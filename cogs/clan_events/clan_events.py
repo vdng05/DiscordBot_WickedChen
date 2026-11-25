@@ -107,7 +107,7 @@ class ClanEvents(commands.Cog):
     # =========================================================================
     @tasks.loop(minutes=5.0)
     async def voice_coop_ticker(self):
-        """Quét các phòng voice: từ 2 thành viên cùng băng trở lên (không deaf, không AFK) được cộng EXP"""
+        """Quét các phòng voice: từ 2 thành viên cùng băng trở lên cùng treo voice/co-op đều được cộng EXP (chấp nhận treo máy/AFK/nghe nhạc đặc trưng Discord)"""
         logger.debug("Đang quét các phòng voice để cộng EXP co-op...")
         try:
             for guild in self.bot.guilds:
@@ -118,6 +118,7 @@ class ClanEvents(commands.Cog):
                 afk_channel_id = guild.afk_channel.id if guild.afk_channel else None
 
                 for vc in guild.voice_channels:
+                    # Bỏ qua kênh AFK chính thức của server hoặc phòng không đủ 2 người
                     if vc.id == afk_channel_id or len(vc.members) < EXP_REWARDS.VOICE_MIN_MEMBERS:
                         continue
 
@@ -125,7 +126,8 @@ class ClanEvents(commands.Cog):
                     clan_users_map: Dict[int, list] = {}
 
                     for m in vc.members:
-                        if m.bot or m.voice.self_deaf or m.voice.deaf or m.voice.afk:
+                        # Chỉ bỏ qua Bot Discord; thành viên người thật treo máy, mute hoặc deafen nghe nhạc vẫn được tính điểm
+                        if m.bot:
                             continue
 
                         mem_rec = await self.bot.db.get_clan_by_member(guild.id, m.id)

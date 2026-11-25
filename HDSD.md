@@ -28,7 +28,7 @@ Mọi tính năng quan trọng sẽ hiện ra ngay dưới dạng các **nút b�
 ### 3. Cày Nhiệm Vụ Tuần Đồng Đội (Weekly Quests)
 - Gõ `/clan quests` để theo dõi 3 nhiệm vụ tuần của cả băng:
   1. **📅 Điểm Danh Đồng Đội:** Đạt đủ tổng số 35 lượt check-in của cả băng trong tuần (+350 EXP).
-  2. **🎙️ Voice Co-op Chơi Game:** Cùng ngồi kênh Voice buôn chuyện / leo rank từ 2 người trở lên (+500 EXP khi đạt 300 phút).
+  2. **🎙️ Voice Co-op Chơi Game:** Cùng ngồi kênh Voice buôn chuyện / nghe nhạc / treo máy cùng nhau từ 2 người trở lên (+500 EXP khi đạt 300 phút). Mute hay deafen nghe nhạc vẫn tính điểm bình thường!
   3. **💬 Sôi Nổi Kênh Chat:** Tương tác, trò chuyện trong kênh chat riêng của băng (+300 EXP khi đạt 100 tin nhắn).
 - Hoàn thành mỗi nhiệm vụ thưởng thẳng từ **+300 đến +500 EXP** cho băng *(Tự động làm mới vào 00:00 Thứ Hai hằng tuần)*.
 
