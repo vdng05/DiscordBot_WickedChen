@@ -354,6 +354,13 @@ class DatabaseManager:
 
     async def delete_clan(self, clan_id: int) -> int:
         async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("PRAGMA foreign_keys = ON;")
+            # Xóa các liên kết để đảm bảo không còn dữ liệu mồ côi
+            await db.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
+            await db.execute("DELETE FROM clan_requests WHERE clan_id = ?", (clan_id,))
+            await db.execute("DELETE FROM clan_weekly_quests WHERE clan_id = ?", (clan_id,))
+            await db.execute("DELETE FROM clan_logs WHERE clan_id = ?", (clan_id,))
+            await db.execute("DELETE FROM clan_parties WHERE clan_id = ?", (clan_id,))
             cursor = await db.execute("DELETE FROM clans WHERE clan_id = ?", (clan_id,))
             await db.commit()
             return cursor.rowcount
@@ -398,11 +405,26 @@ class DatabaseManager:
         INSERT INTO clan_members (
             guild_id, user_id, clan_id, rank, contribution_points, checkin_streak, joined_at
         ) VALUES (?, ?, ?, ?, 0, 0, ?)
+        ON CONFLICT(guild_id, user_id) DO UPDATE SET
+            clan_id = excluded.clan_id,
+            rank = excluded.rank,
+            contribution_points = 0,
+            checkin_streak = 0,
+            joined_at = excluded.joined_at
         """
         async with aiosqlite.connect(self.db_path) as db:
             cursor = await db.execute(sql, (str(guild_id), str(user_id), clan_id, rank, now))
             await db.commit()
             return cursor.rowcount
+
+    async def close(self):
+        """Đóng kết nối cơ sở dữ liệu nếu có"""
+        if self._connection:
+            try:
+                await self._connection.close()
+            except Exception:
+                pass
+            self._connection = None
 
     async def get_member(self, guild_id: int, user_id: int) -> Optional[Dict[str, Any]]:
         async with aiosqlite.connect(self.db_path) as db:

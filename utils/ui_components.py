@@ -722,23 +722,29 @@ class DisbandClanModal(ui.Modal):
         clan_id = self.clan["clan_id"]
         guild = interaction.guild
 
-        # Xóa các kênh
+        # 1. Xóa dữ liệu trong DB trước để tránh kích hoạt cảnh báo sai từ Gateway
+        await self.bot.db.delete_clan(clan_id)
+
+        # 2. Xóa các kênh
         for ch_key in ("text_channel_id", "voice_channel_id", "extra_voice_channel_id"):
             ch_id = self.clan.get(ch_key)
             if ch_id:
                 ch = guild.get_channel(int(ch_id))
                 if ch:
-                    await ch.delete(reason="Giải tán băng").catch(lambda _: None)
+                    try:
+                        await ch.delete(reason="Giải tán băng")
+                    except Exception:
+                        pass
 
-        # Xóa Role
+        # 3. Xóa Role
         role_id = self.clan.get("role_id")
         if role_id:
             role = guild.get_role(int(role_id))
             if role:
-                await role.delete(reason="Giải tán băng").catch(lambda _: None)
-
-        # Xóa DB
-        await self.bot.db.delete_clan(clan_id)
+                try:
+                    await role.delete(reason="Giải tán băng")
+                except Exception:
+                    pass
 
         # Gửi log server nếu có
         cfg = await self.bot.db.get_guild_config(guild.id)
@@ -840,7 +846,7 @@ class ClanQuickPartyModal(ui.Modal, title="🎮 Tạo Kèo Rủ Chơi Game Nhanh
 
 class ClanInfoView(ui.View):
     """View tương tác động dưới /clan info tùy theo vai trò của người xem"""
-    def __init__(self, clan_id: int, can_apply: bool, is_member: bool, is_leader: bool, bot):
+    def __init__(self, clan_id: int, can_apply: bool = False, is_member: bool = False, is_leader: bool = False, bot: Any = None):
         super().__init__(timeout=None)
         self.clan_id = clan_id
         self.bot = bot
@@ -1940,23 +1946,29 @@ class ForceDeleteConfirmView(ui.View):
         guild = interaction.guild
         clan = self.clan
 
-        # Xóa các kênh
+        # 1. Xóa DB trước để tránh kích hoạt cảnh báo sai từ Gateway
+        await self.bot.db.delete_clan(clan["clan_id"])
+
+        # 2. Xóa các kênh
         for ch_key in ("text_channel_id", "voice_channel_id", "extra_voice_channel_id"):
             ch_id = clan.get(ch_key)
             if ch_id:
                 ch = guild.get_channel(int(ch_id))
                 if ch:
-                    await ch.delete(reason="Admin buộc xóa").catch(lambda _: None)
+                    try:
+                        await ch.delete(reason="Admin buộc xóa")
+                    except Exception:
+                        pass
 
-        # Xóa Role
+        # 3. Xóa Role
         role_id = clan.get("role_id")
         if role_id:
             role = guild.get_role(int(role_id))
             if role:
-                await role.delete(reason="Admin buộc xóa").catch(lambda _: None)
-
-        # Xóa DB
-        await self.bot.db.delete_clan(clan["clan_id"])
+                try:
+                    await role.delete(reason="Admin buộc xóa")
+                except Exception:
+                    pass
 
         # Gửi log server
         cfg = await self.bot.db.get_guild_config(guild.id)

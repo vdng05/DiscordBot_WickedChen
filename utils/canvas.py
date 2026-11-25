@@ -236,11 +236,12 @@ def generate_leaderboard_image(
         if clan_data:
             c_tag = clan_data.get("tag", "CLAN")
             c_name = clan_data.get("name", "Băng")
+            disp_name = c_name[:18] + "..." if len(c_name) > 18 else c_name
             c_lvl = clan_data.get("level", 1)
             c_exp = clan_data.get("exp", 0) if criteria == "level" else clan_data.get("weekly_exp", 0)
 
             draw.text((55, py + 12), rank_title, fill=border_c, font=get_font(12, bold=True))
-            draw.text((55, py + 30), f"[{c_tag}] {c_name}", fill=(255, 255, 255), font=get_font(19, bold=True))
+            draw.text((55, py + 30), f"[{c_tag}] {disp_name}", fill=(255, 255, 255), font=get_font(19, bold=True))
             stat_text = f"⭐ Cấp {c_lvl}  •  {c_exp:,} EXP"
             draw.text((55, py + 56), stat_text, fill=(200, 215, 235), font=get_font(13, bold=False))
         else:

@@ -75,6 +75,10 @@ class ClanEvents(commands.Cog):
             return
 
         self._chat_cooldowns[key] = now
+        # Tự động dọn dẹp bộ nhớ đệm nếu danh sách vượt quá 1000 người
+        if len(self._chat_cooldowns) > 1000:
+            threshold = now - (EXP_REWARDS.CHAT_COOLDOWN_SECONDS * 5)
+            self._chat_cooldowns = {k: v for k, v in self._chat_cooldowns.items() if v > threshold}
 
         exp_to_add = EXP_REWARDS.CHAT_EXP
         await self.bot.db.add_clan_exp(clan["clan_id"], exp_to_add, exp_to_add)
@@ -179,7 +183,17 @@ class ClanEvents(commands.Cog):
                     if req.get("message_id"):
                         guild = self.bot.get_guild(int(req["guild_id"]))
                         if guild:
-                            for ch in guild.text_channels:
+                            # Tối ưu: Nếu là đơn APPLY thì kiểm tra trực tiếp kênh riêng của clan trước
+                            target_ch = None
+                            if req.get("clan_id"):
+                                c = await self.bot.db.get_clan_by_id(req["clan_id"])
+                                if c and c.get("text_channel_id"):
+                                    target_ch = guild.get_channel(int(c["text_channel_id"]))
+
+                            channels_to_check = [target_ch] if target_ch else guild.text_channels[:5]
+                            for ch in channels_to_check:
+                                if not ch:
+                                    continue
                                 try:
                                     msg = await ch.fetch_message(int(req["message_id"]))
                                     if msg:

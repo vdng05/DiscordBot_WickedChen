@@ -198,6 +198,7 @@ async def main():
     finally:
         if not bot.is_closed():
             await bot.close()
+        await bot.db.close()
         logger.info("Bot đã tắt an toàn.")
 
 

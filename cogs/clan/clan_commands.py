@@ -691,6 +691,8 @@ class ClanCommands(commands.Cog):
         level_info = get_level_info(clan["exp"])
         viewer_clan = await self.bot.db.get_clan_by_member(guild.id, interaction.user.id)
         can_apply = (viewer_clan is None) and (clan["join_mode"] != JoinModes.INVITE_ONLY)
+        is_member = (viewer_clan is not None and viewer_clan["clan_id"] == clan["clan_id"])
+        is_leader = (int(clan["leader_id"]) == interaction.user.id)
 
         from utils.canvas import generate_clan_profile_image
         import asyncio
@@ -698,7 +700,7 @@ class ClanCommands(commands.Cog):
         file = discord.File(fp=buf, filename="clan_profile.png")
 
         embed = build_clan_info_embed(clan, members, level_info, attachment_filename="clan_profile.png")
-        view = ClanInfoView(clan_id=clan["clan_id"], can_apply=can_apply, bot=self.bot)
+        view = ClanInfoView(clan_id=clan["clan_id"], can_apply=can_apply, is_member=is_member, is_leader=is_leader, bot=self.bot)
         await interaction.followup.send(embed=embed, file=file, view=view)
 
     @clan_group.command(name="members", description="Xem danh sách thành viên trong băng kèm phân trang")
