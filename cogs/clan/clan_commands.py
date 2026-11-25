@@ -428,9 +428,7 @@ class ClanCommands(commands.Cog):
         msg = await interaction.followup.send(content=user.mention, embed=embed, view=view)
 
         # Lưu message_id
-        async with aiosqlite.connect(self.bot.db.db_path) as db:
-            await db.execute("UPDATE clan_requests SET message_id = ? WHERE request_id = ?", (str(msg.id), req_id))
-            await db.commit()
+        await self.bot.db.update_request_message_id(req_id, msg.id)
 
     @clan_group.command(name="apply", description="Nộp đơn xin gia nhập một băng đảng")
     @app_commands.describe(ten_bang="Tên hoặc Tag của băng muốn xin vào")

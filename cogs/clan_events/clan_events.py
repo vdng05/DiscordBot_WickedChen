@@ -125,7 +125,7 @@ class ClanEvents(commands.Cog):
                     clan_users_map: Dict[int, list] = {}
 
                     for m in vc.members:
-                        if m.bot or m.voice.self_deaf or m.voice.deaf:
+                        if m.bot or m.voice.self_deaf or m.voice.deaf or m.voice.afk:
                             continue
 
                         mem_rec = await self.bot.db.get_clan_by_member(guild.id, m.id)
@@ -404,6 +404,12 @@ class ClanEvents(commands.Cog):
                 try:
                     cfg = await self.bot.db.get_guild_config(guild.id)
                     category = guild.get_channel(int(cfg["clan_category_id"])) if cfg else None
+                    if category and len(category.channels) >= 50:
+                        # Tránh lỗi 30013: Tìm category mở rộng còn chỗ trống
+                        for cat in guild.categories:
+                            if "BĂNG ĐẢNG" in cat.name.upper() and len(cat.channels) < 50:
+                                category = cat
+                                break
                     clan_role = guild.get_role(int(clan["role_id"]))
 
                     overwrites = {

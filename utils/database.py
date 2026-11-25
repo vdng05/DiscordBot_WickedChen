@@ -3,6 +3,7 @@ Async SQLite Database Manager using aiosqlite with WAL mode
 """
 
 import aiosqlite
+from contextlib import asynccontextmanager
 from pathlib import Path
 import time
 from typing import Optional, Dict, List, Any
@@ -14,6 +15,14 @@ logger = setup_logging("Database")
 class DatabaseManager:
     """Quản lý kết nối SQLite bất đồng bộ và thực thi truy vấn"""
 
+    @asynccontextmanager
+    async def connect(self):
+        """Tạo kết nối SQLite bất đồng bộ với timeout 30s và cấu hình tối ưu chống lock"""
+        async with aiosqlite.connect(self.db_path, timeout=30.0) as db:
+            await db.execute("PRAGMA foreign_keys = ON;")
+            await db.execute("PRAGMA busy_timeout = 30000;")
+            yield db
+
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._connection: Optional[aiosqlite.Connection] = None
@@ -22,7 +31,7 @@ class DatabaseManager:
         """Khởi tạo file cơ sở dữ liệu, kích hoạt WAL mode và chạy migrations"""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             # Kích hoạt WAL Mode & Foreign Keys
             await db.execute("PRAGMA foreign_keys = ON;")
             await db.execute("PRAGMA journal_mode = WAL;")
@@ -206,7 +215,7 @@ class DatabaseManager:
     # GUILD CONFIGS
     # =========================================================================
     async def get_guild_config(self, guild_id: int) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM guild_configs WHERE guild_id = ?", (str(guild_id),)) as cursor:
                 row = await cursor.fetchone()
@@ -226,7 +235,7 @@ class DatabaseManager:
             required_role_id = excluded.required_role_id,
             leave_cooldown_hours = excluded.leave_cooldown_hours
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             await db.execute(sql, (
                 str(guild_id),
                 str(category_id),
@@ -250,7 +259,7 @@ class DatabaseManager:
             guild_id, name, tag, description, role_id, text_channel_id, voice_channel_id, leader_id, color_hex, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (
                 str(guild_id), name, tag, description, str(role_id),
                 str(text_channel_id), str(voice_channel_id), str(leader_id), color_hex, now
@@ -259,35 +268,35 @@ class DatabaseManager:
             return cursor.lastrowid
 
     async def get_clan_by_id(self, clan_id: int) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM clans WHERE clan_id = ?", (clan_id,)) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
     async def get_clan_by_name(self, guild_id: int, name: str) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM clans WHERE guild_id = ? AND LOWER(name) = LOWER(?)", (str(guild_id), name.strip())) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
     async def get_clan_by_tag(self, guild_id: int, tag: str) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM clans WHERE guild_id = ? AND LOWER(tag) = LOWER(?)", (str(guild_id), tag.strip())) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
     async def get_clan_by_role_id(self, role_id: int) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM clans WHERE role_id = ?", (str(role_id),)) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
     async def get_clan_by_channel_id(self, channel_id: int) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             query = "SELECT * FROM clans WHERE text_channel_id = ? OR voice_channel_id = ? OR extra_voice_channel_id = ?"
             async with db.execute(query, (str(channel_id), str(channel_id), str(channel_id))) as cursor:
@@ -301,7 +310,7 @@ class DatabaseManager:
         JOIN clan_members m ON c.clan_id = m.clan_id
         WHERE m.guild_id = ? AND m.user_id = ?
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(sql, (str(guild_id), str(user_id))) as cursor:
                 row = await cursor.fetchone()
@@ -316,7 +325,7 @@ class DatabaseManager:
         GROUP BY c.clan_id
         ORDER BY c.level DESC, c.exp DESC
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(sql, (str(guild_id),)) as cursor:
                 rows = await cursor.fetchall()
@@ -329,20 +338,20 @@ class DatabaseManager:
         values = list(fields.values())
         values.append(clan_id)
         sql = f"UPDATE clans SET {', '.join(set_clauses)} WHERE clan_id = ?"
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, values)
             await db.commit()
             return cursor.rowcount
 
     async def add_clan_exp(self, clan_id: int, exp_to_add: int, weekly_exp_to_add: int) -> int:
         sql = "UPDATE clans SET exp = exp + ?, weekly_exp = weekly_exp + ? WHERE clan_id = ?"
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (exp_to_add, weekly_exp_to_add, clan_id))
             await db.commit()
             return cursor.rowcount
 
     async def update_clan_level(self, clan_id: int, level: int, max_members: int, extra_voice_channel_id: Optional[int] = None) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             if extra_voice_channel_id:
                 sql = "UPDATE clans SET level = ?, max_members = ?, extra_voice_channel_id = ? WHERE clan_id = ?"
                 cursor = await db.execute(sql, (level, max_members, str(extra_voice_channel_id), clan_id))
@@ -353,7 +362,7 @@ class DatabaseManager:
             return cursor.rowcount
 
     async def delete_clan(self, clan_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             await db.execute("PRAGMA foreign_keys = ON;")
             # Xóa các liên kết để đảm bảo không còn dữ liệu mồ côi
             await db.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
@@ -381,14 +390,14 @@ class DatabaseManager:
         ORDER BY {order_by}
         LIMIT ?
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(sql, (str(guild_id), limit)) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]
 
     async def reset_weekly_exp(self, guild_id: Optional[int] = None) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             if guild_id:
                 cursor = await db.execute("UPDATE clans SET weekly_exp = 0 WHERE guild_id = ?", (str(guild_id),))
             else:
@@ -412,7 +421,7 @@ class DatabaseManager:
             checkin_streak = 0,
             joined_at = excluded.joined_at
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (str(guild_id), str(user_id), clan_id, rank, now))
             await db.commit()
             return cursor.rowcount
@@ -427,14 +436,14 @@ class DatabaseManager:
             self._connection = None
 
     async def get_member(self, guild_id: int, user_id: int) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM clan_members WHERE guild_id = ? AND user_id = ?", (str(guild_id), str(user_id))) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
     async def get_clan_members(self, clan_id: int, rank_filter: Optional[str] = None) -> List[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             if rank_filter:
                 sql = """
@@ -465,26 +474,26 @@ class DatabaseManager:
                     return [dict(r) for r in rows]
 
     async def get_member_count(self, clan_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             async with db.execute("SELECT COUNT(*) FROM clan_members WHERE clan_id = ?", (clan_id,)) as cursor:
                 res = await cursor.fetchone()
                 return res[0] if res else 0
 
     async def get_rank_count(self, clan_id: int, rank: str) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             async with db.execute("SELECT COUNT(*) FROM clan_members WHERE clan_id = ? AND rank = ?", (clan_id, rank)) as cursor:
                 res = await cursor.fetchone()
                 return res[0] if res else 0
 
     async def update_member_rank(self, guild_id: int, user_id: int, rank: str) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute("UPDATE clan_members SET rank = ? WHERE guild_id = ? AND user_id = ?", (rank, str(guild_id), str(user_id)))
             await db.commit()
             return cursor.rowcount
 
     async def add_contribution_points(self, guild_id: int, user_id: int, points: int) -> int:
         sql = "UPDATE clan_members SET contribution_points = contribution_points + ? WHERE guild_id = ? AND user_id = ?"
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (points, str(guild_id), str(user_id)))
             await db.commit()
             return cursor.rowcount
@@ -495,19 +504,19 @@ class DatabaseManager:
         SET last_checkin_date = ?, checkin_streak = ?, contribution_points = contribution_points + 10
         WHERE guild_id = ? AND user_id = ?
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (date_str, streak, str(guild_id), str(user_id)))
             await db.commit()
             return cursor.rowcount
 
     async def remove_member(self, guild_id: int, user_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute("DELETE FROM clan_members WHERE guild_id = ? AND user_id = ?", (str(guild_id), str(user_id)))
             await db.commit()
             return cursor.rowcount
 
     async def transfer_leadership(self, clan_id: int, guild_id: int, old_leader_id: int, new_leader_id: int):
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             await db.execute("UPDATE clan_members SET rank = 'CO_LEADER' WHERE guild_id = ? AND user_id = ?", (str(guild_id), str(old_leader_id)))
             await db.execute("UPDATE clan_members SET rank = 'LEADER' WHERE guild_id = ? AND user_id = ?", (str(guild_id), str(new_leader_id)))
             await db.execute("UPDATE clans SET leader_id = ? WHERE clan_id = ?", (str(new_leader_id), clan_id))
@@ -519,7 +528,7 @@ class DatabaseManager:
     async def get_cooldown(self, guild_id: int, user_id: int) -> Optional[Dict[str, Any]]:
         now = int(time.time())
         sql = "SELECT * FROM member_cooldowns WHERE guild_id = ? AND user_id = ? AND expires_at > ?"
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(sql, (str(guild_id), str(user_id), now)) as cursor:
                 row = await cursor.fetchone()
@@ -532,19 +541,19 @@ class DatabaseManager:
         VALUES (?, ?, ?)
         ON CONFLICT(guild_id, user_id) DO UPDATE SET expires_at = excluded.expires_at
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             await db.execute(sql, (str(guild_id), str(user_id), expires_at))
             await db.commit()
 
     async def remove_cooldown(self, guild_id: int, user_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute("DELETE FROM member_cooldowns WHERE guild_id = ? AND user_id = ?", (str(guild_id), str(user_id)))
             await db.commit()
             return cursor.rowcount
 
     async def clean_expired_cooldowns(self) -> int:
         now = int(time.time())
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute("DELETE FROM member_cooldowns WHERE expires_at <= ?", (now,))
             await db.commit()
             return cursor.rowcount
@@ -562,7 +571,7 @@ class DatabaseManager:
             clan_id, guild_id, user_id, actor_id, request_type, note, message_id, expires_at, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (
                 clan_id, str(guild_id), str(user_id), str(actor_id),
                 request_type, note, str(message_id) if message_id else None, expires_at, now
@@ -571,7 +580,7 @@ class DatabaseManager:
             return cursor.lastrowid
 
     async def get_request_by_id(self, request_id: int) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM clan_requests WHERE request_id = ?", (request_id,)) as cursor:
                 row = await cursor.fetchone()
@@ -580,7 +589,7 @@ class DatabaseManager:
     async def update_request_status(self, request_id: int, new_status: str) -> int:
         """Cập nhật trạng thái an toàn chống Race Condition (chỉ đổi nếu đang PENDING)"""
         sql = "UPDATE clan_requests SET status = ? WHERE request_id = ? AND status = 'PENDING'"
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (new_status, request_id))
             await db.commit()
             return cursor.rowcount
@@ -588,7 +597,7 @@ class DatabaseManager:
     async def get_expired_pending_requests(self) -> List[Dict[str, Any]]:
         now = int(time.time())
         sql = "SELECT * FROM clan_requests WHERE status = 'PENDING' AND expires_at <= ?"
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(sql, (now,)) as cursor:
                 rows = await cursor.fetchall()
@@ -597,7 +606,7 @@ class DatabaseManager:
     async def mark_expired_requests(self) -> int:
         now = int(time.time())
         sql = "UPDATE clan_requests SET status = 'EXPIRED' WHERE status = 'PENDING' AND expires_at <= ?"
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (now,))
             await db.commit()
             return cursor.rowcount
@@ -612,13 +621,13 @@ class DatabaseManager:
         INSERT INTO clan_logs (clan_id, actor_id, target_id, action, details, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             await db.execute(sql, (clan_id, str(actor_id), str(target_id) if target_id else None, action, details, now))
             await db.commit()
 
     async def get_clan_logs(self, clan_id: int, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
         offset = (page - 1) * page_size
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             sql = "SELECT * FROM clan_logs WHERE clan_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
             async with db.execute(sql, (clan_id, page_size, offset)) as cursor:
@@ -642,7 +651,7 @@ class DatabaseManager:
             clan_id, creator_id, channel_id, message_id, title, max_slots, scheduled_at, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (
                 clan_id, str(creator_id), str(channel_id), str(message_id),
                 title, max_slots, scheduled_at, now
@@ -651,14 +660,14 @@ class DatabaseManager:
             return cursor.lastrowid
 
     async def get_party_by_id(self, party_id: int) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM clan_parties WHERE party_id = ?", (party_id,)) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
     async def get_party_by_message_id(self, message_id: int) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute("SELECT * FROM clan_parties WHERE message_id = ?", (str(message_id),)) as cursor:
                 row = await cursor.fetchone()
@@ -671,27 +680,27 @@ class DatabaseManager:
         VALUES (?, ?, ?, ?)
         ON CONFLICT(party_id, user_id) DO UPDATE SET slot_type = excluded.slot_type
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute(sql, (party_id, str(user_id), slot_type, now))
             await db.commit()
             return cursor.rowcount
 
     async def remove_party_participant(self, party_id: int, user_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute("DELETE FROM clan_party_participants WHERE party_id = ? AND user_id = ?", (party_id, str(user_id)))
             await db.commit()
             return cursor.rowcount
 
     async def get_party_participants(self, party_id: int) -> List[Dict[str, Any]]:
         sql = "SELECT * FROM clan_party_participants WHERE party_id = ? ORDER BY joined_at ASC"
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(sql, (party_id,)) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]
 
     async def update_party_status(self, party_id: int, status: str) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute("UPDATE clan_parties SET status = ? WHERE party_id = ?", (status, party_id))
             await db.commit()
             return cursor.rowcount
@@ -706,14 +715,14 @@ class DatabaseManager:
           AND scheduled_at > ? 
           AND scheduled_at <= ?
         """
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(sql, (current_time, max_time)) as cursor:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]
 
     async def mark_party_reminded(self, party_id: int) -> int:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             cursor = await db.execute("UPDATE clan_parties SET reminded = 1 WHERE party_id = ?", (party_id,))
             await db.commit()
             return cursor.rowcount
@@ -722,7 +731,7 @@ class DatabaseManager:
     # WEEKLY QUESTS
     # =========================================================================
     async def ensure_weekly_quests(self, clan_id: int, week_key: str) -> List[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             sql = "SELECT * FROM clan_weekly_quests WHERE clan_id = ? AND week_key = ?"
             async with db.execute(sql, (clan_id, week_key)) as cursor:
@@ -746,7 +755,7 @@ class DatabaseManager:
                 return [dict(r) for r in rows]
 
     async def get_weekly_quests(self, clan_id: int, week_key: str) -> List[Dict[str, Any]]:
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             sql = "SELECT * FROM clan_weekly_quests WHERE clan_id = ? AND week_key = ?"
             async with db.execute(sql, (clan_id, week_key)) as cursor:
@@ -756,7 +765,7 @@ class DatabaseManager:
     async def increment_quest_progress(self, clan_id: int, week_key: str, quest_type: str, amount: int) -> Dict[str, Any]:
         await self.ensure_weekly_quests(clan_id, week_key)
 
-        async with aiosqlite.connect(self.db_path) as db:
+        async with self.connect() as db:
             db.row_factory = aiosqlite.Row
             sql = "SELECT * FROM clan_weekly_quests WHERE clan_id = ? AND week_key = ? AND quest_type = ?"
             async with db.execute(sql, (clan_id, week_key, quest_type)) as cursor:
@@ -783,3 +792,8 @@ class DatabaseManager:
                     "reward_exp": quest["reward_exp"] if completed_now else 0,
                     "quest_type": quest_type
                 }
+
+    async def update_request_message_id(self, request_id: int, message_id: int):
+        async with self.connect() as db:
+            await db.execute("UPDATE clan_requests SET message_id = ? WHERE request_id = ?", (str(message_id), request_id))
+            await db.commit()

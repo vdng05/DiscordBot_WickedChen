@@ -127,6 +127,23 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
             await interaction.followup.send(f"❌ Tag băng **{tag}** đã được sử dụng trong server!", ephemeral=True)
             return
 
+        # Kiểm tra trần giới hạn tài nguyên của Discord Server (250 roles & 500 channels)
+        if len(guild.roles) >= 245:
+            await interaction.followup.send(
+                "❌ **Máy chủ Discord sắp đạt giới hạn trần 250 Roles của Discord!**\n"
+                "👉 Quản trị viên vui lòng dọn dẹp các role không dùng để có thể tạo thêm băng.",
+                ephemeral=True
+            )
+            return
+
+        if len(guild.channels) >= 490:
+            await interaction.followup.send(
+                "❌ **Máy chủ Discord sắp đạt giới hạn trần 500 Kênh của Discord!**\n"
+                "👉 Quản trị viên vui lòng dọn dẹp các kênh không dùng để có thể tạo thêm băng.",
+                ephemeral=True
+            )
+            return
+
         # Kiểm tra quyền bot
         me = guild.me
         if not me.guild_permissions.manage_roles or not me.guild_permissions.manage_channels:
@@ -144,7 +161,7 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
                 reason=f"Tạo băng mới bởi {user.name}"
             )
 
-            # 2. Tạo Kênh Text & Voice trong Category (Tự phục hồi nếu category bị xóa)
+            # 2. Tạo Kênh Text & Voice trong Category (Tự phục hồi nếu category bị xóa & tự mở rộng Category nếu đầy 50 kênh)
             category = guild.get_channel(int(config["clan_category_id"]))
             if not category:
                 try:
@@ -159,6 +176,22 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
                     )
                 except Exception:
                     category = None
+            elif len(category.channels) >= 48:
+                # Category hiện tại đã gần đầy 50 kênh -> Tự động tìm hoặc tạo Category mở rộng (Part II, III...)
+                overflow_cat = None
+                for cat in guild.categories:
+                    if "BĂNG ĐẢNG" in cat.name.upper() and len(cat.channels) < 48:
+                        overflow_cat = cat
+                        break
+                if not overflow_cat:
+                    num_cats = sum(1 for c in guild.categories if "BĂNG ĐẢNG" in c.name.upper()) + 1
+                    roman_map = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
+                    sub_title = roman_map[num_cats - 1] if num_cats <= len(roman_map) else str(num_cats)
+                    try:
+                        overflow_cat = await guild.create_category(f"🏰 BĂNG ĐẢNG {sub_title}", reason="Tự động mở rộng Category khi đạt giới hạn 50 kênh")
+                    except Exception:
+                        overflow_cat = category
+                category = overflow_cat
 
             clean_channel_slug = re.sub(r"[^a-z0-9]", "-", name.lower())[:30]
             text_channel_name = f"💬・{tag.lower()}-{clean_channel_slug}"
@@ -693,9 +726,7 @@ class ApplyClanModal(ui.Modal):
             view = RequestView(request_id=req_id, bot=self.bot, is_invite=False)
             msg = await text_ch.send(content=f"<@&{clan['role_id']}>", embed=apply_embed, view=view)
             # Cập nhật message_id để tự dọn dẹp nếu hết hạn
-            async with aiosqlite.connect(self.bot.db.db_path) as db:
-                await db.execute("UPDATE clan_requests SET message_id = ? WHERE request_id = ?", (str(msg.id), req_id))
-                await db.commit()
+            await self.bot.db.update_request_message_id(req_id, msg.id)
 
         await interaction.followup.send(f"✅ Đơn xin gia nhập của bạn đã được gửi đến ban cán bộ băng **[{clan['tag']}] {clan['name']}**!", ephemeral=True)
 
