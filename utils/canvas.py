@@ -1,0 +1,488 @@
+"""
+Module Dynamic Canvas Image Generator dành cho Discord Clan Bot.
+Tự động vẽ các thẻ đồ họa (Banners, Cards, Leaderboards, Quests) với độ phân giải cao,
+khử răng cưa (anti-aliasing) bằng Pillow, tương thích 100% tiếng Việt UTF-8.
+"""
+
+import io
+import math
+from pathlib import Path
+from typing import Tuple, Optional, Dict, Any, List
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+# Danh sách font chữ hỗ trợ tiếng Việt trên Windows / Linux
+FONT_BOLD_CANDIDATES = ["segoeuib.ttf", "arialbd.ttf", "tahomabd.ttf", "DejaVuSans-Bold.ttf"]
+FONT_REGULAR_CANDIDATES = ["segoeui.ttf", "arial.ttf", "tahoma.ttf", "DejaVuSans.ttf"]
+
+
+def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+    """Tải font chữ hệ thống hỗ trợ tiếng Việt mượt mà"""
+    candidates = FONT_BOLD_CANDIDATES if bold else FONT_REGULAR_CANDIDATES
+    for name in candidates:
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            pass
+
+    # Đường dẫn Linux phổ biến
+    linux_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+    ]
+    for path in linux_paths:
+        if Path(path).exists():
+            try:
+                return ImageFont.truetype(path, size)
+            except OSError:
+                pass
+
+    return ImageFont.load_default()
+
+
+def hex_to_rgb(hex_str: str, default: Tuple[int, int, int] = (88, 101, 242)) -> Tuple[int, int, int]:
+    """Chuyển mã Hex (#RRGGBB) sang Tuple RGB"""
+    if not hex_str:
+        return default
+    clean = hex_str.strip().lstrip("#")
+    if len(clean) == 6:
+        try:
+            return (int(clean[0:2], 16), int(clean[2:4], 16), int(clean[4:6], 16))
+        except ValueError:
+            pass
+    return default
+
+
+def draw_gradient_background(
+    width: int,
+    height: int,
+    start_rgb: Tuple[int, int, int],
+    end_rgb: Tuple[int, int, int],
+    horizontal: bool = False
+) -> Image.Image:
+    """Tạo ảnh nền chuyển sắc (Gradient) mượt mà"""
+    base = Image.new("RGBA", (width, height), (0, 0, 0, 255))
+    draw = ImageDraw.Draw(base)
+
+    if horizontal:
+        for x in range(width):
+            ratio = x / max(width - 1, 1)
+            r = int(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * ratio)
+            g = int(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * ratio)
+            b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
+            draw.line([(x, 0), (x, height)], fill=(r, g, b, 255))
+    else:
+        for y in range(height):
+            ratio = y / max(height - 1, 1)
+            r = int(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * ratio)
+            g = int(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * ratio)
+            b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
+            draw.line([(0, y), (width, y)], fill=(r, g, b, 255))
+
+    return base
+
+
+def draw_progress_bar(
+    draw: ImageDraw.ImageDraw,
+    box: Tuple[int, int, int, int],
+    progress: float,
+    bg_color: Tuple[int, int, int, int] = (40, 44, 62, 255),
+    fill_color: Tuple[int, int, int, int] = (88, 101, 242, 255),
+    radius: int = 8
+):
+    """Vẽ thanh tiến trình bo góc mượt mà"""
+    x1, y1, x2, y2 = box
+    draw.rounded_rectangle(box, radius=radius, fill=bg_color)
+    total_w = x2 - x1
+    pct = max(0.0, min(1.0, progress))
+    if pct > 0:
+        fill_w = max(int(total_w * pct), radius * 2)
+        draw.rounded_rectangle((x1, y1, x1 + fill_w, y2), radius=radius, fill=fill_color)
+
+
+# =============================================================================
+# 1. THẺ TRUNG TÂM ĐIỀU KHIỂN (CLAN HUB BANNER CARD)
+# =============================================================================
+def generate_clan_hub_image(
+    clan: Optional[Dict[str, Any]],
+    user_name: str,
+    member_count: int = 0
+) -> io.BytesIO:
+    """Vẽ thẻ đồ họa Clan Hub phong cách Cyber / Esports Banner (920 x 300)"""
+    W, H = 920, 300
+    color_rgb = hex_to_rgb(clan.get("color_hex") if clan else None, (88, 101, 242))
+
+    # Tạo nền chuyển sắc sang trọng deep navy
+    base = draw_gradient_background(W, H, (15, 17, 28), (24, 28, 48), horizontal=True)
+    draw = ImageDraw.Draw(base)
+
+    # Khung bo viền ngoài với accent phát sáng nhẹ
+    draw.rounded_rectangle((10, 10, W - 10, H - 10), radius=20, outline=(*color_rgb, 200), width=3)
+    draw.rounded_rectangle((14, 14, W - 14, H - 14), radius=18, outline=(255, 255, 255, 25), width=1)
+
+    if clan:
+        clan_name = clan.get("name", "Băng Đảng")
+        clan_tag = clan.get("tag", "CLAN")
+        level = clan.get("level", 1)
+        exp = clan.get("exp", 0)
+        slogan = clan.get("description") or "Chưa có khẩu hiệu băng."
+
+        from utils.embeds import get_level_info
+        lvl_info = get_level_info(exp)
+        next_exp = lvl_info["next_req"]
+        cur_lvl_req = lvl_info["cur_req"]
+        progress = lvl_info["ratio"]
+        pct_display = int(progress * 100)
+
+        # 1. Badge Emblem bên trái
+        emblem_box = (35, 45, 175, 185)
+        draw.rounded_rectangle(emblem_box, radius=24, fill=(*color_rgb, 40), outline=color_rgb, width=3)
+        font_tag = get_font(32, bold=True)
+        draw.text((105, 115), clan_tag, fill=(255, 255, 255), font=font_tag, anchor="mm")
+
+        # 2. Header & Tên Băng
+        font_sub = get_font(14, bold=True)
+        draw.text((200, 48), "🏰 TRUNG TÂM ĐIỀU KHIỂN BĂNG ĐẢNG", fill=(*color_rgb, 255), font=font_sub)
+
+        font_title = get_font(34, bold=True)
+        draw.text((200, 75), f"[{clan_tag}] {clan_name}", fill=(255, 255, 255), font=font_title)
+
+        font_slogan = get_font(15, bold=False)
+        clean_slogan = f"\"{slogan[:65]}...\"" if len(slogan) > 65 else f"\"{slogan}\""
+        draw.text((200, 122), clean_slogan, fill=(180, 190, 210), font=font_slogan)
+
+        # 3. 3 Khối Thống Kê (Pill Boxes)
+        pills = [
+            ("⭐ CẤP ĐỘ", f"Lv.{level} ({lvl_info['title']})", (255, 204, 0)),
+            ("👥 SĨ SỐ", f"{member_count}/{lvl_info['max_members']} Thành Viên", (100, 220, 255)),
+            ("🔥 STREAK", f"{clan.get('checkin_streak', 0)} Ngày Liên Tiếp", (255, 100, 130))
+        ]
+        start_x = 200
+        pill_w = 210
+        pill_h = 44
+        pill_y = 155
+        for i, (label, val, tint) in enumerate(pills):
+            px = start_x + i * (pill_w + 15)
+            draw.rounded_rectangle((px, pill_y, px + pill_w, pill_y + pill_h), radius=10, fill=(30, 35, 55, 240), outline=(*tint, 140), width=1)
+            draw.text((px + 12, pill_y + 12), label, fill=tint, font=get_font(11, bold=True))
+            draw.text((px + 12, pill_y + 26), val, fill=(255, 255, 255), font=get_font(13, bold=True))
+
+        # 4. Thanh tiến trình EXP ở cạnh dưới
+        bar_box = (35, 235, W - 35, 255)
+        draw_progress_bar(draw, bar_box, progress, bg_color=(30, 35, 55, 255), fill_color=(*color_rgb, 255), radius=10)
+        font_bar = get_font(13, bold=True)
+        bar_text = f"TIẾN ĐỘ THĂNG CẤP: {exp:,} / {next_exp:,} EXP ({pct_display}%)"
+        draw.text((45, 218), bar_text, fill=(210, 220, 240), font=font_bar)
+
+    else:
+        # Trường hợp thành viên chưa có băng
+        font_hdr = get_font(16, bold=True)
+        draw.text((W // 2, 55), "🏰 HỆ THỐNG LIÊN MINH & BĂNG ĐẢNG SERVER", fill=(88, 101, 242), font=font_hdr, anchor="mm")
+
+        font_name = get_font(32, bold=True)
+        draw.text((W // 2, 98), f"Xin chào, {user_name}!", fill=(255, 255, 255), font=font_name, anchor="mm")
+
+        font_desc = get_font(16, bold=False)
+        draw.text((W // 2, 145), "Bạn hiện chưa gia nhập bất kỳ băng đảng nào trong máy chủ.", fill=(180, 195, 220), font=font_desc, anchor="mm")
+
+        # Khung hành động nhanh
+        action_box = (120, 185, W - 120, 255)
+        draw.rounded_rectangle(action_box, radius=14, fill=(30, 36, 60, 220), outline=(88, 101, 242, 180), width=2)
+        font_action = get_font(15, bold=True)
+        draw.text((W // 2, 220), "👉 Bấm các nút bên dưới để Khám Phá Danh Sách Băng hoặc Thành Lập Băng Mới!", fill=(100, 230, 180), font=font_action, anchor="mm")
+
+    buf = io.BytesIO()
+    base.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+# =============================================================================
+# 2. THẺ BẢNG XẾP HẠNG (LEADERBOARD BANNER CARD)
+# =============================================================================
+def generate_leaderboard_image(
+    guild_name: str,
+    clans: List[Dict[str, Any]],
+    criteria: str = "level"
+) -> io.BytesIO:
+    """Vẽ bảng xếp hạng Esports Tournament (920 x 520)"""
+    W, H = 920, 520
+    base = draw_gradient_background(W, H, (14, 16, 26), (22, 25, 42), horizontal=False)
+    draw = ImageDraw.Draw(base)
+
+    # Viền ngoài
+    draw.rounded_rectangle((10, 10, W - 10, H - 10), radius=20, outline=(255, 204, 0, 180), width=2)
+
+    # Tiêu đề
+    criteria_name = "Cấp Độ & Tổng EXP" if criteria == "level" else "Năng Động Trong Tuần"
+    font_title = get_font(26, bold=True)
+    draw.text((40, 35), "🏆 BẢNG VINH DANH BĂNG ĐẢNG XUẤT SẮC", fill=(255, 215, 0), font=font_title)
+    font_sub = get_font(14, bold=False)
+    draw.text((40, 68), f"Máy chủ: {guild_name}  •  Tiêu chí xếp hạng: {criteria_name}", fill=(170, 180, 205), font=font_sub)
+
+    # PODIUM TOP 3 (Cột bên trái)
+    top1 = clans[0] if len(clans) > 0 else None
+    top2 = clans[1] if len(clans) > 1 else None
+    top3 = clans[2] if len(clans) > 2 else None
+
+    podium_items = [
+        (top1, "👑 QUÁN QUÂN (TOP 1)", (255, 215, 0), (50, 42, 18), 105, 110),
+        (top2, "🥈 Á QUÂN (TOP 2)", (200, 210, 230), (32, 36, 48), 225, 88),
+        (top3, "🥉 QUÝ QUÂN (TOP 3)", (215, 130, 70), (40, 30, 25), 325, 88),
+    ]
+
+    for clan_data, rank_title, border_c, bg_c, py, ph in podium_items:
+        pbox = (40, py, 450, py + ph)
+        draw.rounded_rectangle(pbox, radius=12, fill=(*bg_c, 240), outline=(*border_c, 220), width=2)
+        if clan_data:
+            c_tag = clan_data.get("tag", "CLAN")
+            c_name = clan_data.get("name", "Băng")
+            c_lvl = clan_data.get("level", 1)
+            c_exp = clan_data.get("exp", 0) if criteria == "level" else clan_data.get("weekly_exp", 0)
+
+            draw.text((55, py + 12), rank_title, fill=border_c, font=get_font(12, bold=True))
+            draw.text((55, py + 30), f"[{c_tag}] {c_name}", fill=(255, 255, 255), font=get_font(19, bold=True))
+            stat_text = f"⭐ Cấp {c_lvl}  •  {c_exp:,} EXP"
+            draw.text((55, py + 56), stat_text, fill=(200, 215, 235), font=get_font(13, bold=False))
+        else:
+            draw.text((55, py + 12), rank_title, fill=border_c, font=get_font(12, bold=True))
+            draw.text((55, py + 36), "Đang chờ băng kế tiếp...", fill=(120, 130, 150), font=get_font(15, bold=False))
+
+    # BẢNG HẠNG 4 ĐẾN 8 (Cột bên phải)
+    rx = 480
+    rw = 400
+    table_box = (rx, 105, rx + rw, 435)
+    draw.rounded_rectangle(table_box, radius=14, fill=(20, 24, 38, 240), outline=(50, 60, 90, 180), width=1)
+
+    draw.text((rx + 20, 120), "BẢNG XẾP HẠNG TOP TIẾP THEO", fill=(100, 200, 255), font=get_font(13, bold=True))
+    draw.line([(rx + 15, 142), (rx + rw - 15, 142)], fill=(45, 55, 80), width=1)
+
+    row_y = 155
+    for rank_idx in range(4, 9):
+        clan_idx = rank_idx - 1
+        if clan_idx < len(clans):
+            c = clans[clan_idx]
+            tag_name = f"#{rank_idx}. [{c['tag']}] {c['name'][:16]}"
+            c_exp = c.get("exp", 0) if criteria == "level" else c.get("weekly_exp", 0)
+            sub_text = f"Lv.{c['level']} • {c_exp:,} EXP"
+            draw.text((rx + 20, row_y), tag_name, fill=(255, 255, 255), font=get_font(14, bold=True))
+            draw.text((rx + rw - 20, row_y), sub_text, fill=(160, 180, 210), font=get_font(13, bold=False), anchor="ra")
+        else:
+            draw.text((rx + 20, row_y), f"#{rank_idx}. ---", fill=(80, 90, 110), font=get_font(13, bold=False))
+
+        row_y += 54
+
+    buf = io.BytesIO()
+    base.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+# =============================================================================
+# 3. THẺ NHIỆM VỤ TUẦN (WEEKLY QUESTS BANNER CARD)
+# =============================================================================
+def generate_quests_image(
+    clan: Dict[str, Any],
+    quests: List[Dict[str, Any]],
+    week_key: str
+) -> io.BytesIO:
+    """Vẽ bảng nhiệm vụ tuần hợp tác đồng đội (920 x 420)"""
+    W, H = 920, 420
+    base = draw_gradient_background(W, H, (16, 20, 34), (24, 28, 48), horizontal=False)
+    draw = ImageDraw.Draw(base)
+
+    # Viền ngoài phát sáng xanh cyan
+    draw.rounded_rectangle((10, 10, W - 10, H - 10), radius=20, outline=(0, 242, 254, 180), width=2)
+
+    # Header
+    font_title = get_font(26, bold=True)
+    draw.text((40, 32), "🎯 NHIỆM VỤ TUẦN HỢP TÁC ĐỒNG ĐỘI", fill=(0, 242, 254), font=font_title)
+    font_sub = get_font(14, bold=False)
+    draw.text((40, 65), f"Băng đảng: [{clan['tag']}] {clan['name']}  •  Chu kỳ: {week_key}", fill=(180, 195, 220), font=font_sub)
+
+    # 3 Thẻ nhiệm vụ nằm ngang hoặc xếp tầng
+    quest_config = {
+        "CHECKIN_COUNT": ("📅 ĐIỂM DANH ĐỒNG ĐỘI", "Cả băng cùng điểm danh đủ số lượt trong tuần", (255, 204, 0)),
+        "VOICE_MINUTES": ("🎙️ VOICE CO-OP CHƠI GAME", "Ngồi Voice chung từ 2 người trở lên", (100, 220, 255)),
+        "CHAT_MESSAGES": ("💬 SÔI NỔI KÊNH CHAT", "Nhắn tin trò chuyện trong kênh chat riêng của băng", (255, 105, 180))
+    }
+
+    start_y = 100
+    card_h = 90
+    spacing = 15
+
+    for i, q in enumerate(quests):
+        q_type = q.get("quest_type")
+        title, desc, color = quest_config.get(q_type, ("🎯 NHIỆM VỤ ĐỒNG ĐỘI", "", (88, 101, 242)))
+        cur_v = q.get("current_value", 0)
+        target_v = q.get("target_value", 1)
+        reward = q.get("reward_exp", 0)
+        completed = bool(q.get("completed", 0))
+
+        progress = min(1.0, cur_v / max(1, target_v))
+        cy = start_y + i * (card_h + spacing)
+        card_box = (40, cy, W - 40, cy + card_h)
+
+        # Hộp thẻ nhiệm vụ
+        border_col = (46, 204, 113) if completed else color
+        bg_col = (20, 35, 30) if completed else (26, 30, 48)
+        draw.rounded_rectangle(card_box, radius=14, fill=(*bg_col, 240), outline=(*border_col, 180), width=2)
+
+        # Tiêu đề & Mô tả
+        draw.text((60, cy + 14), title, fill=border_col, font=get_font(15, bold=True))
+        draw.text((60, cy + 34), desc, fill=(160, 175, 200), font=get_font(12, bold=False))
+
+        # Thanh tiến trình
+        bar_box = (60, cy + 56, W - 260, cy + 72)
+        bar_fill = (46, 204, 113, 255) if completed else (*color, 255)
+        draw_progress_bar(draw, bar_box, progress, bg_color=(36, 42, 65, 255), fill_color=bar_fill, radius=8)
+
+        # Con số tiến độ
+        pct = int(progress * 100)
+        unit = "lượt" if "CHECKIN" in q_type else ("phút" if "VOICE" in q_type else "tin")
+        prog_text = f"{cur_v:,} / {target_v:,} {unit} ({pct}%)"
+        draw.text((W - 275, cy + 54), prog_text, fill=(220, 230, 250), font=get_font(13, bold=True), anchor="ra")
+
+        # Cột trạng thái bên phải
+        badge_box = (W - 230, cy + 20, W - 60, cy + 70)
+        if completed:
+            draw.rounded_rectangle(badge_box, radius=10, fill=(35, 75, 45, 255), outline=(46, 204, 113, 255), width=2)
+            draw.text((W - 145, cy + 45), "HOÀN THÀNH ✅", fill=(46, 204, 113), font=get_font(13, bold=True), anchor="mm")
+        else:
+            draw.rounded_rectangle(badge_box, radius=10, fill=(35, 40, 60, 255), outline=(*color, 160), width=1)
+            draw.text((W - 145, cy + 35), f"+{reward:,} EXP", fill=(255, 215, 0), font=get_font(14, bold=True), anchor="mm")
+            draw.text((W - 145, cy + 54), "ĐANG DIỄN RA ⚡", fill=(170, 185, 210), font=get_font(10, bold=True), anchor="mm")
+
+    buf = io.BytesIO()
+    base.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+# =============================================================================
+# 4. THẺ HỒ SƠ BĂNG (CLAN PROFILE CARD)
+# =============================================================================
+def generate_clan_profile_image(
+    clan: Dict[str, Any],
+    member_count: int,
+    level_info: Dict[str, Any]
+) -> io.BytesIO:
+    """Vẽ thẻ hồ sơ băng đảng phong cách VIP Pass (920 x 320)"""
+    W, H = 920, 320
+    color_rgb = hex_to_rgb(clan.get("color_hex"), (88, 101, 242))
+    sec_rgb = hex_to_rgb(clan.get("secondary_color_hex"), (221, 36, 118)) if clan.get("secondary_color_hex") else color_rgb
+
+    base = draw_gradient_background(W, H, (16, 18, 30), (28, 32, 52), horizontal=True)
+    draw = ImageDraw.Draw(base)
+
+    # Viền gradient 2 màu nếu có
+    draw.rounded_rectangle((10, 10, W - 10, H - 10), radius=20, outline=(*color_rgb, 220), width=3)
+
+    # Biểu tượng Avatar Băng bên trái
+    av_box = (35, 45, 175, 185)
+    draw.rounded_rectangle(av_box, radius=24, fill=(*color_rgb, 40), outline=color_rgb, width=3)
+    draw.text((105, 115), clan.get("tag", "CLAN"), fill=(255, 255, 255), font=get_font(34, bold=True), anchor="mm")
+
+    # Header Tên Băng
+    font_name = get_font(34, bold=True)
+    draw.text((200, 48), f"[{clan['tag']}] {clan['name']}", fill=(255, 255, 255), font=font_name)
+
+    font_slogan = get_font(15, bold=False)
+    slogan = clan.get("description") or "Chưa có khẩu hiệu băng."
+    draw.text((200, 92), f"\"{slogan[:65]}\"", fill=(180, 190, 210), font=font_slogan)
+
+    # Thông tin chi tiết
+    join_mode_names = {
+        "OPEN": "🟢 Mở Tự Do",
+        "APPROVAL": "🟡 Cần Duyệt",
+        "INVITE_ONLY": "🔒 Chỉ Nhận Lời Mời"
+    }
+    mode_text = join_mode_names.get(clan.get("join_mode"), "🟡 Cần Duyệt")
+
+    info_pills = [
+        ("👑 CHỦ BĂNG", f"<ID: {clan.get('leader_id')}>", (255, 204, 0)),
+        ("👥 QUÂN SỐ", f"{member_count}/{level_info['max_members']} Người", (100, 220, 255)),
+        ("🚪 TUYỂN QUÂN", mode_text, (130, 230, 170)),
+        ("🏆 CẤP BĂNG", f"Cấp {clan['level']} ({level_info['title']})", (255, 130, 170))
+    ]
+
+    start_x = 200
+    pill_w = 160
+    pill_h = 44
+    pill_y = 135
+    for i, (lbl, val, col) in enumerate(info_pills):
+        px = start_x + i * (pill_w + 14)
+        draw.rounded_rectangle((px, pill_y, px + pill_w, pill_y + pill_h), radius=10, fill=(32, 38, 60, 240), outline=(*col, 130), width=1)
+        draw.text((px + 10, pill_y + 11), lbl, fill=col, font=get_font(10, bold=True))
+        draw.text((px + 10, pill_y + 25), val, fill=(255, 255, 255), font=get_font(12, bold=True))
+
+    # Thanh EXP
+    next_exp = level_info["next_req"]
+    cur_exp = clan.get("exp", 0)
+    progress = level_info["ratio"]
+    pct_display = int(progress * 100)
+
+    bar_box = (35, 245, W - 35, 265)
+    draw_progress_bar(draw, bar_box, progress, bg_color=(30, 35, 55, 255), fill_color=(*color_rgb, 255), radius=10)
+    font_bar = get_font(13, bold=True)
+    draw.text((45, 225), f"KINH NGHIỆM: {cur_exp:,} / {next_exp:,} EXP ({pct_display}%)", fill=(210, 220, 240), font=font_bar)
+
+    buf = io.BytesIO()
+    base.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+# =============================================================================
+# 5. THẺ PREVIEW ROLE SETUP (ROLE SETUP CARD)
+# =============================================================================
+def generate_role_setup_image(
+    clan: Dict[str, Any],
+    role_name: str,
+    color_hex: str,
+    secondary_color_hex: Optional[str] = None,
+    hoist: bool = True,
+    mentionable: bool = False
+) -> io.BytesIO:
+    """Vẽ thẻ xem trước trực quan hiệu ứng Role (920 x 280)"""
+    W, H = 920, 280
+    color_rgb = hex_to_rgb(color_hex, (88, 101, 242))
+    sec_rgb = hex_to_rgb(secondary_color_hex, color_rgb) if secondary_color_hex else None
+
+    base = draw_gradient_background(W, H, (16, 18, 30), (26, 30, 50), horizontal=True)
+    draw = ImageDraw.Draw(base)
+
+    draw.rounded_rectangle((10, 10, W - 10, H - 10), radius=20, outline=(*color_rgb, 200), width=2)
+
+    # Tiêu đề
+    draw.text((40, 30), "🛡️ TRUNG TÂM CÀI ĐẶT & XEM TRƯỚC ROLE BĂNG", fill=(255, 215, 0), font=get_font(24, bold=True))
+    draw.text((40, 62), f"Băng đảng: [{clan['tag']}] {clan['name']}  •  Tùy biến quyền hạn & sắc màu", fill=(170, 185, 210), font=get_font(14, bold=False))
+
+    # Hộp mô phỏng Role Pill của Discord
+    pill_box = (40, 100, W - 40, 195)
+    draw.rounded_rectangle(pill_box, radius=16, fill=(28, 33, 52, 255), outline=(55, 65, 95, 255), width=2)
+
+    # Chấm tròn màu / gradient
+    circle_center = (80, 147)
+    circle_r = 18
+    if sec_rgb:
+        # Vẽ nửa hình tròn chuyển sắc hoặc viền gradient
+        draw.ellipse((circle_center[0] - circle_r, circle_center[1] - circle_r, circle_center[0] + circle_r, circle_center[1] + circle_r), fill=color_rgb, outline=sec_rgb, width=4)
+    else:
+        draw.ellipse((circle_center[0] - circle_r, circle_center[1] - circle_r, circle_center[0] + circle_r, circle_center[1] + circle_r), fill=color_rgb)
+
+    # Tên Role
+    draw.text((115, 147), f"@{role_name}", fill=(255, 255, 255), font=get_font(24, bold=True), anchor="lm")
+
+    # Thuộc tính bên phải của Role Pill
+    col_desc = f"{color_hex} ➔ {secondary_color_hex} (Gradient 🌈)" if secondary_color_hex else f"{color_hex} (Đơn sắc 🎨)"
+    draw.text((W - 65, 130), f"Màu sắc: {col_desc}", fill=(*color_rgb, 255), font=get_font(14, bold=True), anchor="ra")
+    hoist_text = "Tách Nhóm (Hoist): BẬT ✅" if hoist else "Tách Nhóm (Hoist): TẮT ❌"
+    draw.text((W - 65, 155), hoist_text, fill=(180, 220, 255), font=get_font(13, bold=False), anchor="ra")
+
+    # Dòng chỉ dẫn phía dưới
+    draw.text((W // 2, 235), "👉 Dùng menu bên dưới để chọn màu sẵn, nhập gradient 2 màu hoặc gán Role có sẵn trên Server!", fill=(140, 230, 190), font=get_font(13, bold=True), anchor="mm")
+
+    buf = io.BytesIO()
+    base.save(buf, format="PNG")
+    buf.seek(0)
+    return buf

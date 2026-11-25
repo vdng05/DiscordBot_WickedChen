@@ -1,0 +1,12 @@
+services:
+  clan_bot:
+    build: .
+    container_name: wickedchen_clan_bot
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TIMEZONE=Asia/Ho_Chi_Minh

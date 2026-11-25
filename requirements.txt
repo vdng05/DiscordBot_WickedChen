@@ -1,0 +1,8 @@
+# Thư viện chính cho Discord Bot
+discord.py>=2.3.2
+
+# Cơ sở dữ liệu SQLite bất đồng bộ siêu nhẹ (aiosqlite WAL Mode)
+aiosqlite>=0.20.0
+
+# Quản lý cấu hình & biến môi trường từ file .env
+python-dotenv>=1.0.0
