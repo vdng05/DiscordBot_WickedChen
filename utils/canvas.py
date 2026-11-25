@@ -487,3 +487,105 @@ def generate_role_setup_image(
     base.save(buf, format="PNG")
     buf.seek(0)
     return buf
+
+
+# =============================================================================
+# 6. ẢNH NỀN DESKTOP KỶ NIỆM BĂNG ĐẢNG FULL HD (CLAN WALLPAPER 1920 x 1080)
+# =============================================================================
+def generate_clan_wallpaper(
+    clan: Dict[str, Any],
+    members: List[Dict[str, Any]],
+    milestones: List[Dict[str, Any]]
+) -> io.BytesIO:
+    """Vẽ ảnh nền máy tính Full HD 1920x1080 kỷ niệm vẻ vang và dàn thành viên của Băng Đảng"""
+    W, H = 1920, 1080
+    color_rgb = hex_to_rgb(clan.get("color_hex"), (88, 101, 242))
+    sec_rgb = hex_to_rgb(clan.get("secondary_color_hex"), (255, 105, 180)) if clan.get("secondary_color_hex") else color_rgb
+
+    # 1. Background gradient vũ trụ sâu thẳm
+    base = draw_gradient_background(W, H, (12, 14, 25), (22, 26, 44), horizontal=False)
+    draw = ImageDraw.Draw(base)
+
+    # Viền outer glow sang trọng
+    draw.rounded_rectangle((20, 20, W - 20, H - 20), radius=28, outline=(*color_rgb, 200), width=3)
+    draw.rounded_rectangle((26, 26, W - 26, H - 26), radius=24, outline=(255, 255, 255, 20), width=1)
+
+    # 2. Header Emblem bên trái
+    emblem_box = (80, 80, 280, 280)
+    draw.rounded_rectangle(emblem_box, radius=32, fill=(*color_rgb, 40), outline=color_rgb, width=4)
+    draw.text((180, 180), clan.get("tag", "CLAN"), fill=(255, 255, 255), font=get_font(68, bold=True), anchor="mm")
+
+    # 3. Tên Băng & Khẩu Hiệu
+    draw.text((320, 95), "🏰 HỘI NHÓM & BĂNG ĐẢNG SERVER DISCORD", fill=sec_rgb, font=get_font(20, bold=True))
+    draw.text((320, 125), f"[{clan['tag']}] {clan['name']}", fill=(255, 255, 255), font=get_font(52, bold=True))
+    slogan = clan.get("description") or "Chưa có khẩu hiệu."
+    draw.text((320, 195), f"\"{slogan[:80]}\"", fill=(180, 195, 225), font=get_font(22, bold=False))
+
+    # Dãy chỉ số thống kê
+    from utils.embeds import get_level_info
+    lvl_info = get_level_info(clan.get("exp", 0))
+    stats = [
+        ("🏆 CẤP BĂNG", f"Cấp {clan.get('level', 1)} ({lvl_info['title']})", (255, 204, 0)),
+        ("👥 QUÂN SỐ", f"{len(members)} / {lvl_info['max_members']} Thành Viên", (100, 220, 255)),
+        ("⭐ TỔNG EXP", f"{clan.get('exp', 0):,} EXP", (255, 120, 180)),
+        ("🔥 CHUỖI STREAK", f"{clan.get('checkin_streak', 0)} Ngày", (255, 150, 70))
+    ]
+    sx = 320
+    for lbl, val, col in stats:
+        draw.rounded_rectangle((sx, 240, sx + 250, 305), radius=12, fill=(28, 33, 54, 230), outline=(*col, 160), width=1)
+        draw.text((sx + 15, 252), lbl, fill=col, font=get_font(12, bold=True))
+        draw.text((sx + 15, 272), val, fill=(255, 255, 255), font=get_font(16, bold=True))
+        sx += 265
+
+    # 4. Box 1: Dàn Nhân Sự Cốt Cán (80, 340, 930, 990)
+    p1 = (80, 340, 930, 990)
+    draw.rounded_rectangle(p1, radius=20, fill=(20, 24, 38, 230), outline=(55, 65, 95, 200), width=2)
+    draw.text((115, 365), "👑 DÀN NHÂN SỰ CỐT CÁN & THÀNH VIÊN", fill=(255, 215, 0), font=get_font(22, bold=True))
+    draw.line([(115, 405), (895, 405)], fill=(45, 55, 80), width=1)
+
+    rank_icons = {"LEADER": "👑 Chủ Băng", "CO_LEADER": "🥈 Phó Băng", "OFFICER": "🛡️ Cán Bộ", "MEMBER": "⚔️ Thành Viên"}
+    my = 430
+    for idx, m in enumerate(members[:8]):
+        badge_rank = rank_icons.get(m.get("rank"), "⚔️ Thành Viên")
+        uid_text = f"<ID: {m.get('user_id')}>"
+        custom_t = f"【 {m['custom_title']} 】" if m.get("custom_title") else ""
+        points = f"{m.get('contribution_points', 0):,} điểm cống hiến"
+
+        draw.rounded_rectangle((115, my, 895, my + 54), radius=10, fill=(28, 34, 52, 200), outline=(50, 60, 85), width=1)
+        draw.text((135, my + 14), f"{badge_rank} {uid_text}", fill=(255, 255, 255), font=get_font(16, bold=True))
+        if custom_t:
+            draw.text((500, my + 14), custom_t, fill=(255, 204, 0), font=get_font(15, bold=True))
+        draw.text((875, my + 16), points, fill=(160, 180, 210), font=get_font(13, bold=False), anchor="ra")
+        my += 68
+
+    # 5. Box 2: Cột Mốc Lịch Sử (970, 340, 1840, 990)
+    p2 = (970, 340, 1840, 990)
+    draw.rounded_rectangle(p2, radius=20, fill=(20, 24, 38, 230), outline=(*sec_rgb, 180), width=2)
+    draw.text((1005, 365), "📜 CỘT MỐC LỊCH SỬ & KỶ NIỆM ĐÁNG NHỚ", fill=sec_rgb, font=get_font(22, bold=True))
+    draw.line([(1005, 405), (1805, 405)], fill=(45, 55, 80), width=1)
+
+    import time
+    if not milestones:
+        draw.text((1405, 650), "Đang ghi nhận những chiến tích đầu tiên của Băng Đảng...", fill=(140, 150, 175), font=get_font(20, bold=False), anchor="mm")
+    else:
+        ty = 430
+        for m_item in milestones[:7]:
+            m_title = m_item.get("title", "Cột Mốc Mới")
+            m_desc = m_item.get("description", "")
+            achieved = m_item.get("achieved_at", int(time.time()))
+            time_str = time.strftime("%d/%m/%Y %H:%M", time.localtime(achieved))
+
+            draw.ellipse((1015, ty + 16, 1031, ty + 32), fill=sec_rgb)
+            draw.text((1045, ty + 10), m_title, fill=(255, 255, 255), font=get_font(18, bold=True))
+            draw.text((1805, ty + 12), time_str, fill=(150, 165, 190), font=get_font(13, bold=False), anchor="ra")
+            if m_desc:
+                draw.text((1045, ty + 34), m_desc[:65], fill=(180, 195, 220), font=get_font(14, bold=False))
+            ty += 74
+
+    # Watermark Footer
+    draw.text((W // 2, 1030), "✨ WICKED CHEN CLAN ECOSYSTEM • DISCORD COMMUNITY WALLPAPER 1920x1080 ✨", fill=(120, 135, 165), font=get_font(14, bold=True), anchor="mm")
+
+    buf = io.BytesIO()
+    base.save(buf, format="PNG")
+    buf.seek(0)
+    return buf

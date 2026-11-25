@@ -252,6 +252,13 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
                 details=f"Băng [{tag}] {name} được thành lập bởi Chủ Băng <@{user.id}>."
             )
 
+            # Ghi nhận Cột mốc lịch sử thành lập băng
+            await self.bot.db.add_milestone(
+                clan_id=clan_id,
+                title="🏰 Khai Sinh Băng Đảng",
+                description=f"Băng [{tag}] {name} chính thức được thành lập bởi Chủ Băng {user.name}."
+            )
+
             # 5. Gửi Embed Chào Mừng trong kênh chat riêng
             welcome_embed = discord.Embed(
                 title=f"🏰 CHÀO MỪNG ĐẾN VỚI BĂNG [{tag}] {name}!",
@@ -998,6 +1005,89 @@ class WelcomeGreetingView(ui.View):
         await interaction.response.send_message(random.choice(greetings))
 
 
+class CustomTitleModal(ui.Modal):
+    """Modal đặt hoặc gỡ danh hiệu tùy chỉnh nội bộ cho thành viên"""
+    def __init__(self, target_member: discord.Member, clan: Dict[str, Any], bot):
+        super().__init__(title=f"🎖️ Danh Hiệu: {target_member.display_name[:15]}")
+        self.target_member = target_member
+        self.clan = clan
+        self.bot = bot
+
+        self.title_input = ui.TextInput(
+            label="Danh Hiệu / Biệt Danh (Tối đa 25 ký tự)",
+            placeholder="Ví dụ: Gánh Team 👑, Chúa Hề 🤡, Cú Đêm 🌙 (để trống để gỡ)",
+            max_length=25,
+            required=False
+        )
+        self.add_item(self.title_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        new_title = self.title_input.value.strip() or None
+
+        await self.bot.db.update_member_custom_title(
+            interaction.guild_id,
+            self.target_member.id,
+            new_title
+        )
+
+        action_desc = f"đặt danh hiệu **【 {new_title} 】** cho" if new_title else "gỡ danh hiệu của"
+        await self.bot.db.add_clan_log(
+            clan_id=self.clan["clan_id"],
+            actor_id=interaction.user.id,
+            target_id=self.target_member.id,
+            action="UPDATE_TITLE",
+            details=f"<@{interaction.user.id}> đã {action_desc} <@{self.target_member.id}>."
+        )
+
+        msg = f"✅ Đã {action_desc} <@{self.target_member.id}> thành công!"
+        await interaction.followup.send(msg, ephemeral=True)
+
+
+class ClanCustomTitleMemberSelect(ui.Select):
+    """Menu chọn thành viên để trao / gỡ danh hiệu nội bộ"""
+    def __init__(self, clan: Dict[str, Any], members: List[Dict[str, Any]], guild: discord.Guild, bot):
+        self.clan = clan
+        self.bot = bot
+        options = []
+        for m in members[:25]:
+            uid = int(m["user_id"])
+            discord_member = guild.get_member(uid)
+            display_name = discord_member.display_name if discord_member else f"User {uid}"
+            current_title = f" [{m['custom_title']}]" if m.get("custom_title") else ""
+            options.append(
+                discord.SelectOption(
+                    label=f"{display_name} ({m.get('rank', 'MEMBER')})"[:100],
+                    value=str(uid),
+                    description=(f"Danh hiệu hiện tại:{current_title}"[:100]) if current_title else "Chưa có danh hiệu",
+                    emoji="🎖️"
+                )
+            )
+        super().__init__(placeholder="Chọn thành viên để trao hoặc sửa danh hiệu...", options=options, min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        target_uid = int(self.values[0])
+        member = interaction.guild.get_member(target_uid)
+        if not member:
+            try:
+                member = await interaction.guild.fetch_member(target_uid)
+            except Exception:
+                member = None
+        if not member:
+            await interaction.response.send_message("❌ Không tìm thấy thành viên trong máy chủ Discord!", ephemeral=True)
+            return
+
+        modal = CustomTitleModal(target_member=member, clan=self.clan, bot=self.bot)
+        await interaction.response.send_modal(modal)
+
+
+class ClanCustomTitleMemberSelectView(ui.View):
+    """View bọc Menu chọn thành viên trao danh hiệu"""
+    def __init__(self, clan: Dict[str, Any], members: List[Dict[str, Any]], guild: discord.Guild, bot):
+        super().__init__(timeout=120)
+        self.add_item(ClanCustomTitleMemberSelect(clan, members, guild, bot))
+
+
 class ClanHubView(ui.View):
     """Trung Tâm Điều Khiển Băng Đảng Tương Tác 1-Click Dành Cho Thành Viên Cộng Đồng"""
     def __init__(self, user: discord.Member, clan: Optional[Dict[str, Any]], bot):
@@ -1014,6 +1104,7 @@ class ClanHubView(ui.View):
             if not is_officer:
                 self.remove_item(self.manage_btn)
                 self.remove_item(self.role_btn)
+                self.remove_item(self.titles_btn)
             elif not is_leader and not user.guild_permissions.administrator:
                 self.remove_item(self.role_btn)
         else:
@@ -1022,6 +1113,9 @@ class ClanHubView(ui.View):
             self.remove_item(self.quests_btn)
             self.remove_item(self.manage_btn)
             self.remove_item(self.role_btn)
+            self.remove_item(self.milestones_btn)
+            self.remove_item(self.wallpaper_btn)
+            self.remove_item(self.titles_btn)
 
     @ui.button(label="Điểm Danh Hằng Ngày", emoji="📅", style=discord.ButtonStyle.success, row=0)
     async def checkin_btn(self, interaction: discord.Interaction, button: ui.Button):
@@ -1156,6 +1250,57 @@ class ClanHubView(ui.View):
         embed = build_role_setup_embed(self.clan, role, attachment_filename="role_setup.png")
         view = ClanRoleSetupView(clan=self.clan, bot=self.bot)
         await interaction.followup.send(embed=embed, file=file, view=view, ephemeral=True)
+
+    @ui.button(label="Cột Mốc Lịch Sử", emoji="📜", style=discord.ButtonStyle.secondary, row=2)
+    async def milestones_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        if not self.clan:
+            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            return
+        from utils.embeds import build_milestones_embed
+        milestones = await self.bot.db.get_clan_milestones(self.clan["clan_id"], limit=10)
+        embed = build_milestones_embed(self.clan, milestones)
+        if self.clan.get("logo_url"):
+            embed.set_thumbnail(url=self.clan["logo_url"])
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @ui.button(label="Ảnh Nền Băng (Full HD)", emoji="🖼️", style=discord.ButtonStyle.secondary, row=2)
+    async def wallpaper_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        if not self.clan:
+            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            return
+        from utils.canvas import generate_clan_wallpaper
+        members = await self.bot.db.get_clan_members(self.clan["clan_id"])
+        milestones = await self.bot.db.get_clan_milestones(self.clan["clan_id"], limit=5)
+        buf = await asyncio.to_thread(generate_clan_wallpaper, self.clan, members, milestones)
+        file = discord.File(fp=buf, filename="clan_wallpaper.png")
+        embed = discord.Embed(
+            title=f"🖼️ HÌNH NỀN DESKTOP BĂNG [{self.clan['tag']}] {self.clan['name']}",
+            description="Tác phẩm đồ họa Full HD 1920x1080 ghi lại dấu ấn, thành viên chủ chốt và biên niên sử hào hùng của băng!",
+            color=discord.Color.from_str(self.clan.get("color_hex") or "#5865F2"),
+            timestamp=datetime.now()
+        )
+        embed.set_image(url="attachment://clan_wallpaper.png")
+        embed.set_footer(text="Gợi ý: Nhấn vào ảnh và chọn 'Open in Browser' để tải về ảnh gốc chất lượng cao nhất!")
+        await interaction.followup.send(embed=embed, file=file, ephemeral=True)
+
+    @ui.button(label="Trao Danh Hiệu", emoji="🎖️", style=discord.ButtonStyle.primary, row=2)
+    async def titles_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not self.clan:
+            await interaction.response.send_message("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            return
+        is_leader = int(self.clan["leader_id"]) == interaction.user.id
+        is_officer = is_leader or self.clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
+        if not is_officer and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Chỉ Cán Bộ, Phó Băng hoặc Chủ Băng mới có quyền trao danh hiệu nội bộ!", ephemeral=True)
+            return
+        members = await self.bot.db.get_clan_members(self.clan["clan_id"])
+        if not members:
+            await interaction.response.send_message("❌ Băng chưa có thành viên!", ephemeral=True)
+            return
+        view = ClanCustomTitleMemberSelectView(clan=self.clan, members=members, guild=interaction.guild, bot=self.bot)
+        await interaction.response.send_message("🎖️ **Chọn thành viên để trao hoặc chỉnh sửa danh hiệu nội bộ:**", view=view, ephemeral=True)
 
 
 class RequestView(ui.View):

@@ -24,6 +24,11 @@ from utils.logger import setup_logging
 
 logger = setup_logging("ClanEvents")
 
+def is_bonfire_active() -> bool:
+    """Kiểm tra thời điểm hiện tại có đang trong Đêm Lửa Trại (T7 & CN, 20:00 - 23:00) không"""
+    vn_now = get_vietnam_now()
+    return vn_now.weekday() in (5, 6) and (20 <= vn_now.hour < 23)
+
 class ClanEvents(commands.Cog):
     """Lắng nghe sự kiện Gateway và chạy tác vụ nền định kỳ"""
 
@@ -33,6 +38,8 @@ class ClanEvents(commands.Cog):
         self._chat_cooldowns: Dict[Tuple[int, int], float] = {}
         # Cờ đánh dấu đã chạy reset tuần cho chu kỳ hiện tại
         self._last_weekly_reset_key: str = ""
+        # Cờ đánh dấu thông báo sự kiện Đêm Lửa Trại cuối tuần
+        self._last_bonfire_alert_key: str = ""
 
     def cog_unload(self):
         if self.voice_coop_ticker.is_running():
@@ -80,7 +87,9 @@ class ClanEvents(commands.Cog):
             threshold = now - (EXP_REWARDS.CHAT_COOLDOWN_SECONDS * 5)
             self._chat_cooldowns = {k: v for k, v in self._chat_cooldowns.items() if v > threshold}
 
-        exp_to_add = EXP_REWARDS.CHAT_EXP
+        # Tự động x2 EXP nếu đang trong Đêm Lửa Trại Cuối Tuần
+        multiplier = 2 if is_bonfire_active() else 1
+        exp_to_add = EXP_REWARDS.CHAT_EXP * multiplier
         await self.bot.db.add_clan_exp(clan["clan_id"], exp_to_add, exp_to_add)
         await self.bot.db.add_contribution_points(message.guild.id, message.author.id, EXP_REWARDS.CHAT_CONTRIBUTION)
 
@@ -146,7 +155,8 @@ class ClanEvents(commands.Cog):
                             if not clan:
                                 continue
 
-                            exp_to_add = EXP_REWARDS.VOICE_EXP
+                            multiplier = 2 if is_bonfire_active() else 1
+                            exp_to_add = EXP_REWARDS.VOICE_EXP * multiplier
                             await self.bot.db.add_clan_exp(clan_id, exp_to_add, exp_to_add)
 
                             for uid in user_ids:
@@ -228,6 +238,24 @@ class ClanEvents(commands.Cog):
         except Exception as e:
             logger.error(f"Lỗi kiểm tra reset tuần: {e}")
 
+        # 5. Kiểm tra Sự Kiện Đêm Lửa Trại Cuối Tuần (Weekend Clan Bonfire - x2 EXP)
+        try:
+            vn_now = get_vietnam_now()
+            # Thứ Bảy (5) & Chủ Nhật (6)
+            if vn_now.weekday() in (5, 6):
+                if vn_now.hour == 20 and vn_now.minute == 0:
+                    alert_key = f"{vn_now.strftime('%Y-%m-%d')}-START"
+                    if self._last_bonfire_alert_key != alert_key:
+                        self._last_bonfire_alert_key = alert_key
+                        await self._broadcast_bonfire_event(is_start=True)
+                elif vn_now.hour == 23 and vn_now.minute == 0:
+                    alert_key = f"{vn_now.strftime('%Y-%m-%d')}-END"
+                    if self._last_bonfire_alert_key != alert_key:
+                        self._last_bonfire_alert_key = alert_key
+                        await self._broadcast_bonfire_event(is_start=False)
+        except Exception as e:
+            logger.error(f"Lỗi kiểm tra sự kiện lửa trại: {e}")
+
     @one_minute_ticker.before_loop
     async def before_one_minute_ticker(self):
         await self.bot.wait_until_ready()
@@ -269,6 +297,55 @@ class ClanEvents(commands.Cog):
                 await self.bot.db.ensure_weekly_quests(c["clan_id"], current_week)
 
         logger.info(f"Hoàn tất Reset Tuần cho chu kỳ {current_week}!")
+
+    async def _broadcast_bonfire_event(self, is_start: bool):
+        """Phát sóng thông báo Bắt đầu / Kết thúc Đêm Lửa Trại Cuối Tuần tới toàn bộ các băng"""
+        logger.info(f"Phát sóng thông báo Đêm Lửa Trại Cuối Tuần (is_start={is_start})")
+        for guild in self.bot.guilds:
+            try:
+                clans = await self.bot.db.get_all_clans_in_guild(guild.id)
+                for clan in clans:
+                    text_ch_id = clan.get("text_channel_id")
+                    role_id = clan.get("role_id")
+                    if not text_ch_id:
+                        continue
+                    channel = guild.get_channel(int(text_ch_id))
+                    if not channel:
+                        continue
+
+                    ping_content = f"<@&{role_id}>" if role_id else ""
+                    if is_start:
+                        embed = discord.Embed(
+                            title="🔥 ĐÊM LỬA TRẠI CUỐI TUẦN CHÍNH THỨC BẮT ĐẦU! (x2 EXP) 🔥",
+                            description=(
+                                f"Hỡi các anh em của **[{clan['tag']}] {clan['name']}**!\n\n"
+                                f"⏰ **Thời gian:** 20:00 - 23:00 (Tối nay)\n"
+                                f"✨ **Hiệu ứng đặc biệt đang kích hoạt:**\n"
+                                f"• **x2 EXP Chat:** Tăng tốc cày cấp băng qua mỗi tin nhắn hợp lệ!\n"
+                                f"• **x2 EXP Voice Co-op:** Quây quần đàm đạo cùng anh em trong kênh Voice để nhận gấp đôi EXP!\n\n"
+                                f"👉 *Hãy mau chóng tụ họp cùng đồng đội để bứt phá bảng xếp hạng tuần này!*"
+                            ),
+                            color=discord.Color.from_str("#FF4500"),
+                            timestamp=datetime.now()
+                        )
+                        embed.set_footer(text="Sự kiện Đêm Lửa Trại Cuối Tuần • Tự động kích hoạt x2 EXP")
+                    else:
+                        embed = discord.Embed(
+                            title="🌙 ĐÊM LỬA TRẠI CUỐI TUẦN ĐÃ KẾT THÚC 🌙",
+                            description=(
+                                f"Ngọn lửa trại tối nay của **[{clan['tag']}] {clan['name']}** đã tạm lắng xuống!\n\n"
+                                f"🎉 Cảm ơn toàn thể anh em đã cháy hết mình trong 3 giờ vừa qua.\n"
+                                f"⚡ Hệ số EXP đã trở về mức tiêu chuẩn (x1).\n"
+                                f"Chúc các bạn nghỉ ngơi vui vẻ và sẵn sàng cho các mục tiêu tiếp theo!"
+                            ),
+                            color=discord.Color.from_str("#4A69BD"),
+                            timestamp=datetime.now()
+                        )
+                        embed.set_footer(text="Đêm Lửa Trại Cuối Tuần • Hẹn gặp lại vào 20:00 ngày tiếp theo!")
+
+                    await channel.send(content=ping_content, embed=embed)
+            except Exception as e:
+                logger.error(f"Lỗi khi gửi thông báo Đêm Lửa Trại cho guild {guild.id}: {e}")
 
     # =========================================================================
     # SỰ KIỆN: NGƯỜI RỜI SERVER (KẾ VỊ HOẶC GIẢI TÁN BĂNG)
@@ -442,6 +519,13 @@ class ClanEvents(commands.Cog):
                 actor_id=self.bot.user.id,
                 action="LEVEL_UP",
                 details=f"Băng thăng cấp từ Level {old_level} lên Level {lvl_info['level']}!"
+            )
+
+            # Ghi nhận Cột mốc lịch sử (Milestone)
+            await self.bot.db.add_milestone(
+                clan_id=clan_id,
+                title=f"🎉 Thăng Cấp Level {lvl_info['level']}",
+                description=f"Cán mốc cấp độ {lvl_info['level']} ({lvl_info['title']}) - {lvl_info['perks']}"
             )
 
             # Thông báo vào kênh chat

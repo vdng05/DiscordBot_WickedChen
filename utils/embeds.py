@@ -180,8 +180,9 @@ def build_members_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], pag
             idx = start_idx + i + 1
             badge = rank_badges.get(m["rank"], "👤")
             r_name = Ranks.NAMES.get(m["rank"], m["rank"])
+            title_tag = f" • 【 {m['custom_title']} 】" if m.get("custom_title") else ""
             lines.append(
-                f"`#{idx:02d}` {badge} <@{m['user_id']}> **({r_name})**\n"
+                f"`#{idx:02d}` {badge} <@{m['user_id']}> **({r_name})**{title_tag}\n"
                 f"   ┗ 🏆 Cống hiến: **{m['contribution_points']}** • 🔥 Chuỗi Streak: **{m.get('checkin_streak', 0)} ngày**"
             )
         desc = f"📊 Tổng cộng: **{len(filtered)}** thành viên {f'(Bộ lọc: {Ranks.NAMES.get(rank_filter)})' if rank_filter else ''}\n\n" + "\n\n".join(lines)
@@ -198,6 +199,30 @@ def build_members_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], pag
         embed.set_thumbnail(url=clan["logo_url"])
     embed.set_footer(text=f"Trang {current_page} / {total_pages} • Sĩ số: {len(members)}/{clan['max_members']}")
     return embed, total_pages
+
+
+def build_milestones_embed(clan: Dict[str, Any], milestones: List[Dict[str, Any]]) -> discord.Embed:
+    """Tạo Embed dòng thời gian biên niên sử cột mốc của Băng Đảng"""
+    embed = discord.Embed(
+        title=f"📜 BIÊN NIÊN SỬ CỘT MỐC: [{clan['tag']}] {clan['name']}",
+        description="Ghi nhận các chiến tích, mốc thăng cấp và khoảnh khắc vẻ vang của băng đảng!",
+        color=parse_hex_color(clan.get("color_hex")),
+        timestamp=datetime.now()
+    )
+    if not milestones:
+        embed.description += "\n\n_Băng đảng hiện chưa có cột mốc nào được ghi nhận. Hãy tiếp tục hoạt động cùng anh em nhé!_"
+    else:
+        for idx, m in enumerate(milestones[:10]):
+            achieved = m.get("achieved_at", int(datetime.now().timestamp()))
+            embed.add_field(
+                name=f"{idx+1}. {m['title']} (<t:{achieved}:d>)",
+                value=m.get("description") or "_Không có mô tả chi tiết._",
+                inline=False
+            )
+    if clan.get("logo_url"):
+        embed.set_thumbnail(url=clan["logo_url"])
+    embed.set_footer(text="Cột mốc được tự động ghi nhận theo thời gian thực")
+    return embed
 
 
 def build_clan_list_embed(guild_name: str, clans: List[Dict[str, Any]]) -> discord.Embed:

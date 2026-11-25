@@ -165,12 +165,23 @@ class DatabaseManager:
                 FOREIGN KEY (clan_id) REFERENCES clans(clan_id) ON DELETE CASCADE
             );
 
+            -- 7. Cột mốc lịch sử & Kỷ niệm của băng
+            CREATE TABLE IF NOT EXISTS clan_milestones (
+                milestone_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                clan_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                achieved_at INTEGER NOT NULL,
+                FOREIGN KEY (clan_id) REFERENCES clans(clan_id) ON DELETE CASCADE
+            );
+
             -- Các chỉ mục tối ưu hiệu năng
             CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id);
             CREATE INDEX IF NOT EXISTS idx_clan_logs_clan_time ON clan_logs(clan_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_clan_requests_status ON clan_requests(status, expires_at);
             CREATE INDEX IF NOT EXISTS idx_clan_parties_reminder ON clan_parties(status, reminded, scheduled_at);
             CREATE INDEX IF NOT EXISTS idx_weekly_quests_clan_week ON clan_weekly_quests(clan_id, week_key);
+            CREATE INDEX IF NOT EXISTS idx_clan_milestones_clan ON clan_milestones(clan_id, achieved_at DESC);
             """
 
             await db.executescript(schema)
@@ -179,6 +190,13 @@ class DatabaseManager:
             # Migration: thêm secondary_color_hex nếu chưa có
             try:
                 await db.execute("ALTER TABLE clans ADD COLUMN secondary_color_hex TEXT")
+                await db.commit()
+            except Exception:
+                pass
+
+            # Migration: thêm custom_title cho clan_members nếu chưa có
+            try:
+                await db.execute("ALTER TABLE clan_members ADD COLUMN custom_title TEXT")
                 await db.commit()
             except Exception:
                 pass
@@ -368,6 +386,7 @@ class DatabaseManager:
             await db.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan_id,))
             await db.execute("DELETE FROM clan_requests WHERE clan_id = ?", (clan_id,))
             await db.execute("DELETE FROM clan_weekly_quests WHERE clan_id = ?", (clan_id,))
+            await db.execute("DELETE FROM clan_milestones WHERE clan_id = ?", (clan_id,))
             await db.execute("DELETE FROM clan_logs WHERE clan_id = ?", (clan_id,))
             await db.execute("DELETE FROM clan_parties WHERE clan_id = ?", (clan_id,))
             cursor = await db.execute("DELETE FROM clans WHERE clan_id = ?", (clan_id,))
@@ -490,6 +509,28 @@ class DatabaseManager:
             cursor = await db.execute("UPDATE clan_members SET rank = ? WHERE guild_id = ? AND user_id = ?", (rank, str(guild_id), str(user_id)))
             await db.commit()
             return cursor.rowcount
+
+    async def update_member_custom_title(self, guild_id: int, user_id: int, custom_title: Optional[str]) -> int:
+        async with self.connect() as db:
+            cursor = await db.execute("UPDATE clan_members SET custom_title = ? WHERE guild_id = ? AND user_id = ?", (custom_title, str(guild_id), str(user_id)))
+            await db.commit()
+            return cursor.rowcount
+
+    async def add_milestone(self, clan_id: int, title: str, description: str) -> int:
+        now = int(time.time())
+        sql = "INSERT INTO clan_milestones (clan_id, title, description, achieved_at) VALUES (?, ?, ?, ?)"
+        async with self.connect() as db:
+            cursor = await db.execute(sql, (clan_id, title, description, now))
+            await db.commit()
+            return cursor.lastrowid
+
+    async def get_clan_milestones(self, clan_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        sql = "SELECT * FROM clan_milestones WHERE clan_id = ? ORDER BY achieved_at DESC, milestone_id DESC LIMIT ?"
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(sql, (clan_id, limit)) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(r) for r in rows]
 
     async def add_contribution_points(self, guild_id: int, user_id: int, points: int) -> int:
         sql = "UPDATE clan_members SET contribution_points = contribution_points + ? WHERE guild_id = ? AND user_id = ?"

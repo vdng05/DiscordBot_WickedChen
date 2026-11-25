@@ -8,7 +8,7 @@
 👉 **Cách nhanh nhất để dùng bot:** Bạn chỉ cần gõ lệnh duy nhất `/clan hub`.
 Mọi tính năng quan trọng sẽ hiện ra ngay dưới dạng các **nút bấm thông minh**:
 - **Nếu chưa có băng:** Bấm nút xem danh sách băng mở tuyển, xem Bảng Xếp Hạng hoặc tự lập băng mới.
-- **Nếu đã có băng:** Bấm nút Điểm danh hằng ngày, Xem Nhiệm vụ tuần, Xem hồ sơ băng, Mở bảng quản lý hoặc cài đặt Role... bằng 1 cú click!
+- **Nếu đã có băng:** Bấm nút Điểm danh hằng ngày, Xem Nhiệm vụ tuần, Xem hồ sơ băng, Mở bảng quản lý, Cài đặt Role, Xem Cột mốc lịch sử, Xuất ảnh nền Full HD hoặc Trao danh hiệu... bằng 1 cú click!
 
 ---
 
@@ -89,6 +89,15 @@ Mở bảng điều khiển tương tác (dành cho Chủ Băng & Cán Bộ):
 - **Chuyển giao quyền Chủ Băng:** `/clan transfer @user` (Chủ cũ tự động chuyển thành Phó Băng).
 - **Giải tán băng:** `/clan disband` (Yêu cầu gõ chính xác tên băng để xác nhận an toàn 2 lớp).
 
+### 7. Trao Danh Hiệu & Biệt Danh Nội Bộ: Nút `[🎖️ Trao Danh Hiệu]` trong `/clan hub`
+- Cán Bộ, Phó Băng và Chủ Băng có thể trao tặng các danh hiệu/biệt danh độc đáo cho thành viên (Ví dụ: `Gánh Team 👑`, `Cú Đêm 🌙`, `Chúa Hề 🤡`, `Trùm Nấu Lẩu 🍲`...).
+- **Cách dùng:** Mở `/clan hub` $\rightarrow$ bấm **`[🎖️ Trao Danh Hiệu]`** $\rightarrow$ chọn thành viên từ menu thả xuống $\rightarrow$ nhập danh hiệu mong muốn (hoặc để trống để gỡ).
+- Danh hiệu sẽ xuất hiện kiêu hãnh trên **Bảng thành viên (`/clan members`)** và khắc ghi trang trọng trên **Ảnh Nền Wallpaper Full HD** của băng!
+
+### 8. Biên Niên Sử & Xuất Ảnh Nền Wallpaper Full HD (1920x1080)
+- **📜 Cột Mốc Lịch Sử:** Bấm **`[📜 Cột Mốc Lịch Sử]`** trong `/clan hub` để xem dòng thời gian ghi dấu các sự kiện trọng đại của băng (ngày thành lập, các mốc thăng cấp).
+- **🖼️ Xuất Ảnh Nền Desktop Full HD:** Bấm **`[🖼️ Ảnh Nền Băng (Full HD)]`** trong `/clan hub`. Bot sẽ vẽ tự động tác phẩm Wallpaper 1920x1080 tuyệt đẹp mang biểu tượng, chỉ số, danh sách nòng cốt và biên niên sử của băng để anh em tải về làm hình nền máy tính!
+
 ---
 
 ## 👑 PHẦN 3: DÀNH CHO QUẢN TRỊ VIÊN SERVER (ADMIN)
@@ -127,3 +136,8 @@ Mở bảng điều khiển tương tác (dành cho Chủ Băng & Cán Bộ):
 2. **Chat giao lưu trong kênh riêng:** +5 EXP mỗi tin nhắn (cooldown 60 giây chống spam) và tích lũy nhiệm vụ tuần.
 3. **Treo Voice chơi game cùng nhau:** Cứ từ 2 thành viên cùng băng ngồi chung phòng Voice, mỗi 5 phút băng được cộng thẳng **+15 EXP**!
 4. **Hoàn thành Nhiệm Vụ Tuần (`/clan quests`):** Nhận ngay **+300 đến +500 EXP** cho mỗi nhiệm vụ hoàn thành.
+5. **🔥 Sự Kiện Đêm Lửa Trại Cuối Tuần (Weekend Clan Bonfire - x2 EXP):**
+   - Diễn ra vào **Thứ Bảy & Chủ Nhật, từ 20:00 đến 23:00** (giờ Việt Nam).
+   - Đúng 20:00, bot sẽ **tự động tag vai trò băng (`@Role Clan`)** trong kênh chat riêng của từng băng để hiệu triệu anh em tập hợp.
+   - Trong suốt thời gian lửa trại, toàn bộ EXP nhận được từ **Chat và Voice Co-op đều được nhân đôi (x2)**!
+   - Đến 23:00, bot sẽ gửi thông báo tổng kết khép lại đêm lửa trại. Đừng bỏ lỡ khung giờ vàng này để bứt phá bảng xếp hạng nhé!

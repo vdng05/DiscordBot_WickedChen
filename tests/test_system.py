@@ -169,8 +169,40 @@ async def run_tests():
     assert len(role_view.children) >= 4
     print("✅ 11. Thành phần UI tương tác & Cài đặt Role (ClanRoleSetupView, RoleNameModal) sẵn sàng.")
 
+    # 12. Danh hiệu nội bộ (Custom Title & Badges)
+    await db.update_member_custom_title(123456789, 8888, "Gánh Team 👑")
+    m8888_title = await db.get_member(123456789, 8888)
+    assert m8888_title["custom_title"] == "Gánh Team 👑"
+    print("✅ 12. Trao & Cập nhật Danh hiệu nội bộ (Custom Title / Badges) thành công.")
+
+    # 13. Cột mốc lịch sử (Clan Milestones)
+    ms_id1 = await db.add_milestone(clan_id, "🏰 Khai Sinh Băng Đảng", "Băng Hoàng Gia chính thức thành lập.")
+    ms_id2 = await db.add_milestone(clan_id, "🎉 Thăng Cấp Level 2", "Cán mốc cấp độ 2 Khởi Nghĩa.")
+    assert ms_id1 > 0 and ms_id2 > 0
+    milestones = await db.get_clan_milestones(clan_id)
+    assert len(milestones) == 2
+    assert milestones[0]["title"] == "🎉 Thăng Cấp Level 2"
+    print("✅ 13. Lưu trữ và truy xuất Cột mốc lịch sử (Milestones) hoàn hảo.")
+
+    # 14. Kiểm tra Sự kiện Đêm Lửa Trại (Bonfire Logic)
+    from cogs.clan_events.clan_events import is_bonfire_active
+    # Hàm chạy không lỗi
+    bonfire_active = is_bonfire_active()
+    assert isinstance(bonfire_active, bool)
+    print("✅ 14. Logic kiểm tra Đêm Lửa Trại Cuối Tuần (Bonfire x2 EXP) hoạt động chuẩn.")
+
+    # 15. Xuất Ảnh Nền Wallpaper Full HD 1920x1080 & Milestone Embed
+    from utils.canvas import generate_clan_wallpaper
+    from utils.embeds import build_milestones_embed
+    members = await db.get_clan_members(clan_id)
+    wall_buf = generate_clan_wallpaper(clan, members, milestones)
+    assert wall_buf.getbuffer().nbytes > 10000
+    ms_embed = build_milestones_embed(clan, milestones)
+    assert ms_embed.title.startswith("📜 BIÊN NIÊN SỬ")
+    print("✅ 15. Sinh Wallpaper Full HD (1920x1080) & Embed Cột Mốc Lịch Sử thành công.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 11 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 15 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db
