@@ -276,9 +276,17 @@ class ClanCommands(commands.Cog):
         import asyncio
         buf = await asyncio.to_thread(generate_role_setup_image, clan, role_name, color_hex, sec_hex, hoist, mentionable)
         file = discord.File(fp=buf, filename="role_setup.png")
-        embed = build_role_setup_embed(clan, role, attachment_filename="role_setup.png")
+        files = [file]
+        logo_filename = None
+        if not clan.get("logo_url"):
+            from utils.canvas import generate_default_clan_logo
+            logo_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
+            files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
+            logo_filename = "default_logo.png"
+
+        embed = build_role_setup_embed(clan, role, attachment_filename="role_setup.png", logo_filename=logo_filename)
         view = ClanRoleSetupView(clan=clan, bot=self.bot)
-        await interaction.followup.send(embed=embed, file=file, view=view, ephemeral=True)
+        await interaction.followup.send(embed=embed, files=files, view=view, ephemeral=True)
 
     @clan_group.command(name="set-role", description="Gán nhanh một Role có sẵn trên Server làm Role Băng (Chủ Băng)")
     @app_commands.describe(role="Chọn Role trên server bạn muốn gán làm Role của Băng")
@@ -746,14 +754,21 @@ class ClanCommands(commands.Cog):
         is_member = (viewer_clan is not None and viewer_clan["clan_id"] == clan["clan_id"])
         is_leader = (int(clan["leader_id"]) == interaction.user.id)
 
-        from utils.canvas import generate_clan_profile_image
+        from utils.canvas import generate_clan_profile_image, generate_default_clan_logo
         import asyncio
         buf = await asyncio.to_thread(generate_clan_profile_image, clan, len(members), level_info)
         file = discord.File(fp=buf, filename="clan_profile.png")
+        files = [file]
 
-        embed = build_clan_info_embed(clan, members, level_info, attachment_filename="clan_profile.png")
+        logo_filename = None
+        if not clan.get("logo_url"):
+            logo_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
+            files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
+            logo_filename = "default_logo.png"
+
+        embed = build_clan_info_embed(clan, members, level_info, attachment_filename="clan_profile.png", logo_filename=logo_filename)
         view = ClanInfoView(clan_id=clan["clan_id"], can_apply=can_apply, is_member=is_member, is_leader=is_leader, bot=self.bot)
-        await interaction.followup.send(embed=embed, file=file, view=view)
+        await interaction.followup.send(embed=embed, files=files, view=view)
 
     @clan_group.command(name="members", description="Xem danh sách thành viên trong băng kèm phân trang")
     @app_commands.describe(ten_bang="Tên hoặc Tag băng (để trống để xem băng của mình)")
@@ -772,9 +787,18 @@ class ClanCommands(commands.Cog):
             return
 
         members = await self.bot.db.get_clan_members(clan["clan_id"])
-        embed, total_pages = build_members_embed(clan, members, page=1, page_size=10)
-        view = MembersPaginationView(clan_id=clan["clan_id"], current_page=1, total_pages=total_pages, current_filter="ALL", bot=self.bot)
-        await interaction.followup.send(embed=embed, view=view)
+        if not clan.get("logo_url"):
+            from utils.canvas import generate_default_clan_logo
+            import asyncio
+            logo_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
+            logo_file = discord.File(fp=logo_buf, filename="default_logo.png")
+            embed, total_pages = build_members_embed(clan, members, page=1, page_size=10, logo_filename="default_logo.png")
+            view = MembersPaginationView(clan_id=clan["clan_id"], current_page=1, total_pages=total_pages, current_filter="ALL", bot=self.bot)
+            await interaction.followup.send(embed=embed, file=logo_file, view=view)
+        else:
+            embed, total_pages = build_members_embed(clan, members, page=1, page_size=10)
+            view = MembersPaginationView(clan_id=clan["clan_id"], current_page=1, total_pages=total_pages, current_filter="ALL", bot=self.bot)
+            await interaction.followup.send(embed=embed, view=view)
 
     @clan_group.command(name="list", description="Xem danh sách toàn bộ các băng đang hoạt động trong server")
     async def clan_list(self, interaction: discord.Interaction):
@@ -1126,10 +1150,16 @@ class ClanCommands(commands.Cog):
         from utils.canvas import generate_quests_image
         buf = await asyncio.to_thread(generate_quests_image, clan, quests, week_key)
         file = discord.File(fp=buf, filename="quests.png")
+        files = [file]
         embed = build_quests_embed(clan, quests, week_key, attachment_filename="quests.png")
         if clan.get("logo_url"):
             embed.set_thumbnail(url=clan["logo_url"])
-        await interaction.followup.send(embed=embed, file=file)
+        else:
+            from utils.canvas import generate_default_clan_logo
+            logo_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
+            files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
+            embed.set_thumbnail(url="attachment://default_logo.png")
+        await interaction.followup.send(embed=embed, files=files)
 
     @clan_group.command(name="hub", description="Mở trung tâm điều khiển Băng Đảng tương tác 1-click")
     async def clan_hub(self, interaction: discord.Interaction):

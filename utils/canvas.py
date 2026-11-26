@@ -99,6 +99,281 @@ def draw_progress_bar(
         draw.rounded_rectangle((x1, y1, x1 + fill_w, y2), radius=radius, fill=fill_color)
 
 
+def draw_sparkle(
+    draw: ImageDraw.ImageDraw,
+    cx: int,
+    cy: int,
+    size: int,
+    color: Tuple[int, int, int, int] = (255, 235, 150, 255)
+):
+    """Vẽ hiệu ứng ngôi sao lấp lánh 4 cánh sang trọng (Glint / Sparkle)"""
+    draw.line([(cx - size, cy), (cx + size, cy)], fill=color, width=2)
+    draw.line([(cx, cy - size), (cx, cy + size)], fill=color, width=2)
+    s2 = max(2, int(size * 0.45))
+    draw.line([(cx - s2, cy - s2), (cx + s2, cy + s2)], fill=color, width=1)
+    draw.line([(cx - s2, cy + s2), (cx + s2, cy - s2)], fill=color, width=1)
+    draw.ellipse((cx - 2, cy - 2, cx + 2, cy + 2), fill=(255, 255, 255, 255))
+
+
+def draw_emblem_crest(
+    draw: ImageDraw.ImageDraw,
+    cx: int,
+    cy: int,
+    radius: int,
+    tag: str,
+    color_rgb: Tuple[int, int, int],
+    sec_rgb: Tuple[int, int, int] = (255, 215, 0),
+    level: int = 1,
+    show_crown: bool = True
+):
+    """Vẽ huy hiệu / emblem hoàng gia lộng lẫy lên canvas với kích thước tùy biến"""
+    # 1. Hào quang phát sáng tỏa tròn (Radial Glow)
+    r1, r2 = int(radius * 1.15), int(radius * 0.95)
+    draw.ellipse((cx - r1, cy - r1, cx + r1, cy + r1), fill=(*color_rgb, 35))
+    draw.ellipse((cx - r2, cy - r2, cx + r2, cy + r2), fill=(*color_rgb, 60))
+
+    # 2. Vành tròn kim loại ngoài
+    draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=(*sec_rgb, 170), width=2)
+
+    # 3. Khiên Bát Giác Hoàng Gia (Royal Octagon)
+    pts = [
+        (cx, cy - radius),
+        (cx + int(radius * 0.72), cy - int(radius * 0.72)),
+        (cx + radius, cy),
+        (cx + int(radius * 0.72), cy + int(radius * 0.72)),
+        (cx, cy + radius),
+        (cx - int(radius * 0.72), cy + int(radius * 0.72)),
+        (cx - radius, cy),
+        (cx - int(radius * 0.72), cy - int(radius * 0.72))
+    ]
+    draw.polygon(pts, fill=(16, 20, 36, 250), outline=(*color_rgb, 230))
+    # Viền trong sắc nét
+    in_r = int(radius * 0.88)
+    in_pts = [
+        (cx, cy - in_r),
+        (cx + int(in_r * 0.72), cy - int(in_r * 0.72)),
+        (cx + in_r, cy),
+        (cx + int(in_r * 0.72), cy + int(in_r * 0.72)),
+        (cx, cy + in_r),
+        (cx - int(in_r * 0.72), cy + int(in_r * 0.72)),
+        (cx - in_r, cy),
+        (cx - int(in_r * 0.72), cy - int(in_r * 0.72))
+    ]
+    draw.line(in_pts + [in_pts[0]], fill=(*sec_rgb, 210), width=1)
+
+    # 4. Vương miện trên đỉnh
+    if show_crown:
+        crown_size = max(14, int(radius * 0.28))
+        draw.text((cx, cy - int(radius * 0.44)), "👑", fill=(255, 215, 0), font=get_font(crown_size), anchor="mm")
+
+    # 5. Tag Băng phát sáng
+    tag_str = (tag or "CLAN").upper()
+    font_size = max(16, int(radius * (0.42 if len(tag_str) <= 4 else 0.32)))
+    font_tag = get_font(font_size, bold=True)
+    # Glow / Drop Shadow
+    draw.text((cx + 1, cy + int(radius * 0.08)), tag_str, fill=(0, 0, 0, 220), font=font_tag, anchor="mm")
+    draw.text((cx, cy + int(radius * 0.06)), tag_str, fill=(255, 255, 255), font=font_tag, anchor="mm")
+
+    # 6. Mini Pill cấp độ ở chân huy hiệu
+    pw = int(radius * 0.95)
+    ph = max(14, int(radius * 0.24))
+    py = cy + int(radius * 0.45)
+    draw.rounded_rectangle((cx - pw // 2, py, cx + pw // 2, py + ph), radius=6, fill=(24, 30, 52, 240), outline=(*sec_rgb, 200), width=1)
+    draw.text((cx, py + ph // 2), f"LV.{level}", fill=(255, 215, 0), font=get_font(max(10, int(ph * 0.65)), bold=True), anchor="mm")
+
+    # 7. Sparkles
+    sp_size = max(4, int(radius * 0.12))
+    draw_sparkle(draw, cx, cy - radius, sp_size, (*sec_rgb, 255))
+    draw_sparkle(draw, cx, cy + radius, sp_size, (*sec_rgb, 255))
+    draw_sparkle(draw, cx - radius, cy, sp_size - 1, (*color_rgb, 255))
+    draw_sparkle(draw, cx + radius, cy, sp_size - 1, (*color_rgb, 255))
+
+
+def generate_default_clan_logo(clan: Dict[str, Any]) -> io.BytesIO:
+    """Tạo Logo / Avatar Huy Hiệu Băng Đảng Mặc Định Cực Kỳ Lộng Lẫy (512 x 512)"""
+    W, H = 512, 512
+    cx, cy = W // 2, H // 2
+    color_rgb = hex_to_rgb(clan.get("color_hex"), (88, 101, 242))
+    sec_rgb = hex_to_rgb(clan.get("secondary_color_hex"), (255, 215, 0)) if clan.get("secondary_color_hex") else (255, 215, 0)
+
+    # 1. Nền Canvas Dark Obsidian với gradient chuyển sắc huyền bí
+    base = draw_gradient_background(W, H, (10, 12, 22), (22, 26, 44), horizontal=False)
+    draw = ImageDraw.Draw(base)
+
+    # 2. Vòng hào quang phát sáng đa lớp (Multi-layer Radial Glow)
+    glow_layers = [(235, 12), (200, 25), (165, 45), (130, 70), (95, 100)]
+    for r, a in glow_layers:
+        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(*color_rgb, a))
+
+    # 3. Các tia hào quang ma thuật / công nghệ (Magic / Tech Radial Rays)
+    for angle_deg in range(0, 360, 20):
+        rad = math.radians(angle_deg)
+        x1 = cx + int(145 * math.cos(rad))
+        y1 = cy + int(145 * math.sin(rad))
+        x2 = cx + int(205 * math.cos(rad))
+        y2 = cy + int(205 * math.sin(rad))
+        draw.line([(x1, y1), (x2, y2)], fill=(*color_rgb, 70), width=1)
+
+    # 4. Vòng tròn thiên hà / La bàn phép thuật ngoài
+    draw.ellipse((cx - 200, cy - 200, cx + 200, cy + 200), outline=(*sec_rgb, 140), width=2)
+    draw.ellipse((cx - 180, cy - 180, cx + 180, cy + 180), outline=(*color_rgb, 180), width=1)
+
+    # 5. Khiên huy hiệu trung tâm hình Bát Giác Hoàng Gia (Royal Octagon Shield)
+    shield_pts = [
+        (cx, cy - 195),
+        (cx + 140, cy - 135),
+        (cx + 195, cy),
+        (cx + 140, cy + 135),
+        (cx, cy + 195),
+        (cx - 140, cy + 135),
+        (cx - 195, cy),
+        (cx - 140, cy - 135)
+    ]
+    draw.polygon(shield_pts, fill=(16, 20, 34, 250), outline=(*color_rgb, 240))
+    # Viền trong mạ vàng
+    inner_shield_pts = [
+        (cx, cy - 183),
+        (cx + 130, cy - 127),
+        (cx + 183, cy),
+        (cx + 130, cy + 127),
+        (cx, cy + 183),
+        (cx - 130, cy + 127),
+        (cx - 183, cy),
+        (cx - 130, cy - 127)
+    ]
+    draw.line(inner_shield_pts + [inner_shield_pts[0]], fill=(*sec_rgb, 230), width=2)
+
+    # 6. Biểu tượng Vương Miện / Ngôi Sao danh vọng trên đỉnh
+    draw.text((cx, cy - 75), "👑", fill=(255, 215, 0), font=get_font(42), anchor="mm")
+
+    # 7. Tag Băng Đảng phát sáng ở chính giữa
+    tag_text = clan.get("tag", "CLAN").upper()
+    font_tag = get_font(52 if len(tag_text) <= 4 else 42, bold=True)
+    # Neon outer glow
+    for ox, oy in [(-2, 0), (2, 0), (0, -2), (0, 2), (-1, -1), (1, 1), (-1, 1), (1, -1)]:
+        draw.text((cx + ox, cy + 8 + oy), tag_text, fill=(*color_rgb, 200), font=font_tag, anchor="mm")
+    # Drop shadow
+    draw.text((cx + 2, cy + 11), tag_text, fill=(0, 0, 0, 230), font=font_tag, anchor="mm")
+    # Main foreground
+    draw.text((cx, cy + 8), tag_text, fill=(255, 255, 255), font=font_tag, anchor="mm")
+
+    # 8. Dải ruy băng / Pill Cấp Độ & Tên Băng ở phía dưới
+    from utils.embeds import get_level_info
+    lvl_info = get_level_info(clan.get("exp", 0))
+    pill_box = (cx - 130, cy + 78, cx + 130, cy + 118)
+    draw.rounded_rectangle(pill_box, radius=12, fill=(24, 30, 52, 240), outline=(*sec_rgb, 220), width=2)
+    lvl_str = f"LV.{clan.get('level', 1)} • {lvl_info['title']}"
+    draw.text((cx, cy + 97), lvl_str, fill=(255, 215, 0), font=get_font(12, bold=True), anchor="mm")
+
+    # Tên Băng trang trọng phía dưới ruy băng
+    name_str = f"★ {clan.get('name', 'Băng Đảng')[:18]} ★"
+    draw.text((cx, cy + 145), name_str, fill=(220, 230, 250), font=get_font(15, bold=True), anchor="mm")
+
+    # 9. Các hạt lấp lánh tỏa sáng (Sparkle Highlights)
+    draw_sparkle(draw, cx, cy - 195, 16, (*sec_rgb, 255))
+    draw_sparkle(draw, cx, cy + 195, 14, (*sec_rgb, 255))
+    draw_sparkle(draw, cx - 195, cy, 14, (*color_rgb, 255))
+    draw_sparkle(draw, cx + 195, cy, 14, (*color_rgb, 255))
+    draw_sparkle(draw, cx - 140, cy - 135, 10, (255, 255, 255, 255))
+    draw_sparkle(draw, cx + 140, cy - 135, 10, (255, 255, 255, 255))
+
+    buf = io.BytesIO()
+    base.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+def generate_default_clan_banner(clan: Dict[str, Any], member_count: int = 1) -> io.BytesIO:
+    """Tạo Banner Header Băng Đảng Mặc Định Siêu Đẹp (1200 x 420)"""
+    W, H = 1200, 420
+    color_rgb = hex_to_rgb(clan.get("color_hex"), (88, 101, 242))
+    sec_rgb = hex_to_rgb(clan.get("secondary_color_hex"), (255, 215, 0)) if clan.get("secondary_color_hex") else (255, 215, 0)
+
+    # 1. Background gradient vũ trụ sâu thẳm
+    base = draw_gradient_background(W, H, (10, 12, 22), (24, 20, 45), horizontal=True)
+    draw = ImageDraw.Draw(base)
+
+    # 2. Họa tiết lục giác ma trận Cybernetic (Hex Pattern) ở nửa bên phải
+    hex_r = 30
+    for hx in range(450, W, 70):
+        for hy in range(30, H, 60):
+            pts = [
+                (hx + int(hex_r * math.cos(math.radians(a))), hy + int(hex_r * math.sin(math.radians(a))))
+                for a in range(30, 390, 60)
+            ]
+            draw.polygon(pts, fill=None, outline=(*color_rgb, 25))
+
+    # 3. Dải sáng vát chéo Cyber Streak
+    draw.polygon([(460, 0), (520, 0), (320, H), (260, H)], fill=(*color_rgb, 35))
+    draw.line([(520, 0), (320, H)], fill=(*sec_rgb, 100), width=2)
+
+    # 4. Viền khung công nghệ với 4 góc bo kim loại
+    draw.rounded_rectangle((16, 16, W - 16, H - 16), radius=20, outline=(*color_rgb, 180), width=2)
+    draw.rounded_rectangle((22, 22, W - 22, H - 22), radius=16, outline=(255, 255, 255, 20), width=1)
+
+    # Corner brackets (Góc kim loại)
+    c_len = 35
+    for bx, by, dx, dy in [(22, 22, 1, 1), (W - 22, 22, -1, 1), (22, H - 22, 1, -1), (W - 22, H - 22, -1, -1)]:
+        draw.line([(bx, by), (bx + dx * c_len, by)], fill=sec_rgb, width=3)
+        draw.line([(bx, by), (bx, by + dy * c_len)], fill=sec_rgb, width=3)
+
+    # 5. Huy hiệu bên trái (Left Emblem Crest - Center x=180, y=210)
+    draw_emblem_crest(draw, cx=180, cy=210, radius=115, tag=clan.get("tag", "CLAN"), color_rgb=color_rgb, sec_rgb=sec_rgb, level=clan.get("level", 1), show_crown=True)
+
+    # 6. Thông tin chi tiết bên phải (Right Content Area)
+    tx = 360
+    draw.rounded_rectangle((tx, 45, tx + 330, 75), radius=8, fill=(28, 34, 56, 230), outline=(*sec_rgb, 160), width=1)
+    draw.text((tx + 14, 52), "★ OFFICIAL CLAN • DISCORD GAMING ECOSYSTEM ★", fill=(255, 215, 0), font=get_font(11, bold=True))
+
+    # Tên Băng siêu to lộng lẫy
+    font_name = get_font(42, bold=True)
+    name_str = f"[{clan.get('tag', 'CLAN')}] {clan.get('name', 'Băng Đảng')}"
+    draw.text((tx + 2, 88), name_str, fill=(*color_rgb, 200), font=font_name)
+    draw.text((tx, 86), name_str, fill=(255, 255, 255), font=font_name)
+
+    # Slogan
+    slogan = clan.get("description") or "Chưa có khẩu hiệu băng."
+    draw.text((tx, 142), f"\"{slogan[:75]}\"", fill=(185, 200, 225), font=get_font(16, bold=False))
+
+    # 4 Khối thông số (Pills)
+    from utils.embeds import get_level_info
+    lvl_info = get_level_info(clan.get("exp", 0))
+    from utils.constants import JoinModes
+    mode_name = JoinModes.NAMES.get(clan.get("join_mode"), "🟡 Cần Duyệt")
+    pills = [
+        ("👑 CHỦ BĂNG", f"<ID: {clan.get('leader_id')}>", (255, 215, 0)),
+        ("👥 THÀNH VIÊN", f"{member_count}/{lvl_info['max_members']} Người", (100, 220, 255)),
+        ("🚪 TUYỂN QUÂN", mode_name, (130, 230, 170)),
+        ("🏆 EXP TÍCH LŨY", f"{clan.get('exp', 0):,} EXP", (255, 130, 180))
+    ]
+    py = 185
+    pw = 185
+    ph = 52
+    for i, (plbl, pval, pcol) in enumerate(pills):
+        px = tx + i * (pw + 14)
+        draw.rounded_rectangle((px, py, px + pw, py + ph), radius=10, fill=(26, 32, 52, 230), outline=(*pcol, 130), width=1)
+        draw.text((px + 12, py + 8), plbl, fill=pcol, font=get_font(11, bold=True))
+        draw.text((px + 12, py + 26), pval, fill=(255, 255, 255), font=get_font(13, bold=True))
+
+    # 7. Thanh tiến trình EXP ở phía dưới
+    progress = lvl_info["ratio"]
+    pct_display = int(progress * 100)
+    draw.text((tx, 260), f"TIẾN ĐỘ THĂNG CẤP: {clan.get('exp', 0):,} / {lvl_info['next_req']:,} EXP ({pct_display}%)", fill=(210, 220, 240), font=get_font(13, bold=True))
+    draw_progress_bar(draw, (tx, 285, W - 45, 305), progress, bg_color=(26, 32, 52, 255), fill_color=(*color_rgb, 255), radius=10)
+
+    # Dòng footer
+    draw.text((tx, 335), f"✨ ID Băng: {clan.get('clan_id')} • Ngày thành lập: Khởi lập vẻ vang trên server", fill=(140, 155, 185), font=get_font(13, bold=False))
+
+    # Sparkles
+    draw_sparkle(draw, W - 60, 45, 14, (*sec_rgb, 255))
+    draw_sparkle(draw, tx + 400, 95, 10, (255, 255, 255, 255))
+
+    buf = io.BytesIO()
+    base.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
 # =============================================================================
 # 1. THẺ TRUNG TÂM ĐIỀU KHIỂN (CLAN HUB BANNER CARD)
 # =============================================================================
@@ -133,11 +408,9 @@ def generate_clan_hub_image(
         progress = lvl_info["ratio"]
         pct_display = int(progress * 100)
 
-        # 1. Badge Emblem bên trái
-        emblem_box = (35, 45, 175, 185)
-        draw.rounded_rectangle(emblem_box, radius=24, fill=(*color_rgb, 40), outline=color_rgb, width=3)
-        font_tag = get_font(32, bold=True)
-        draw.text((105, 115), clan_tag, fill=(255, 255, 255), font=font_tag, anchor="mm")
+        # 1. Badge Emblem bên trái lộng lẫy
+        sec_rgb = hex_to_rgb(clan.get("secondary_color_hex"), (255, 215, 0)) if clan.get("secondary_color_hex") else (255, 215, 0)
+        draw_emblem_crest(draw, cx=105, cy=115, radius=68, tag=clan_tag, color_rgb=color_rgb, sec_rgb=sec_rgb, level=level, show_crown=True)
 
         # 2. Header & Tên Băng
         font_sub = get_font(14, bold=True)
@@ -378,10 +651,8 @@ def generate_clan_profile_image(
     # Viền gradient 2 màu nếu có
     draw.rounded_rectangle((10, 10, W - 10, H - 10), radius=20, outline=(*color_rgb, 220), width=3)
 
-    # Biểu tượng Avatar Băng bên trái
-    av_box = (35, 45, 175, 185)
-    draw.rounded_rectangle(av_box, radius=24, fill=(*color_rgb, 40), outline=color_rgb, width=3)
-    draw.text((105, 115), clan.get("tag", "CLAN"), fill=(255, 255, 255), font=get_font(34, bold=True), anchor="mm")
+    # Biểu tượng Avatar Băng bên trái lộng lẫy
+    draw_emblem_crest(draw, cx=105, cy=115, radius=68, tag=clan.get("tag", "CLAN"), color_rgb=color_rgb, sec_rgb=sec_rgb, level=clan.get("level", 1), show_crown=True)
 
     # Header Tên Băng
     font_name = get_font(34, bold=True)
@@ -510,10 +781,8 @@ def generate_clan_wallpaper(
     draw.rounded_rectangle((20, 20, W - 20, H - 20), radius=28, outline=(*color_rgb, 200), width=3)
     draw.rounded_rectangle((26, 26, W - 26, H - 26), radius=24, outline=(255, 255, 255, 20), width=1)
 
-    # 2. Header Emblem bên trái
-    emblem_box = (80, 80, 280, 280)
-    draw.rounded_rectangle(emblem_box, radius=32, fill=(*color_rgb, 40), outline=color_rgb, width=4)
-    draw.text((180, 180), clan.get("tag", "CLAN"), fill=(255, 255, 255), font=get_font(68, bold=True), anchor="mm")
+    # 2. Header Emblem bên trái lộng lẫy
+    draw_emblem_crest(draw, cx=180, cy=180, radius=95, tag=clan.get("tag", "CLAN"), color_rgb=color_rgb, sec_rgb=sec_rgb, level=clan.get("level", 1), show_crown=True)
 
     # 3. Tên Băng & Khẩu Hiệu
     draw.text((320, 95), "🏰 HỘI NHÓM & BĂNG ĐẢNG SERVER DISCORD", fill=sec_rgb, font=get_font(20, bold=True))

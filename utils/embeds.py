@@ -106,7 +106,9 @@ def get_level_info(total_exp: int) -> Dict[str, Any]:
     }
 
 
-def build_clan_info_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], level_info: Dict[str, Any], attachment_filename: Optional[str] = None) -> discord.Embed:
+def build_clan_info_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], level_info: Dict[str, Any],
+                          attachment_filename: Optional[str] = None, logo_filename: Optional[str] = None,
+                          banner_filename: Optional[str] = None) -> discord.Embed:
     """Tạo Embed hồ sơ chi tiết của băng đảng với đồ họa sinh động"""
     co_leaders = [m for m in members if m["rank"] == Ranks.CO_LEADER]
     co_leaders_str = ", ".join(f"<@{m['user_id']}>" for m in co_leaders) if co_leaders else "_Chưa có Phó Băng_"
@@ -147,17 +149,22 @@ def build_clan_info_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], l
 
     if clan.get("logo_url"):
         embed.set_thumbnail(url=clan["logo_url"])
+    elif logo_filename:
+        embed.set_thumbnail(url=f"attachment://{logo_filename}")
 
     if attachment_filename:
         embed.set_image(url=f"attachment://{attachment_filename}")
     elif clan.get("banner_url"):
         embed.set_image(url=clan["banner_url"])
+    elif banner_filename:
+        embed.set_image(url=f"attachment://{banner_filename}")
 
     embed.set_footer(text=f"ID Băng: {clan['clan_id']} • Cấp {level_info['level']} ({level_info['title']})")
     return embed
 
 
-def build_members_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], page: int = 1, page_size: int = 10, rank_filter: Optional[str] = None) -> Tuple[discord.Embed, int]:
+def build_members_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], page: int = 1, page_size: int = 10,
+                        rank_filter: Optional[str] = None, logo_filename: Optional[str] = None) -> Tuple[discord.Embed, int]:
     """Tạo Embed danh sách thành viên hỗ trợ phân trang & lọc chức vụ kèm đồ họa"""
     embed_color = parse_hex_color(clan.get("color_hex"))
     filtered = [m for m in members if m["rank"] == rank_filter] if rank_filter else members
@@ -197,11 +204,13 @@ def build_members_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], pag
     )
     if clan.get("logo_url"):
         embed.set_thumbnail(url=clan["logo_url"])
+    elif logo_filename:
+        embed.set_thumbnail(url=f"attachment://{logo_filename}")
     embed.set_footer(text=f"Trang {current_page} / {total_pages} • Sĩ số: {len(members)}/{clan['max_members']}")
     return embed, total_pages
 
 
-def build_milestones_embed(clan: Dict[str, Any], milestones: List[Dict[str, Any]]) -> discord.Embed:
+def build_milestones_embed(clan: Dict[str, Any], milestones: List[Dict[str, Any]], logo_filename: Optional[str] = None) -> discord.Embed:
     """Tạo Embed dòng thời gian biên niên sử cột mốc của Băng Đảng"""
     embed = discord.Embed(
         title=f"📜 BIÊN NIÊN SỬ CỘT MỐC: [{clan['tag']}] {clan['name']}",
@@ -221,6 +230,8 @@ def build_milestones_embed(clan: Dict[str, Any], milestones: List[Dict[str, Any]
             )
     if clan.get("logo_url"):
         embed.set_thumbnail(url=clan["logo_url"])
+    elif logo_filename:
+        embed.set_thumbnail(url=f"attachment://{logo_filename}")
     embed.set_footer(text="Cột mốc được tự động ghi nhận theo thời gian thực")
     return embed
 
@@ -430,7 +441,7 @@ def build_party_embed(title: str, creator_id: int, max_slots: int, scheduled_at:
     return embed
 
 
-def build_role_setup_embed(clan: Dict[str, Any], role: Optional[discord.Role], attachment_filename: Optional[str] = None) -> discord.Embed:
+def build_role_setup_embed(clan: Dict[str, Any], role: Optional[discord.Role], attachment_filename: Optional[str] = None, logo_filename: Optional[str] = None) -> discord.Embed:
     """Tạo Embed giao diện cài đặt & tùy biến Role Băng Đảng cho Chủ Băng kèm đồ họa"""
     if role:
         color_hex = f"#{role.color.value:06X}" if role.color.value else clan.get("color_hex", "#5865F2")
@@ -476,6 +487,8 @@ def build_role_setup_embed(clan: Dict[str, Any], role: Optional[discord.Role], a
     )
     if clan.get("logo_url"):
         embed.set_thumbnail(url=clan["logo_url"])
+    elif logo_filename:
+        embed.set_thumbnail(url=f"attachment://{logo_filename}")
     if attachment_filename:
         embed.set_image(url=f"attachment://{attachment_filename}")
     embed.set_footer(text="Hỗ trợ đầy đủ tính năng Server Boost: Gradient 2 màu và Icon Vai Trò")

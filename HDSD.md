@@ -106,6 +106,12 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 - **📜 Cột Mốc Lịch Sử:** Bấm **`[📜 Cột Mốc Lịch Sử]`** trong `/clan hub` để xem dòng thời gian ghi dấu các sự kiện trọng đại của băng (ngày thành lập, các mốc thăng cấp).
 - **🖼️ Xuất Ảnh Nền Desktop Full HD:** Bấm **`[🖼️ Ảnh Nền Băng (Full HD)]`** trong `/clan hub`. Bot sẽ vẽ tự động tác phẩm Wallpaper 1920x1080 tuyệt đẹp mang biểu tượng, chỉ số, danh sách nòng cốt và biên niên sử của băng để anh em tải về làm hình nền máy tính!
 
+### 9. Đồ Họa Mặc Định Siêu Lộng Lẫy (Tự Động Kiến Tạo Bằng Discord Framework)
+- **Không lo thiếu ảnh:** Nếu Chủ Băng chưa tải ảnh tùy chỉnh lên, bot **hoàn toàn không sử dụng ảnh stock mạng chung chung** mà sẽ tự động vẽ đồ họa nhận diện thương hiệu riêng cho băng bằng Canvas Engine:
+  - 🛡️ **Default Clan Logo (512x512):** Khiên Bát Giác Hoàng Gia (Royal Octagon Shield) mạ vàng, hào quang đa tầng neon theo màu chủ đạo của băng, vương miện hoàng gia, Tag băng phát sáng 3D và các hạt sao lấp lánh (Sparkles).
+  - 🚩 **Default Clan Banner (1200x420 Widescreen):** Phong cách Cyber Gaming hiện đại với ma trận tổ ong lục giác, vệt sáng năng lượng, 4 góc bo kim loại, huy hiệu vương miện, 4 khối thông số glassmorphism và thanh tiến độ cấp độ rực rỡ.
+- **Nút Xem Banner Tiện Lợi:** Bấm nút **`[🚩 Xem Banner Băng]`** trong `/clan info` hoặc khi duyệt danh sách băng để chiêm ngưỡng tác phẩm đồ họa của băng bất cứ lúc nào!
+
 ---
 
 ## 👑 PHẦN 3: DÀNH CHO QUẢN TRỊ VIÊN SERVER (ADMIN)

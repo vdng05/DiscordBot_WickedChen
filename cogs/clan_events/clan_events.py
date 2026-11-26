@@ -411,9 +411,7 @@ class ClanEvents(commands.Cog):
             else:
                 # Thành viên thường / Cán bộ / Phó băng rời server
                 await self.bot.db.remove_member(guild.id, user_id)
-                cfg = await self.bot.db.get_guild_config(guild.id)
-                cd_hours = cfg["leave_cooldown_hours"] if cfg else 24
-                await self.bot.db.set_cooldown(guild.id, user_id, cd_hours)
+                # Bỏ timeout/cooldown khi rời băng theo yêu cầu
 
                 await self.bot.db.add_clan_log(
                     clan_id=clan["clan_id"],

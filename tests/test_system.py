@@ -227,8 +227,31 @@ async def run_tests():
     assert len(mgmt_view.children) >= 4
     print("✅ 16. Toàn bộ các View tương tác 1-Click (Danh sách băng, Bảng xếp hạng, Quản lý thành viên, Rời băng) sẵn sàng.")
 
+    # 17. Kiểm tra Sinh Ảnh Mặc Định Tự Tạo (Default Clan Logo & Banner) bằng Canvas
+    from utils.canvas import generate_default_clan_logo, generate_default_clan_banner
+    from utils.embeds import build_clan_info_embed, get_level_info
+    default_clan = dict(clan)
+    default_clan["logo_url"] = None
+    default_clan["banner_url"] = None
+
+    logo_buf = generate_default_clan_logo(default_clan)
+    assert logo_buf.getbuffer().nbytes > 5000, "Default logo bytes must be valid"
+
+    banner_buf = generate_default_clan_banner(default_clan, member_count=len(members))
+    assert banner_buf.getbuffer().nbytes > 15000, "Default banner bytes must be valid"
+
+    lvl_info = get_level_info(default_clan.get("exp", 0))
+    info_embed = build_clan_info_embed(
+        default_clan, members, lvl_info,
+        attachment_filename="clan_profile.png",
+        logo_filename="default_logo.png"
+    )
+    assert info_embed.thumbnail.url == "attachment://default_logo.png"
+    assert info_embed.image.url == "attachment://clan_profile.png"
+    print("✅ 17. Tự động sinh Logo Bát Giác & Banner Gaming mặc định lộng lẫy bằng Canvas thành công 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 16 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 17 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db
