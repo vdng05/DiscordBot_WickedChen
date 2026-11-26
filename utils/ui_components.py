@@ -27,7 +27,8 @@ from utils.embeds import (
     build_party_embed,
     build_role_setup_embed,
     get_level_info,
-    parse_hex_color
+    parse_hex_color,
+    send_dm_notification
 )
 from utils.logger import setup_logging
 from utils.time_helper import get_current_week_key
@@ -120,12 +121,6 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
         existing = await self.bot.db.get_clan_by_member(guild.id, user.id)
         if existing:
             await interaction.followup.send(f"❌ Bạn đã tham gia băng **{existing['name']}** rồi! Mỗi người chỉ được ở trong 1 băng.", ephemeral=True)
-            return
-
-        # Kiểm tra cooldown
-        cooldown = await self.bot.db.get_cooldown(guild.id, user.id)
-        if cooldown:
-            await interaction.followup.send(f"❌ Bạn đang dính thời gian chờ sau khi rời băng cũ! Có thể lập/vào băng vào: <t:{cooldown['expires_at']}:R>.", ephemeral=True)
             return
 
         # Kiểm tra trùng tên / tag
@@ -673,11 +668,6 @@ class ApplyClanModal(ui.Modal):
             await interaction.followup.send(f"❌ Bạn đã là thành viên của băng **{existing['name']}** rồi!", ephemeral=True)
             return
 
-        cooldown = await self.bot.db.get_cooldown(guild.id, user.id)
-        if cooldown:
-            await interaction.followup.send(f"❌ Bạn đang trong thời gian chờ sau khi rời băng cũ! Hết hạn: <t:{cooldown['expires_at']}:R>.", ephemeral=True)
-            return
-
         cur_members = await self.bot.db.get_member_count(clan["clan_id"])
         if cur_members >= clan["max_members"]:
             await interaction.followup.send(f"❌ Băng **{clan['name']}** đã đầy sĩ số ({cur_members}/{clan['max_members']})!", ephemeral=True)
@@ -713,6 +703,19 @@ class ApplyClanModal(ui.Modal):
                 welcome_view = WelcomeGreetingView(user.id)
                 await text_ch.send(content=f"<@{user.id}>", embed=welcome_embed, view=welcome_view)
 
+            # Gửi DM thông báo gia nhập thành công
+            dm_welcome = discord.Embed(
+                title="🎉 CHÀO MỪNG GIA NHẬP BĂNG!",
+                description=f"Chúc mừng bạn đã chính thức gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}**!",
+                color=discord.Color.green(),
+                timestamp=datetime.now()
+            )
+            dm_welcome.add_field(name="🏰 Băng Đảng", value=f"[{clan['tag']}] {clan['name']}", inline=True)
+            dm_welcome.add_field(name="👑 Chủ Băng", value=f"<@{clan['leader_id']}>", inline=True)
+            dm_welcome.add_field(name="💬 Kênh Riêng", value="Role băng đã được cấp cho bạn. Hãy vào kênh chat và voice của băng để giao lưu cùng đồng đội ngay nhé!", inline=False)
+            dm_welcome.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+            await send_dm_notification(user, dm_welcome)
+
             await interaction.followup.send(f"🎉 Chúc mừng bạn đã gia nhập thành công băng **[{clan['tag']}] {clan['name']}**!", ephemeral=True)
             return
 
@@ -743,6 +746,37 @@ class ApplyClanModal(ui.Modal):
             msg = await text_ch.send(content=f"<@&{clan['role_id']}>", embed=apply_embed, view=view)
             # Cập nhật message_id để tự dọn dẹp nếu hết hạn
             await self.bot.db.update_request_message_id(req_id, msg.id)
+
+        # Gửi DM xác nhận cho người nộp đơn
+        dm_applicant = discord.Embed(
+            title="📨 ĐÃ GỬI ĐƠN XIN GIA NHẬP BĂNG",
+            description=f"Đơn xin gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}** của bạn đã được gửi thành công!",
+            color=discord.Color.blue(),
+            timestamp=datetime.now()
+        )
+        dm_applicant.add_field(name="💬 Lời nhắn của bạn", value=note_text, inline=False)
+        dm_applicant.add_field(name="⏳ Trạng thái", value="Đang chờ Ban Quản Trị băng xét duyệt. Bạn sẽ nhận được thông báo ngay khi có kết quả!", inline=False)
+        dm_applicant.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+        await send_dm_notification(user, dm_applicant)
+
+        # Gửi DM thông báo cho Chủ Băng
+        leader_mem = guild.get_member(int(clan["leader_id"]))
+        if not leader_mem:
+            try:
+                leader_mem = await self.bot.fetch_user(int(clan["leader_id"]))
+            except Exception:
+                leader_mem = None
+        if leader_mem:
+            dm_leader = discord.Embed(
+                title="📬 CÓ ĐƠN XIN GIA NHẬP BĂNG MỚI",
+                description=f"Thành viên <@{user.id}> (**{user.display_name}**) vừa nộp đơn xin gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}**!",
+                color=discord.Color.gold(),
+                timestamp=datetime.now()
+            )
+            dm_leader.add_field(name="💬 Lời nhắn", value=note_text, inline=False)
+            dm_leader.add_field(name="👉 Thao tác", value="Hãy kiểm tra kênh chat riêng của băng để bấm nút **[✅ Duyệt Đơn]** hoặc **[❌ Từ Chối]**!", inline=False)
+            dm_leader.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+            await send_dm_notification(leader_mem, dm_leader)
 
         await interaction.followup.send(f"✅ Đơn xin gia nhập của bạn đã được gửi đến ban cán bộ băng **[{clan['tag']}] {clan['name']}**!", ephemeral=True)
 
@@ -1337,13 +1371,8 @@ class LeaveClanConfirmView(ui.View):
                 except Exception:
                     pass
 
-        # Xóa khỏi DB
+        # Xóa khỏi DB (Bỏ cooldown theo yêu cầu)
         await self.bot.db.remove_member(guild.id, user.id)
-
-        # Áp dụng cooldown
-        cfg = await self.bot.db.get_guild_config(guild.id)
-        cd_hours = int(cfg["leave_cooldown_hours"]) if cfg else 24
-        await self.bot.db.set_cooldown(guild.id, user.id, cd_hours)
 
         # Ghi log
         await self.bot.db.add_clan_log(
@@ -1368,7 +1397,7 @@ class LeaveClanConfirmView(ui.View):
         for item in self.children:
             item.disabled = True
         await interaction.edit_original_response(
-            content=f"✅ Bạn đã rời khỏi băng **[{clan['tag']}] {clan['name']}** thành công.\n⏳ Thời gian chờ ({cd_hours} giờ) đã bắt đầu trước khi bạn có thể gia nhập hoặc lập băng mới.",
+            content=f"✅ Bạn đã rời khỏi băng **[{clan['tag']}] {clan['name']}** thành công.\n✨ Bạn không bị áp dụng thời gian chờ và có thể tự do gia nhập hoặc thành lập băng mới ngay!",
             view=self
         )
 
@@ -1413,11 +1442,8 @@ class KickMemberModal(ui.Modal):
                 except Exception:
                     pass
 
-        # Xóa khỏi DB & Áp dụng cooldown
+        # Xóa khỏi DB (Bỏ cooldown theo yêu cầu)
         await self.bot.db.remove_member(guild.id, self.target_member.id)
-        cfg = await self.bot.db.get_guild_config(guild.id)
-        cd_hours = int(cfg["leave_cooldown_hours"]) if cfg else 24
-        await self.bot.db.set_cooldown(guild.id, self.target_member.id, cd_hours)
 
         # Ghi log
         await self.bot.db.add_clan_log(
@@ -1427,6 +1453,19 @@ class KickMemberModal(ui.Modal):
             action="KICK",
             details=f"<@{interaction.user.id}> đã trục xuất <@{self.target_member.id}>. Lý do: {reason}"
         )
+
+        # Gửi DM thông báo lý do trục xuất cho thành viên
+        dm_embed = discord.Embed(
+            title="👢 BẠN ĐÃ BỊ TRỤC XUẤT KHỎI BĂNG",
+            description=f"Bạn đã bị trục xuất khỏi băng **[{self.clan['tag']}] {self.clan['name']}** tại máy chủ **{guild.name}**.",
+            color=discord.Color.red(),
+            timestamp=datetime.now()
+        )
+        dm_embed.add_field(name="👮 Người thực hiện", value=f"<@{interaction.user.id}> ({interaction.user.display_name})", inline=True)
+        dm_embed.add_field(name="💬 Lý do trục xuất", value=reason, inline=False)
+        dm_embed.add_field(name="✨ Lưu ý", value="Bạn không bị áp dụng thời gian chờ (cooldown) và có thể tự do gia nhập hoặc tạo băng khác ngay lập tức!", inline=False)
+        dm_embed.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+        await send_dm_notification(self.target_member, dm_embed)
 
         # Thông báo trong kênh chat riêng
         if self.clan.get("text_channel_id"):
@@ -1440,7 +1479,7 @@ class KickMemberModal(ui.Modal):
                 )
                 await ch.send(embed=embed)
 
-        await interaction.followup.send(f"✅ Đã trục xuất <@{self.target_member.id}> thành công!", ephemeral=True)
+        await interaction.followup.send(f"✅ Đã trục xuất <@{self.target_member.id}> thành công và gửi thông báo lý do qua DM!", ephemeral=True)
 
 
 class KickSelectDropdown(ui.Select):
@@ -1556,6 +1595,18 @@ class PromoteSelectDropdown(ui.Select):
                 )
                 await ch.send(embed=embed)
 
+        # Gửi DM thông báo thăng chức cho thành viên
+        target_mem = guild.get_member(target_uid)
+        if target_mem:
+            dm_promote = discord.Embed(
+                title="⭐ BẠN ĐÃ ĐƯỢC THĂNG CHỨC!",
+                description=f"Chúc mừng bạn! Bạn đã được <@{interaction.user.id}> thăng cấp lên chức vụ **{RANK_NAMES[new_rank]}** trong băng **[{self.clan['tag']}] {self.clan['name']}** tại máy chủ **{guild.name}**!",
+                color=discord.Color.gold(),
+                timestamp=datetime.now()
+            )
+            dm_promote.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+            await send_dm_notification(target_mem, dm_promote)
+
         await interaction.followup.send(f"🎉 Đã thăng chức cho <@{target_uid}> lên **{RANK_NAMES[new_rank]}** thành công!", ephemeral=True)
 
 
@@ -1628,6 +1679,18 @@ class DemoteSelectDropdown(ui.Select):
                     timestamp=datetime.now()
                 )
                 await ch.send(embed=embed)
+
+        # Gửi DM thông báo giáng chức cho thành viên
+        target_mem = guild.get_member(target_uid)
+        if target_mem:
+            dm_demote = discord.Embed(
+                title="⬇️ ĐIỀU CHỈNH CHỨC VỤ BĂNG ĐẢNG",
+                description=f"Chức vụ của bạn trong băng **[{self.clan['tag']}] {self.clan['name']}** tại máy chủ **{guild.name}** đã được điều chỉnh thành **{RANK_NAMES[new_rank]}** bởi <@{interaction.user.id}>.",
+                color=discord.Color.orange(),
+                timestamp=datetime.now()
+            )
+            dm_demote.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+            await send_dm_notification(target_mem, dm_demote)
 
         await interaction.followup.send(f"📉 Đã giáng chức <@{target_uid}> xuống **{RANK_NAMES[new_rank]}** thành công!", ephemeral=True)
 
@@ -1713,11 +1776,6 @@ class MemberInviteUserSelect(ui.UserSelect):
             await interaction.followup.send(f"❌ Người này đã tham gia băng **{existing['name']}** rồi!", ephemeral=True)
             return
 
-        cooldown = await self.bot.db.get_cooldown(guild.id, target_user.id)
-        if cooldown:
-            await interaction.followup.send(f"❌ Người này đang trong thời gian chờ sau khi rời băng cũ (<t:{cooldown['expires_at']}:R>).", ephemeral=True)
-            return
-
         # Tạo request trong DB (15 phút)
         expires_at = int(time.time()) + (15 * 60)
         req_id = await self.bot.db.create_request(
@@ -1746,6 +1804,20 @@ class MemberInviteUserSelect(ui.UserSelect):
         target_ch = clan_text_ch or interaction.channel
         msg = await target_ch.send(content=target_user.mention, embed=embed, view=view)
         await self.bot.db.update_request_message_id(req_id, msg.id)
+
+        # Gửi DM thông báo nhận lời mời
+        dm_invite = discord.Embed(
+            title="💌 BẠN NHẬN ĐƯỢC LỜI MỜI VÀO BĂNG",
+            description=f"Cán Bộ <@{inviter.id}> đã gửi lời mời bạn gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}**!",
+            color=discord.Color.blue(),
+            timestamp=datetime.now()
+        )
+        dm_invite.add_field(name="🏰 Tên Băng", value=f"[{clan['tag']}] {clan['name']}", inline=True)
+        dm_invite.add_field(name="👑 Chủ Băng", value=f"<@{clan['leader_id']}>", inline=True)
+        dm_invite.add_field(name="⏳ Hạn Lời Mời", value=f"<t:{expires_at}:R>", inline=True)
+        dm_invite.add_field(name="👉 Thao Tác", value=f"Hãy vào kênh <#{target_ch.id}> trên máy chủ **{guild.name}** để bấm nút [✅ Chấp Nhận Lời Mời] nhé!", inline=False)
+        dm_invite.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+        await send_dm_notification(target_user, dm_invite)
 
         await interaction.followup.send(f"✅ Đã gửi lời mời tham gia băng tới {target_user.mention} thành công!", ephemeral=True)
 
@@ -2139,6 +2211,27 @@ class ClanHubView(ui.View):
         await interaction.response.send_modal(modal)
 
 
+class RejectRequestModal(ui.Modal):
+    """Modal nhập lý do từ chối đơn gia nhập băng để gửi DM cho người nộp đơn"""
+    def __init__(self, req_view: "RequestView", bot):
+        super().__init__(title="❌ Từ Chối Đơn Xin Vào Băng")
+        self.req_view = req_view
+        self.bot = bot
+
+        self.reason_input = ui.TextInput(
+            label="Lý Do Từ Chối (Sẽ gửi DM cho người nộp)",
+            placeholder="Chưa đủ điều kiện, băng tạm đầy slot, chưa phù hợp...",
+            default="Chưa phù hợp ở thời điểm hiện tại",
+            max_length=150,
+            required=False
+        )
+        self.add_item(self.reason_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        reason = self.reason_input.value.strip() or "Chưa phù hợp ở thời điểm hiện tại"
+        await self.req_view._handle_decision(interaction, "REJECTED", reason=reason)
+
+
 class RequestView(ui.View):
     """View duyệt đơn hoặc phản hồi lời mời với điều kiện changes == 1 chống race condition"""
     def __init__(self, request_id: int, bot, is_invite: bool = False):
@@ -2156,10 +2249,15 @@ class RequestView(ui.View):
 
     @ui.button(label="Từ Chối", emoji="❌", style=discord.ButtonStyle.danger, custom_id="req_reject_btn")
     async def reject_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await self._handle_decision(interaction, "REJECTED")
+        if self.is_invite:
+            await self._handle_decision(interaction, "REJECTED")
+        else:
+            modal = RejectRequestModal(req_view=self, bot=self.bot)
+            await interaction.response.send_modal(modal)
 
-    async def _handle_decision(self, interaction: discord.Interaction, decision: str):
-        await interaction.response.defer(ephemeral=True)
+    async def _handle_decision(self, interaction: discord.Interaction, decision: str, reason: Optional[str] = None):
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
         req = await self.bot.db.get_request_by_id(self.request_id)
         if not req:
             await interaction.followup.send("❌ Yêu cầu này không còn tồn tại!", ephemeral=True)
@@ -2205,9 +2303,12 @@ class RequestView(ui.View):
                 try:
                     target_user = await guild.fetch_member(int(req["user_id"]))
                 except Exception:
-                    target_user = None
+                    try:
+                        target_user = await self.bot.fetch_user(int(req["user_id"]))
+                    except Exception:
+                        target_user = None
 
-            if target_user:
+            if target_user and isinstance(target_user, discord.Member):
                 role = guild.get_role(int(clan["role_id"]))
                 if role:
                     try:
@@ -2235,6 +2336,64 @@ class RequestView(ui.View):
                 )
                 welcome_view = WelcomeGreetingView(int(req["user_id"]))
                 await text_ch.send(content=f"<@{req['user_id']}>", embed=welcome_embed, view=welcome_view)
+
+            # Gửi DM thông báo duyệt đơn thành công cho người nộp đơn (hoặc thông báo cho người mời)
+            if not self.is_invite and target_user:
+                dm_accepted = discord.Embed(
+                    title="🎉 ĐƠN GIA NHẬP BĂNG ĐÃ ĐƯỢC DUYỆT!",
+                    description=f"Chúc mừng bạn! Đơn xin gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}** đã được Cán Bộ <@{interaction.user.id}> phê duyệt thành công!",
+                    color=discord.Color.green(),
+                    timestamp=datetime.now()
+                )
+                dm_accepted.add_field(name="🏰 Băng Đảng", value=f"[{clan['tag']}] {clan['name']}", inline=True)
+                dm_accepted.add_field(name="👮 Người duyệt", value=f"<@{interaction.user.id}>", inline=True)
+                dm_accepted.add_field(name="💬 Bắt đầu", value="Role băng đã được cấp cho bạn. Hãy vào kênh chat riêng của băng để giao lưu cùng mọi người ngay nhé!", inline=False)
+                dm_accepted.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+                await send_dm_notification(target_user, dm_accepted)
+            elif self.is_invite:
+                inviter = guild.get_member(int(req["actor_id"]))
+                if inviter:
+                    dm_inv_acc = discord.Embed(
+                        title="✅ LỜI MỜI ĐÃ ĐƯỢC CHẤP NHẬN",
+                        description=f"<@{req['user_id']}> đã chấp nhận lời mời gia nhập băng **[{clan['tag']}] {clan['name']}** của bạn!",
+                        color=discord.Color.green(),
+                        timestamp=datetime.now()
+                    )
+                    dm_inv_acc.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+                    await send_dm_notification(inviter, dm_inv_acc)
+
+        elif decision == "REJECTED":
+            if not self.is_invite:
+                # Gửi DM từ chối đơn kèm lý do
+                target_user = guild.get_member(int(req["user_id"]))
+                if not target_user:
+                    try:
+                        target_user = await self.bot.fetch_user(int(req["user_id"]))
+                    except Exception:
+                        target_user = None
+                if target_user:
+                    reject_reason = reason or "Chưa phù hợp ở thời điểm hiện tại"
+                    dm_reject = discord.Embed(
+                        title="❌ THÔNG BÁO TỪ CHỐI ĐƠN VÀO BĂNG",
+                        description=f"Rất tiếc, đơn xin gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}** của bạn đã bị từ chối bởi Cán Bộ <@{interaction.user.id}>.",
+                        color=discord.Color.red(),
+                        timestamp=datetime.now()
+                    )
+                    dm_reject.add_field(name="💬 Lý do từ chối", value=reject_reason, inline=False)
+                    dm_reject.add_field(name="✨ Lưu ý", value="Bạn không bị áp dụng thời gian chờ (cooldown) và có thể tự do nộp đơn vào các băng khác ngay lập tức!", inline=False)
+                    dm_reject.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+                    await send_dm_notification(target_user, dm_reject)
+            else:
+                inviter = guild.get_member(int(req["actor_id"]))
+                if inviter:
+                    dm_inv_rej = discord.Embed(
+                        title="❌ LỜI MỜI ĐÃ BỊ TỪ CHỐI",
+                        description=f"<@{req['user_id']}> đã từ chối lời mời gia nhập băng **[{clan['tag']}] {clan['name']}** của bạn.",
+                        color=discord.Color.orange(),
+                        timestamp=datetime.now()
+                    )
+                    dm_inv_rej.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+                    await send_dm_notification(inviter, dm_inv_rej)
 
         # Vô hiệu hóa nút trên tin nhắn gốc
         for item in self.children:
@@ -2942,6 +3101,24 @@ class TransferConfirmView(ui.View):
                 timestamp=datetime.now()
             )
             await text_ch.send(embed=embed)
+
+        # Gửi DM thông báo quyền Chủ Băng cho người nhận
+        new_leader_mem = interaction.guild.get_member(self.new_leader_id)
+        if not new_leader_mem:
+            try:
+                new_leader_mem = await self.bot.fetch_user(self.new_leader_id)
+            except Exception:
+                new_leader_mem = None
+        if new_leader_mem:
+            dm_leader = discord.Embed(
+                title="👑 BẠN ĐÃ TRỞ THÀNH CHỦ BĂNG!",
+                description=f"<@{self.old_leader_id}> đã chính thức trao quyền **Chủ Băng (LEADER)** của băng **[{self.clan['tag']}] {self.clan['name']}** tại máy chủ **{interaction.guild.name}** cho bạn!",
+                color=discord.Color.gold(),
+                timestamp=datetime.now()
+            )
+            dm_leader.add_field(name="Trách nhiệm", value="Hãy dẫn dắt anh em phát triển băng đảng ngày một vững mạnh nhé!", inline=False)
+            dm_leader.set_footer(text=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+            await send_dm_notification(new_leader_mem, dm_leader)
 
         for item in self.children:
             item.disabled = True

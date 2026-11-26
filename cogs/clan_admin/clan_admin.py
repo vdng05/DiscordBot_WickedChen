@@ -47,7 +47,7 @@ class ClanAdmin(commands.Cog):
         log_channel="Kênh ghi nhật ký sự kiện chung của server (tùy chọn)",
         allow_member_create="Bật/Tắt cho phép thành viên thường tự lập băng (Mặc định: Bật)",
         create_fee_role="Role yêu cầu nếu muốn giới hạn quyền lập băng (tùy chọn)",
-        cooldown_hours="Thời gian chờ sau khi rời băng mới được vào/lập băng mới (giờ, mặc định 24)"
+        cooldown_hours="Thời gian chờ sau khi rời băng mới được vào/lập băng mới (giờ, mặc định 0 - không chờ)"
     )
     async def setup(
         self,
@@ -56,7 +56,7 @@ class ClanAdmin(commands.Cog):
         log_channel: Optional[discord.TextChannel] = None,
         allow_member_create: bool = True,
         create_fee_role: Optional[discord.Role] = None,
-        cooldown_hours: int = 24
+        cooldown_hours: int = 0
     ):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild

@@ -39,10 +39,10 @@ Mọi tính năng quan trọng đều được **model hóa 100% bằng nút b�
   3. **💬 Sôi Nổi Kênh Chat:** Tương tác, trò chuyện trong kênh chat riêng của băng (+300 EXP khi đạt 100 tin nhắn).
 - Hoàn thành mỗi nhiệm vụ thưởng thẳng từ **+300 đến +500 EXP** cho băng *(Tự động làm mới vào 00:00 Thứ Hai hằng tuần)*.
 
-### 4. Rời Băng & Thời Gian Chờ (Cooldown)
+### 4. Rời Băng Tự Do (Không Bị Timeout / Cooldown)
 - Bấm nút **`[🚪 Rời Băng]`** màu đỏ trong `/clan hub` (hoặc gõ `/clan leave`).
 - Bot sẽ mở hộp thoại xác nhận 2 lớp để tránh bấm nhầm.
-- ⚠️ **Lưu ý chống nhảy băng:** Sau khi rời băng (hoặc bị trục xuất), bạn cần chờ **24 giờ** mới có thể tạo băng mới hoặc nộp đơn vào băng khác.
+- ✨ **Tự do tuyệt đối:** Bạn hoàn toàn không bị áp dụng thời gian chờ (cooldown/timeout) sau khi rời băng, có thể thoải mái tạo băng mới hoặc nộp đơn vào băng khác ngay lập tức!
 
 ---
 
@@ -92,7 +92,7 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 - **➕ Mời thành viên mới:** Menu chọn người dùng Discord (User Picker) trực quan, chọn ai là gửi ngay lời mời có nút xác nhận (hạn 15 phút).
 - **⬆️ Thăng chức:** Bấm nút $\rightarrow$ Chọn thành viên từ menu thả xuống để thăng lên Cán Bộ hoặc Phó Băng.
 - **⬇️ Giáng chức:** Bấm nút $\rightarrow$ Chọn cán bộ để hạ bậc chức vụ. *(Tối đa 2 Phó Băng và 4 Cán Bộ)*.
-- **👢 Trục xuất:** Bấm nút $\rightarrow$ Chọn thành viên vi phạm $\rightarrow$ Nhập lý do trong popup để trục xuất và áp dụng cooldown 24h.
+- **👢 Trục xuất:** Bấm nút $\rightarrow$ Chọn thành viên vi phạm $\rightarrow$ Nhập lý do trong popup để trục xuất (Bot sẽ gửi thông báo riêng qua DM kèm lý do cho thành viên, không phạt cooldown).
 - **👑 Chuyển giao Chủ Băng:** Chỉ dành cho Chủ Băng, chọn người kế vị từ menu thả xuống và xác nhận an toàn 2 lớp.
 - **💥 Giải Tán Băng:** Nút Giải Tán Băng (yêu cầu gõ chính xác tên băng trong Modal để xác nhận an toàn, tránh bấm nhầm).
 *(Ngoài ra, bạn vẫn có thể dùng các lệnh `/clan invite`, `/clan promote`, `/clan demote`, `/clan kick`, `/clan transfer`, `/clan disband` nếu thích gõ lệnh)*.

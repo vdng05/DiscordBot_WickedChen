@@ -29,7 +29,8 @@ from utils.embeds import (
     build_party_embed,
     build_role_setup_embed,
     get_level_info,
-    BoardAssets
+    BoardAssets,
+    send_dm_notification
 )
 from utils.ui_components import (
     CreateClanModal,
@@ -396,11 +397,6 @@ class ClanCommands(commands.Cog):
             await interaction.followup.send(f"❌ Người dùng này đã tham gia băng **{existing['name']}** rồi!")
             return
 
-        cooldown = await self.bot.db.get_cooldown(guild.id, user.id)
-        if cooldown:
-            await interaction.followup.send(f"❌ Người này đang trong thời gian chờ sau khi rời băng cũ. Hết hạn: <t:{cooldown['expires_at']}:R>.")
-            return
-
         # Tạo request trong DB
         expires_at = int(time.time()) + (15 * 60)
         req_id = await self.bot.db.create_request(
@@ -429,6 +425,20 @@ class ClanCommands(commands.Cog):
 
         # Lưu message_id
         await self.bot.db.update_request_message_id(req_id, msg.id)
+
+        # Gửi DM thông báo nhận lời mời
+        dm_invite = discord.Embed(
+            title="💌 BẠN NHẬN ĐƯỢC LỜI MỜI VÀO BĂNG",
+            description=f"Cán Bộ <@{inviter.id}> đã gửi lời mời bạn gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}**!",
+            color=discord.Color.blue(),
+            timestamp=datetime.now()
+        )
+        dm_invite.add_field(name="🏰 Tên Băng", value=f"[{clan['tag']}] {clan['name']}", inline=True)
+        dm_invite.add_field(name="👑 Chủ Băng", value=f"<@{clan['leader_id']}>", inline=True)
+        dm_invite.add_field(name="⏳ Hạn Lời Mời", value=f"<t:{expires_at}:R>", inline=True)
+        dm_invite.add_field(name="👉 Thao Tác", value=f"Hãy vào máy chủ **{guild.name}** để bấm nút [✅ Chấp Nhận Lời Mời] nhé!", inline=False)
+        dm_invite.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+        await send_dm_notification(user, dm_invite)
 
     @clan_group.command(name="apply", description="Nộp đơn xin gia nhập một băng đảng")
     @app_commands.describe(ten_bang="Tên hoặc Tag của băng muốn xin vào (bỏ trống để chọn danh sách)")
@@ -515,6 +525,16 @@ class ClanCommands(commands.Cog):
             details=f"<@{interaction.user.id}> đã thăng chức cho <@{user.id}> lên {RANK_NAMES[new_rank]}."
         )
 
+        # Gửi DM thông báo thăng chức
+        dm_promote = discord.Embed(
+            title="⭐ BẠN ĐÃ ĐƯỢC THĂNG CHỨC!",
+            description=f"Chúc mừng bạn! Bạn đã được <@{interaction.user.id}> thăng cấp lên chức vụ **{RANK_NAMES[new_rank]}** trong băng **[{actor_rec['tag']}] {actor_rec['name']}** tại máy chủ **{guild.name}**!",
+            color=discord.Color.gold(),
+            timestamp=datetime.now()
+        )
+        dm_promote.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+        await send_dm_notification(user, dm_promote)
+
         await interaction.followup.send(f"🎉 Chúc mừng {user.mention} đã được thăng chức lên **{RANK_NAMES[new_rank]}** trong băng **[{actor_rec['tag']}] {actor_rec['name']}**!")
 
     @clan_group.command(name="demote", description="Giáng cấp bậc của một cán bộ/phó băng")
@@ -560,6 +580,16 @@ class ClanCommands(commands.Cog):
             action="DEMOTE",
             details=f"<@{interaction.user.id}> đã giáng chức <@{user.id}> xuống {RANK_NAMES[new_rank]}."
         )
+
+        # Gửi DM thông báo giáng chức
+        dm_demote = discord.Embed(
+            title="⬇️ ĐIỀU CHỈNH CHỨC VỤ BĂNG ĐẢNG",
+            description=f"Chức vụ của bạn trong băng **[{actor_rec['tag']}] {actor_rec['name']}** tại máy chủ **{guild.name}** đã được điều chỉnh thành **{RANK_NAMES[new_rank]}** bởi <@{interaction.user.id}>.",
+            color=discord.Color.orange(),
+            timestamp=datetime.now()
+        )
+        dm_demote.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+        await send_dm_notification(user, dm_demote)
 
         await interaction.followup.send(f"📉 Thành viên {user.mention} đã bị giáng chức xuống **{RANK_NAMES[new_rank]}** trong băng **[{actor_rec['tag']}] {actor_rec['name']}**.")
 
@@ -627,11 +657,8 @@ class ClanCommands(commands.Cog):
             except Exception:
                 pass
 
-        # Xóa khỏi DB & Gán cooldown
+        # Xóa khỏi DB (Bỏ cooldown theo yêu cầu)
         await self.bot.db.remove_member(guild.id, user.id)
-        cfg = await self.bot.db.get_guild_config(guild.id)
-        cd_hours = cfg["leave_cooldown_hours"] if cfg else 24
-        await self.bot.db.set_cooldown(guild.id, user.id, cd_hours)
 
         await self.bot.db.add_clan_log(
             clan_id=actor_rec["clan_id"],
@@ -641,12 +668,20 @@ class ClanCommands(commands.Cog):
             details=f"<@{interaction.user.id}> đã trục xuất <@{user.id}>. Lý do: {ly_do}"
         )
 
-        try:
-            await user.send(f"⚠️ Bạn đã bị trục xuất khỏi băng **[{actor_rec['tag']}] {actor_rec['name']}** tại server **{guild.name}**.\nLý do: {ly_do}.\nBạn có thể vào băng mới sau {cd_hours} giờ.")
-        except Exception:
-            pass
+        # Gửi DM thông báo lý do trục xuất
+        dm_kick = discord.Embed(
+            title="👢 BẠN ĐÃ BỊ TRỤC XUẤT KHỎI BĂNG",
+            description=f"Bạn đã bị trục xuất khỏi băng **[{actor_rec['tag']}] {actor_rec['name']}** tại máy chủ **{guild.name}**.",
+            color=discord.Color.red(),
+            timestamp=datetime.now()
+        )
+        dm_kick.add_field(name="👮 Người thực hiện", value=f"<@{interaction.user.id}> ({interaction.user.display_name})", inline=True)
+        dm_kick.add_field(name="💬 Lý do trục xuất", value=ly_do, inline=False)
+        dm_kick.add_field(name="✨ Lưu ý", value="Bạn không bị áp dụng thời gian chờ (cooldown) và có thể tự do gia nhập hoặc tạo băng khác ngay lập tức!", inline=False)
+        dm_kick.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
+        await send_dm_notification(user, dm_kick)
 
-        await interaction.followup.send(f"👢 Đã trục xuất {user.mention} khỏi băng **[{actor_rec['tag']}] {actor_rec['name']}** thành công.")
+        await interaction.followup.send(f"👢 Đã trục xuất {user.mention} khỏi băng **[{actor_rec['tag']}] {actor_rec['name']}** thành công và gửi thông báo lý do qua DM.")
 
     @clan_group.command(name="leave", description="Tự nguyện rời khỏi băng hiện tại của bạn")
     async def clan_leave(self, interaction: discord.Interaction):
@@ -671,10 +706,8 @@ class ClanCommands(commands.Cog):
             except Exception:
                 pass
 
+        # Xóa khỏi DB (Bỏ cooldown theo yêu cầu)
         await self.bot.db.remove_member(guild.id, user.id)
-        cfg = await self.bot.db.get_guild_config(guild.id)
-        cd_hours = cfg["leave_cooldown_hours"] if cfg else 24
-        await self.bot.db.set_cooldown(guild.id, user.id, cd_hours)
 
         await self.bot.db.add_clan_log(
             clan_id=mem_rec["clan_id"],
@@ -683,7 +716,7 @@ class ClanCommands(commands.Cog):
             details=f"<@{user.id}> đã tự nguyện rời khỏi băng."
         )
 
-        await interaction.followup.send(f"👋 Bạn đã tự nguyện rời khỏi băng **[{mem_rec['tag']}] {mem_rec['name']}**. Bạn cần chờ **{cd_hours} giờ** nữa mới có thể vào băng mới.", ephemeral=True)
+        await interaction.followup.send(f"👋 Bạn đã tự nguyện rời khỏi băng **[{mem_rec['tag']}] {mem_rec['name']}**. Bạn có thể tự do gia nhập hoặc lập băng mới ngay mà không cần chờ đợi!", ephemeral=True)
 
     # =========================================================================
     # NHÓM D: TRA CỨU & XẾP HẠNG

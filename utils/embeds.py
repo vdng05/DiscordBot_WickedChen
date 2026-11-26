@@ -480,3 +480,14 @@ def build_role_setup_embed(clan: Dict[str, Any], role: Optional[discord.Role], a
         embed.set_image(url=f"attachment://{attachment_filename}")
     embed.set_footer(text="Hỗ trợ đầy đủ tính năng Server Boost: Gradient 2 màu và Icon Vai Trò")
     return embed
+
+
+async def send_dm_notification(user: Any, embed: discord.Embed) -> bool:
+    """Gửi DM thông báo an toàn cho thành viên, bắt mọi lỗi nếu user đóng DM/block bot"""
+    if not user:
+        return False
+    try:
+        await user.send(embed=embed)
+        return True
+    except Exception:
+        return False

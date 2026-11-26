@@ -45,7 +45,7 @@ class DatabaseManager:
                 log_channel_id TEXT,
                 allow_member_create INTEGER DEFAULT 1,
                 required_role_id TEXT,
-                leave_cooldown_hours INTEGER DEFAULT 24,
+                leave_cooldown_hours INTEGER DEFAULT 0,
                 created_at INTEGER NOT NULL
             );
 
@@ -226,6 +226,13 @@ class DatabaseManager:
                         await db.commit()
             except Exception as mig_err:
                 logger.warning(f"Lỗi kiểm tra migration weekly quests: {mig_err}")
+
+            # Xóa các cooldown cũ còn tồn đọng để bỏ hẳn time out rời băng theo yêu cầu
+            try:
+                await db.execute("DELETE FROM member_cooldowns")
+                await db.commit()
+            except Exception:
+                pass
 
         logger.info(f"Đã kết nối và khởi tạo schema SQLite (WAL Mode) tại: {self.db_path}")
 
@@ -576,6 +583,9 @@ class DatabaseManager:
                 return dict(row) if row else None
 
     async def set_cooldown(self, guild_id: int, user_id: int, hours: int):
+        if hours <= 0:
+            await self.remove_cooldown(guild_id, user_id)
+            return
         expires_at = int(time.time()) + (hours * 3600)
         sql = """
         INSERT INTO member_cooldowns (guild_id, user_id, expires_at)
