@@ -154,12 +154,16 @@ class ClanAdmin(commands.Cog):
                 except Exception as e:
                     issues.append(f"Không thể tạo lại Role cho băng **{c['name']}**: {e}")
 
-            # 2. Kiểm tra Kênh Chat
+            # 2. Kiểm tra Kênh Chat & Chuẩn Hóa Tên Kênh Không Dấu
+            from utils.text_helper import to_channel_slug
+            clean_slug = to_channel_slug(c["name"])[:25]
+            expected_ch_name = f"💬・{c['tag'].lower()}-{clean_slug}"
+
             text_ch = guild.get_channel(int(c["text_channel_id"]))
             if not text_ch and role:
                 try:
                     text_ch = await guild.create_text_channel(
-                        name=f"💬・{c['tag'].lower()}-{c['name'].lower()[:20]}",
+                        name=expected_ch_name,
                         category=category,
                         overwrites={
                             guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -168,9 +172,16 @@ class ClanAdmin(commands.Cog):
                     )
                     await self.bot.db.update_clan(c["clan_id"], text_channel_id=str(text_ch.id))
                     channels_fixed += 1
-                    issues.append(f"Khôi phục kênh chat cho băng **{c['name']}**.")
+                    issues.append(f"Khôi phục kênh chat cho băng **{c['name']}** ({expected_ch_name}).")
                 except Exception as e:
                     issues.append(f"Không thể tạo lại kênh chat cho băng **{c['name']}**: {e}")
+            elif text_ch and text_ch.name != expected_ch_name:
+                try:
+                    await text_ch.edit(name=expected_ch_name, reason="Chuẩn hóa tên kênh không dấu chuẩn Discord")
+                    channels_fixed += 1
+                    issues.append(f"Chuẩn hóa tên kênh chat của băng **{c['name']}** sang không dấu: `{expected_ch_name}`.")
+                except Exception as e:
+                    logger.warning(f"Không thể đổi tên text channel: {e}")
 
             # 3. Đồng bộ thành viên Role vs DB
             if role:

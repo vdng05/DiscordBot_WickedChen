@@ -255,6 +255,8 @@ class ClanCommands(commands.Cog):
     @clan_group.command(name="setup-role", description="Bảng điều khiển thiết lập & tùy biến Role Băng (Chủ Băng)")
     async def clan_setup_role(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
         clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         if not clan:
             await interaction.followup.send("❌ Bạn không thuộc băng nào!", ephemeral=True)
@@ -734,7 +736,9 @@ class ClanCommands(commands.Cog):
     @app_commands.describe(ten_bang="Tên hoặc Tag băng (để trống để xem băng của chính mình)")
     @app_commands.autocomplete(ten_bang=clan_name_autocomplete)
     async def clan_info(self, interaction: discord.Interaction, ten_bang: Optional[str] = None):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
         guild = interaction.guild
 
         if ten_bang:
@@ -802,12 +806,14 @@ class ClanCommands(commands.Cog):
 
     @clan_group.command(name="list", description="Xem danh sách toàn bộ các băng đang hoạt động trong server")
     async def clan_list(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         embed = build_clan_list_embed(interaction.guild.name, clans)
         from utils.ui_components import ClanListInteractiveView
         view = ClanListInteractiveView(clans=clans, bot=self.bot)
-        await interaction.followup.send(embed=embed, view=view)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @clan_group.command(name="leaderboard", description="Bảng vinh danh các băng đảng xuất sắc nhất server")
     @app_commands.describe(tieu_chi="Tiêu chí xếp hạng")
@@ -816,7 +822,9 @@ class ClanCommands(commands.Cog):
         interaction: discord.Interaction,
         tieu_chi: Literal["level", "weekly", "members"] = "level"
     ):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
         clans = await self.bot.db.get_leaderboard(interaction.guild_id, criteria=tieu_chi, limit=10)
 
         from utils.canvas import generate_leaderboard_image
@@ -829,12 +837,14 @@ class ClanCommands(commands.Cog):
             embed.set_thumbnail(url=interaction.guild.icon.url)
         from utils.ui_components import LeaderboardInteractiveView
         view = LeaderboardInteractiveView(guild_name=interaction.guild.name, bot=self.bot, initial_criteria=tieu_chi)
-        await interaction.followup.send(embed=embed, file=file, view=view)
+        await interaction.followup.send(embed=embed, file=file, view=view, ephemeral=True)
 
     @clan_group.command(name="logs", description="Xem nhật ký hoạt động gần đây của băng (Cán Bộ trở lên)")
     @app_commands.describe(trang="Số trang cần xem (Mặc định: 1)")
     async def clan_logs(self, interaction: discord.Interaction, trang: int = 1):
         await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
         clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         if not clan:
             await interaction.followup.send("❌ Bạn không thuộc băng nào!", ephemeral=True)
@@ -1139,10 +1149,12 @@ class ClanCommands(commands.Cog):
 
     @clan_group.command(name="quests", description="Xem danh sách nhiệm vụ tuần hợp tác của băng")
     async def clan_quests(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
         clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         if not clan:
-            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!")
+            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
             return
 
         week_key = get_current_week_key()
@@ -1159,11 +1171,13 @@ class ClanCommands(commands.Cog):
             logo_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
             files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
             embed.set_thumbnail(url="attachment://default_logo.png")
-        await interaction.followup.send(embed=embed, files=files)
+        await interaction.followup.send(embed=embed, files=files, ephemeral=True)
 
     @clan_group.command(name="hub", description="Mở trung tâm điều khiển Băng Đảng tương tác 1-click")
     async def clan_hub(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
         clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         member_count = 0
         if clan:

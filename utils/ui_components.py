@@ -32,6 +32,7 @@ from utils.embeds import (
 )
 from utils.logger import setup_logging
 from utils.time_helper import get_current_week_key
+from utils.text_helper import to_channel_slug, auto_dismiss_notice
 
 logger = setup_logging("UIComponents")
 
@@ -88,7 +89,7 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
             if is_admin:
                 try:
                     category = await guild.create_category("🏰 BĂNG ĐẢNG", reason="Tự động khởi tạo hệ thống Băng Đảng")
-                    log_ch = await guild.create_text_channel("📜・nhật-ký-băng", category=category, reason="Tự động tạo kênh log băng")
+                    log_ch = await guild.create_text_channel("📜・nhat-ky-bang", category=category, reason="Tự động tạo kênh log băng")
                     await self.bot.db.save_guild_config(
                         guild_id=guild.id,
                         category_id=category.id,
@@ -197,7 +198,8 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
                         overflow_cat = category
                 category = overflow_cat
 
-            clean_channel_slug = re.sub(r"[^a-z0-9]", "-", name.lower())[:30]
+            from utils.text_helper import to_channel_slug
+            clean_channel_slug = to_channel_slug(name)[:30]
             text_channel_name = f"💬・{tag.lower()}-{clean_channel_slug}"
             voice_channel_name = f"🔊・[{tag}] Phòng Sinh Hoạt"
 
@@ -379,6 +381,23 @@ class RenameClanModal(ui.Modal):
                 await role.edit(name=f"[{tag}] {name}")
             except Exception as e:
                 logger.warn(f"Không thể đổi tên role: {e}")
+
+        # Cập nhật Tên Kênh Chat & Voice Không Dấu
+        from utils.text_helper import to_channel_slug
+        clean_slug = to_channel_slug(name)[:25]
+        text_ch = guild.get_channel(int(self.clan["text_channel_id"]))
+        if text_ch:
+            try:
+                await text_ch.edit(name=f"💬・{tag.lower()}-{clean_slug}", topic=f"Kênh sinh hoạt chính thức của Băng [{tag}] {name} | Khẩu hiệu: {slogan}")
+            except Exception as e:
+                logger.warn(f"Không thể đổi tên text channel: {e}")
+
+        voice_ch = guild.get_channel(int(self.clan["voice_channel_id"]))
+        if voice_ch:
+            try:
+                await voice_ch.edit(name=f"🔊・[{tag}] Phòng Sinh Hoạt")
+            except Exception as e:
+                logger.warn(f"Không thể đổi tên voice channel: {e}")
 
         # Cập nhật DB
         await self.bot.db.update_clan(
@@ -965,19 +984,19 @@ class ClanInfoView(ui.View):
 
     @ui.button(label="Điểm Danh Nhanh", emoji="📅", style=discord.ButtonStyle.success, custom_id="clan_quick_checkin_btn")
     async def checkin_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
         from utils.time_helper import get_today_vn_string, get_yesterday_vn_string, get_current_week_key
         from utils.constants import EXP_REWARDS
+        from utils.text_helper import auto_dismiss_notice
 
         clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         if not clan or clan["clan_id"] != self.clan_id:
-            await interaction.followup.send("❌ Bạn không thuộc băng này!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn không thuộc băng này!", delay=5)
             return
 
         today = get_today_vn_string()
         yesterday = get_yesterday_vn_string()
         if clan.get("last_checkin_date") == today:
-            await interaction.followup.send("ℹ️ Hôm nay bạn đã điểm danh rồi! Hãy quay lại sau 00:00 nhé.", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="ℹ️ Hôm nay bạn đã điểm danh rồi! Hãy quay lại sau 00:00 nhé.", delay=5)
             return
 
         new_streak = 1
@@ -997,11 +1016,14 @@ class ClanInfoView(ui.View):
         if quest_res["completed_now"]:
             await self.bot.db.add_clan_exp(clan["clan_id"], quest_res["reward_exp"], quest_res["reward_exp"])
 
-        await interaction.followup.send(
-            f"🎉 **Điểm danh thành công!**\n"
-            f"• Chuỗi streak: **{new_streak} ngày** {'🎁 *(Thưởng thêm +50 EXP mốc 7 ngày!)*' if is_streak_7 else ''}\n"
-            f"• Băng nhận: **+{clan_exp_to_add} EXP** • Cá nhân nhận: **+10 Điểm cống hiến**",
-            ephemeral=True
+        await auto_dismiss_notice(
+            interaction,
+            content=(
+                f"🎉 **Điểm danh thành công!**\n"
+                f"• Chuỗi streak: **{new_streak} ngày** {'🎁 *(Thưởng thêm +50 EXP mốc 7 ngày!)*' if is_streak_7 else ''}\n"
+                f"• Băng nhận: **+{clan_exp_to_add} EXP** • Cá nhân nhận: **+10 Điểm cống hiến**"
+            ),
+            delay=6
         )
 
     @ui.button(label="Cài Đặt", emoji="⚙️", style=discord.ButtonStyle.secondary, custom_id="clan_quick_settings_btn")
@@ -1050,6 +1072,21 @@ class ClanInfoView(ui.View):
                 embed.set_thumbnail(url=clan["logo_url"])
             embed.set_footer(text="Đồ họa kiến tạo tự động bởi Hệ Thống Discord Bot Gaming")
             await interaction.followup.send(embed=embed, file=file, ephemeral=True)
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, custom_id="clan_info_back_hub_btn", row=1)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, custom_id="clan_info_close_btn", row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 class WelcomeGreetingView(ui.View):
@@ -1299,6 +1336,21 @@ class ClanDetailView(ui.View):
             embed.set_footer(text="Đồ họa kiến tạo tự động bởi Hệ Thống Discord Bot Gaming")
             await interaction.followup.send(embed=embed, file=file, ephemeral=True)
 
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
+
 
 class QuickApplyDropdown(ui.Select):
     """Dropdown chọn nhanh băng để mở Modal nộp đơn trực tiếp"""
@@ -1382,14 +1434,29 @@ class ClanListInteractiveView(ui.View):
 
     @ui.button(label="Bảng Xếp Hạng Server", emoji="🏆", style=discord.ButtonStyle.secondary, row=1)
     async def leaderboard_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         from utils.canvas import generate_leaderboard_image
         clans = await self.bot.db.get_leaderboard(interaction.guild_id, criteria="level", limit=10)
         buf = await asyncio.to_thread(generate_leaderboard_image, interaction.guild.name, clans, "level")
         file = discord.File(fp=buf, filename="leaderboard.png")
         embed = build_leaderboard_embed(interaction.guild.name, clans, criteria="level", attachment_filename="leaderboard.png")
         view = LeaderboardInteractiveView(guild_name=interaction.guild.name, bot=self.bot, initial_criteria="level")
-        await interaction.followup.send(embed=embed, file=file, view=view, ephemeral=True)
+        await interaction.edit_original_response(embed=embed, attachments=[file], view=view)
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=1)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 # =============================================================================
@@ -1432,6 +1499,21 @@ class LeaderboardInteractiveView(ui.View):
     @ui.button(label="Sĩ Số Thành Viên", emoji="👥", style=discord.ButtonStyle.secondary)
     async def members_btn(self, interaction: discord.Interaction, button: ui.Button):
         await self._update_leaderboard(interaction, "members")
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=1)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 # =============================================================================
@@ -2001,6 +2083,138 @@ class ClanMemberManagementView(ui.View):
         modal = DisbandClanModal(clan=self.clan, bot=self.bot)
         await interaction.response.send_modal(modal)
 
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=2)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=2)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
+
+
+# =============================================================================
+# ĐIỀU HƯỚNG TẠI CHỖ & TIỆN ÍCH QUAY LẠI HUB (IN-PLACE NAVIGATION HELPERS)
+# =============================================================================
+
+async def return_to_hub(interaction: discord.Interaction, user: Any, bot: Any):
+    """Cập nhật trực tiếp tin nhắn hiện tại thành Clan Hub để tránh làm đầy chat"""
+    if not interaction.response.is_done():
+        await interaction.response.defer()
+
+    clan = await bot.db.get_clan_by_member(interaction.guild_id, user.id)
+    member_count = 0
+    if clan:
+        member_count = await bot.db.get_member_count(clan["clan_id"])
+        desc = (
+            f"Xin chào <@{user.id}>!\n\n"
+            f"🏰 Băng đảng: **[{clan['tag']}] {clan['name']}**\n"
+            f"🎖️ Chức vụ: **{RANK_NAMES.get(clan.get('rank'), clan.get('rank', 'Thành viên'))}**\n"
+            f"⭐ Điểm cống hiến: **{clan.get('contribution_points', 0)}** • Chuỗi điểm danh: **{clan.get('checkin_streak', 0)} ngày**\n\n"
+            "👉 *Bấm các nút bên dưới để thao tác nhanh bằng 1-click mà không cần nhớ lệnh:*"
+        )
+        color = discord.Color.gold()
+    else:
+        desc = (
+            f"Xin chào <@{user.id}>!\n\n"
+            "Bạn hiện **chưa gia nhập** băng đảng nào trong server.\n\n"
+            "👉 *Bấm các nút bên dưới để xem danh sách băng đang mở tuyển hoặc tự lập băng mới:*"
+        )
+        color = discord.Color.blue()
+
+    from utils.canvas import generate_clan_hub_image
+    buf = await asyncio.to_thread(generate_clan_hub_image, clan, user.display_name, member_count)
+    file = discord.File(fp=buf, filename="clan_hub.png")
+
+    embed = discord.Embed(
+        title="🎮 TRUNG TÂM ĐIỀU KHIỂN BĂNG ĐẢNG (CLAN HUB)",
+        description=desc,
+        color=color,
+        timestamp=datetime.now()
+    )
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.set_image(url="attachment://clan_hub.png")
+    view = ClanHubView(user=user, clan=clan, bot=bot)
+    await interaction.edit_original_response(content=None, embed=embed, attachments=[file], view=view)
+
+
+class ClanQuestsView(ui.View):
+    """View hiển thị Bảng Nhiệm Vụ Tuần hỗ trợ quay lại Hub và đóng bảng"""
+    def __init__(self, clan: Dict[str, Any], user: Any, bot: Any):
+        super().__init__(timeout=180)
+        self.clan = clan
+        self.user = user
+        self.bot = bot
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=0)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, self.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=0)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
+
+
+class ClanMilestonesView(ui.View):
+    """View hiển thị Cột Mốc Lịch Sử hỗ trợ quay lại Hub và đóng bảng"""
+    def __init__(self, clan: Dict[str, Any], user: Any, bot: Any):
+        super().__init__(timeout=180)
+        self.clan = clan
+        self.user = user
+        self.bot = bot
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=0)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, self.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=0)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
+
+
+class ClanWallpaperView(ui.View):
+    """View hiển thị Wallpaper Full HD hỗ trợ quay lại Hub và đóng bảng"""
+    def __init__(self, clan: Dict[str, Any], user: Any, bot: Any):
+        super().__init__(timeout=180)
+        self.clan = clan
+        self.user = user
+        self.bot = bot
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=0)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, self.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=0)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
+
 
 # =============================================================================
 # TRUNG TÂM ĐIỀU KHIỂN BĂNG ĐẢNG (CLAN HUB)
@@ -2043,19 +2257,19 @@ class ClanHubView(ui.View):
 
     @ui.button(label="Điểm Danh Hằng Ngày", emoji="📅", style=discord.ButtonStyle.success, row=0)
     async def checkin_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
         from utils.time_helper import get_today_vn_string, get_yesterday_vn_string, get_current_week_key
         from utils.constants import EXP_REWARDS
+        from utils.text_helper import auto_dismiss_notice
 
         clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         if not clan:
-            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
 
         today = get_today_vn_string()
         yesterday = get_yesterday_vn_string()
         if clan.get("last_checkin_date") == today:
-            await interaction.followup.send("ℹ️ Hôm nay bạn đã điểm danh rồi! Hãy quay lại sau 00:00 nhé.", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="ℹ️ Hôm nay bạn đã điểm danh rồi! Hãy quay lại sau 00:00 nhé.", delay=5)
             return
 
         new_streak = 1
@@ -2075,18 +2289,21 @@ class ClanHubView(ui.View):
         if quest_res["completed_now"]:
             await self.bot.db.add_clan_exp(clan["clan_id"], quest_res["reward_exp"], quest_res["reward_exp"])
 
-        await interaction.followup.send(
-            f"🎉 **Điểm danh thành công!**\n"
-            f"• Chuỗi streak: **{new_streak} ngày** {'🎁 *(Thưởng thêm +50 EXP mốc 7 ngày!)*' if is_streak_7 else ''}\n"
-            f"• Băng nhận: **+{clan_exp_to_add} EXP** • Cá nhân nhận: **+10 Điểm cống hiến**",
-            ephemeral=True
+        await auto_dismiss_notice(
+            interaction,
+            content=(
+                f"🎉 **Điểm danh thành công!**\n"
+                f"• Chuỗi streak: **{new_streak} ngày** {'🎁 *(Thưởng thêm +50 EXP mốc 7 ngày!)*' if is_streak_7 else ''}\n"
+                f"• Băng nhận: **+{clan_exp_to_add} EXP** • Cá nhân nhận: **+10 Điểm cống hiến**"
+            ),
+            delay=6
         )
 
     @ui.button(label="Nhiệm Vụ Tuần", emoji="🎯", style=discord.ButtonStyle.primary, row=0)
     async def quests_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         if not self.clan:
-            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
         from utils.time_helper import get_current_week_key
         from utils.embeds import build_quests_embed
@@ -2103,14 +2320,15 @@ class ClanHubView(ui.View):
             logo_buf = await asyncio.to_thread(generate_default_clan_logo, self.clan)
             files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
             embed.set_thumbnail(url="attachment://default_logo.png")
-        await interaction.followup.send(embed=embed, files=files, ephemeral=True)
+        view = ClanQuestsView(clan=self.clan, user=interaction.user, bot=self.bot)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
 
     @ui.button(label="Hồ Sơ Băng Của Bạn", emoji="🏰", style=discord.ButtonStyle.secondary, row=0)
     async def my_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         if not clan:
-            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
 
         members = await self.bot.db.get_clan_members(clan["clan_id"])
@@ -2129,12 +2347,12 @@ class ClanHubView(ui.View):
         if clan.get("logo_url"):
             embed.set_thumbnail(url=clan["logo_url"])
         view = ClanInfoView(clan_id=clan["clan_id"], can_apply=False, is_member=True, is_leader=(int(clan["leader_id"]) == interaction.user.id), bot=self.bot)
-        await interaction.followup.send(embed=embed, files=files, view=view, ephemeral=True)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
 
     @ui.button(label="Rời Băng", emoji="🚪", style=discord.ButtonStyle.danger, row=3)
     async def leave_btn(self, interaction: discord.Interaction, button: ui.Button):
         if not self.clan:
-            await interaction.response.send_message("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
         if int(self.clan["leader_id"]) == interaction.user.id:
             await interaction.response.send_message(
@@ -2151,22 +2369,33 @@ class ClanHubView(ui.View):
             ephemeral=True
         )
 
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=3)
+    async def close_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
+
     @ui.button(label="Bảng Xếp Hạng Server", emoji="🏆", style=discord.ButtonStyle.secondary, row=1)
     async def leaderboard_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         from utils.canvas import generate_leaderboard_image
         clans = await self.bot.db.get_leaderboard(interaction.guild_id, criteria="level", limit=10)
         buf = await asyncio.to_thread(generate_leaderboard_image, interaction.guild.name, clans, "level")
         file = discord.File(fp=buf, filename="leaderboard.png")
         embed = build_leaderboard_embed(interaction.guild.name, clans, criteria="level", attachment_filename="leaderboard.png")
         view = LeaderboardInteractiveView(guild_name=interaction.guild.name, bot=self.bot, initial_criteria="level")
-        await interaction.followup.send(embed=embed, file=file, view=view, ephemeral=True)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=[file], view=view)
 
     @ui.button(label="Cột Mốc Lịch Sử", emoji="📜", style=discord.ButtonStyle.secondary, row=1)
     async def milestones_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         if not self.clan:
-            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
         from utils.embeds import build_milestones_embed
         milestones = await self.bot.db.get_clan_milestones(self.clan["clan_id"], limit=10)
@@ -2179,16 +2408,14 @@ class ClanHubView(ui.View):
             logo_buf = await asyncio.to_thread(generate_default_clan_logo, self.clan)
             files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
             embed = build_milestones_embed(self.clan, milestones, logo_filename="default_logo.png")
-        if files:
-            await interaction.followup.send(embed=embed, files=files, ephemeral=True)
-        else:
-            await interaction.followup.send(embed=embed, ephemeral=True)
+        view = ClanMilestonesView(clan=self.clan, user=interaction.user, bot=self.bot)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
 
     @ui.button(label="Ảnh Nền Băng (Full HD)", emoji="🖼️", style=discord.ButtonStyle.secondary, row=1)
     async def wallpaper_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         if not self.clan:
-            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
         from utils.canvas import generate_clan_wallpaper
         members = await self.bot.db.get_clan_members(self.clan["clan_id"])
@@ -2197,47 +2424,47 @@ class ClanHubView(ui.View):
         file = discord.File(fp=buf, filename="clan_wallpaper.png")
         embed = discord.Embed(
             title=f"🖼️ HÌNH NỀN DESKTOP BĂNG [{self.clan['tag']}] {self.clan['name']}",
-            description="Tác phẩm đồ họa Full HD 1920x1080 ghi lại dấu ấn, thành viên chủ chốt và biên niên sử hào hùng của băng!",
+            description="Tác phẩm đồ họa Full HD 1920x1080 ghi lại dấu ấn, thành viên chủ chốt và biên niên sử hào hùng của băng!\n*(Gợi ý: Nhấn vào ảnh và chọn 'Open in Browser' để tải về ảnh gốc)*",
             color=discord.Color.from_str(self.clan.get("color_hex") or "#5865F2"),
             timestamp=datetime.now()
         )
         embed.set_image(url="attachment://clan_wallpaper.png")
-        embed.set_footer(text="Gợi ý: Nhấn vào ảnh và chọn 'Open in Browser' để tải về ảnh gốc chất lượng cao nhất!")
-        await interaction.followup.send(embed=embed, file=file, ephemeral=True)
+        view = ClanWallpaperView(clan=self.clan, user=interaction.user, bot=self.bot)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=[file], view=view)
 
     @ui.button(label="Nhật Ký Băng", emoji="📜", style=discord.ButtonStyle.secondary, row=1)
     async def logs_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         if not self.clan:
-            await interaction.followup.send("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
         is_leader = int(self.clan["leader_id"]) == interaction.user.id
         is_officer = is_leader or self.clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
         if not is_officer and not interaction.user.guild_permissions.administrator:
-            await interaction.followup.send("❌ Chỉ Cán Bộ, Phó Băng hoặc Chủ Băng mới có quyền xem nhật ký băng!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Chỉ Cán Bộ, Phó Băng hoặc Chủ Băng mới có quyền xem nhật ký băng!", delay=5)
             return
         from utils.embeds import build_logs_embed
         logs_data = await self.bot.db.get_clan_logs(self.clan["clan_id"], page=1, page_size=10)
         embed = build_logs_embed(self.clan, logs_data["logs"], page=1, total_pages=logs_data["total_pages"])
         view = LogsPaginationView(clan_id=self.clan["clan_id"], current_page=1, total_pages=logs_data["total_pages"], bot=self.bot)
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=[], view=view)
 
     @ui.button(label="Nộp Đơn Vào Băng", emoji="📩", style=discord.ButtonStyle.primary, row=1)
     async def apply_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
         existing = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         if existing:
-            await interaction.response.send_message(f"❌ Bạn đã là thành viên của băng **{existing['name']}** rồi!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content=f"❌ Bạn đã là thành viên của băng **{existing['name']}** rồi!", delay=5)
             return
 
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         if not clans:
-            await interaction.response.send_message("❌ Máy chủ hiện chưa có băng nào đang hoạt động!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Máy chủ hiện chưa có băng nào đang hoạt động!", delay=5)
             return
 
         if len(clans) == 1:
             clan = await self.bot.db.get_clan_by_id(clans[0]["clan_id"])
             if not clan:
-                await interaction.response.send_message("❌ Băng không tồn tại hoặc vừa bị giải tán!", ephemeral=True)
+                await auto_dismiss_notice(interaction, content="❌ Băng không tồn tại hoặc vừa bị giải tán!", delay=5)
                 return
             modal = ApplyClanModal(clan=clan, bot=self.bot)
             await interaction.response.send_modal(modal)
@@ -2248,29 +2475,30 @@ class ClanHubView(ui.View):
     @ui.button(label="Quản Lý Thành Viên", emoji="👥", style=discord.ButtonStyle.primary, row=2)
     async def members_mgmt_btn(self, interaction: discord.Interaction, button: ui.Button):
         if not self.clan:
-            await interaction.response.send_message("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
         is_leader = int(self.clan["leader_id"]) == interaction.user.id
         is_officer = is_leader or self.clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
         if not is_officer and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Chỉ Cán Bộ hoặc Chủ Băng mới có quyền truy cập Quản Lý Thành Viên!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Chỉ Cán Bộ hoặc Chủ Băng mới có quyền truy cập Quản Lý Thành Viên!", delay=5)
             return
+        await interaction.response.defer()
         view = ClanMemberManagementView(clan=self.clan, user=interaction.user, bot=self.bot)
-        await interaction.response.send_message("👥 **BẢNG ĐIỀU KHIỂN QUẢN LÝ THÀNH VIÊN & NHÂN SỰ BĂNG:**", view=view, ephemeral=True)
+        await interaction.edit_original_response(content="👥 **BẢNG ĐIỀU KHIỂN QUẢN LÝ THÀNH VIÊN & NHÂN SỰ BĂNG:**", embed=None, attachments=[], view=view)
 
     @ui.button(label="Trao Danh Hiệu", emoji="🎖️", style=discord.ButtonStyle.primary, row=2)
     async def titles_btn(self, interaction: discord.Interaction, button: ui.Button):
         if not self.clan:
-            await interaction.response.send_message("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
         is_leader = int(self.clan["leader_id"]) == interaction.user.id
         is_officer = is_leader or self.clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
         if not is_officer and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Chỉ Cán Bộ, Phó Băng hoặc Chủ Băng mới có quyền trao danh hiệu nội bộ!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Chỉ Cán Bộ, Phó Băng hoặc Chủ Băng mới có quyền trao danh hiệu nội bộ!", delay=5)
             return
         members = await self.bot.db.get_clan_members(self.clan["clan_id"])
         if not members:
-            await interaction.response.send_message("❌ Băng chưa có thành viên!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Băng chưa có thành viên!", delay=5)
             return
         view = ClanCustomTitleMemberSelectView(clan=self.clan, members=members, guild=interaction.guild, bot=self.bot)
         await interaction.response.send_message("🎖️ **Chọn thành viên để trao hoặc chỉnh sửa danh hiệu nội bộ:**", view=view, ephemeral=True)
@@ -2279,8 +2507,9 @@ class ClanHubView(ui.View):
     async def manage_btn(self, interaction: discord.Interaction, button: ui.Button):
         if not self.clan:
             return
+        await interaction.response.defer()
         view = SettingsDashboardView(clan=self.clan, bot=self.bot)
-        await interaction.response.send_message("⚙️ Bảng điều khiển cài đặt băng:", view=view, ephemeral=True)
+        await interaction.edit_original_response(content="⚙️ **BẢNG ĐIỀU KHIỂN CÀI ĐẶT BĂNG:**", embed=None, attachments=[], view=view)
 
     @ui.button(label="Cài Đặt Role", emoji="🛡️", style=discord.ButtonStyle.secondary, row=2)
     async def role_btn(self, interaction: discord.Interaction, button: ui.Button):
@@ -2288,9 +2517,9 @@ class ClanHubView(ui.View):
             return
         is_leader = int(self.clan["leader_id"]) == interaction.user.id
         if not is_leader and not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Chỉ Chủ Băng hoặc Quản Trị Viên mới có quyền thiết lập Role!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Chỉ Chủ Băng hoặc Quản Trị Viên mới có quyền thiết lập Role!", delay=5)
             return
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         role = interaction.guild.get_role(int(self.clan["role_id"])) if self.clan.get("role_id") else None
         from utils.canvas import generate_role_setup_image
         buf = await asyncio.to_thread(
@@ -2303,23 +2532,41 @@ class ClanHubView(ui.View):
             role.mentionable if role else True
         )
         file = discord.File(fp=buf, filename="role_setup.png")
-        embed = build_role_setup_embed(self.clan, role, attachment_filename="role_setup.png")
+        files = [file]
+        logo_filename = None
+        if not self.clan.get("logo_url"):
+            from utils.canvas import generate_default_clan_logo
+            logo_buf = await asyncio.to_thread(generate_default_clan_logo, self.clan)
+            files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
+            logo_filename = "default_logo.png"
+        embed = build_role_setup_embed(self.clan, role, attachment_filename="role_setup.png", logo_filename=logo_filename)
         view = ClanRoleSetupView(clan=self.clan, bot=self.bot)
-        await interaction.followup.send(embed=embed, file=file, view=view, ephemeral=True)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
 
     @ui.button(label="Xem Danh Sách Băng Mở Tuyển", emoji="📜", style=discord.ButtonStyle.primary, row=0)
     async def list_clans_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         from utils.embeds import build_clan_list_embed
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         embed = build_clan_list_embed(interaction.guild.name, clans)
         view = ClanListInteractiveView(clans=clans, bot=self.bot)
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=[], view=view)
 
     @ui.button(label="Thành Lập Băng Mới", emoji="✨", style=discord.ButtonStyle.success, row=0)
     async def create_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
         modal = CreateClanModal(bot=self.bot)
         await interaction.response.send_modal(modal)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=3)
+    async def close_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 class RejectRequestModal(ui.Modal):
@@ -2665,28 +2912,46 @@ class SettingsDashboardView(ui.View):
     async def select_callback(self, interaction: discord.Interaction, select: ui.Select):
         val = select.values[0]
         if val == "member_mgmt":
+            await interaction.response.defer()
             view = ClanMemberManagementView(clan=self.clan, user=interaction.user, bot=self.bot)
-            await interaction.response.send_message("👥 **Bảng Quản Lý Nhân Sự & Thành Viên Băng:**", view=view, ephemeral=True)
+            await interaction.edit_original_response(content="👥 **BẢNG QUẢN LÝ NHÂN SỰ & THÀNH VIÊN BĂNG:**", embed=None, attachments=[], view=view)
         elif val == "rename":
             modal = RenameClanModal(clan=self.clan, bot=self.bot)
             await interaction.response.send_modal(modal)
         elif val in ("color", "role_setup"):
+            await interaction.response.defer()
             role = interaction.guild.get_role(int(self.clan["role_id"])) if self.clan.get("role_id") else None
             embed = build_role_setup_embed(self.clan, role)
             view = ClanRoleSetupView(clan=self.clan, bot=self.bot)
-            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            await interaction.edit_original_response(content=None, embed=embed, attachments=[], view=view)
         elif val == "images":
             modal = ImagesClanModal(clan=self.clan, bot=self.bot)
             await interaction.response.send_modal(modal)
         elif val == "join_mode":
+            await interaction.response.defer()
             view = JoinModeSelectView(clan_id=self.clan["clan_id"], current_mode=self.clan["join_mode"], bot=self.bot)
-            await interaction.response.send_message("🚪 Chọn chế độ tuyển quân mới cho băng:", view=view, ephemeral=True)
+            await interaction.edit_original_response(content="🚪 **CHỌN CHẾ ĐỘ TUYỂN QUÂN MỚI CHO BĂNG:**", embed=None, attachments=[], view=view)
         elif val == "disband":
             if int(self.clan["leader_id"]) != interaction.user.id and not interaction.user.guild_permissions.administrator:
                 await interaction.response.send_message("❌ Chỉ có Chủ Băng mới có quyền giải tán băng!", ephemeral=True)
                 return
             modal = DisbandClanModal(clan=self.clan, bot=self.bot)
             await interaction.response.send_modal(modal)
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=1)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 PRESET_COLORS = [
@@ -3057,6 +3322,20 @@ class ClanRoleSetupView(ui.View):
             ephemeral=True
         )
 
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=4)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=4)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 class JoinModeSelectView(ui.View):
@@ -3073,9 +3352,8 @@ class JoinModeSelectView(ui.View):
         ]
         self.select_menu.options = options
 
-    @ui.select(placeholder="Chọn chế độ tuyển...")
+    @ui.select(placeholder="Chọn chế độ tuyển...", row=0)
     async def select_menu(self, interaction: discord.Interaction, select: ui.Select):
-        await interaction.response.defer(ephemeral=True)
         chosen = select.values[0]
         await self.bot.db.update_clan(self.clan_id, join_mode=chosen)
         await self.bot.db.add_clan_log(
@@ -3084,7 +3362,25 @@ class JoinModeSelectView(ui.View):
             action="UPDATE_JOIN_MODE",
             details=f"Đổi chế độ tuyển quân sang {chosen}."
         )
-        await interaction.followup.send(f"✅ Đã đổi chế độ tuyển quân thành: **{chosen}**!", ephemeral=True)
+        for opt in self.select_menu.options:
+            opt.default = (opt.value == chosen)
+        await interaction.response.edit_message(view=self)
+        await auto_dismiss_notice(interaction, content=f"✅ Đã đổi chế độ tuyển quân thành: **{chosen}**!", delay=5)
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=1)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 class MembersPaginationView(ui.View):
@@ -3133,6 +3429,21 @@ class MembersPaginationView(ui.View):
     async def next_btn(self, interaction: discord.Interaction, button: ui.Button):
         await self._change_page(interaction, self.current_page + 1)
 
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=1)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
+
     async def _change_page(self, interaction: discord.Interaction, new_page: int):
         await interaction.response.defer()
         rank_filter = None if self.current_filter == "ALL" else self.current_filter
@@ -3167,6 +3478,21 @@ class LogsPaginationView(ui.View):
     @ui.button(label="Sau", emoji="▶️", style=discord.ButtonStyle.secondary)
     async def next_btn(self, interaction: discord.Interaction, button: ui.Button):
         await self._change_page(interaction, self.current_page + 1)
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
     async def _change_page(self, interaction: discord.Interaction, new_page: int):
         await interaction.response.defer()

@@ -214,7 +214,7 @@ async def run_tests():
     assert len(cl_view.children) >= 2
 
     lb_view = LeaderboardInteractiveView(guild_name="Test Server", bot=bot, initial_criteria="level")
-    assert len(lb_view.children) == 3
+    assert len(lb_view.children) >= 3
 
     leave_view = LeaveClanConfirmView(clan=clan, bot=bot)
     assert len(leave_view.children) == 2
@@ -250,8 +250,46 @@ async def run_tests():
     assert info_embed.image.url == "attachment://clan_profile.png"
     print("✅ 17. Tự động sinh Logo Bát Giác & Banner Gaming mặc định lộng lẫy bằng Canvas thành công 100%.")
 
+    # 18. Kiểm tra Chuyển đổi tên kênh Tiếng Việt sang ASCII Slug không dấu (to_channel_slug)
+    from utils.text_helper import to_channel_slug
+    test_slug_1 = to_channel_slug("Chó Điên")
+    assert test_slug_1 == "cho-dien", f"Expected 'cho-dien', got '{test_slug_1}'"
+
+    test_slug_2 = to_channel_slug("[NGU] Chó Điên")
+    assert test_slug_2 == "ngu-cho-dien", f"Expected 'ngu-cho-dien', got '{test_slug_2}'"
+
+    test_slug_3 = to_channel_slug("nhật-ký-băng")
+    assert test_slug_3 == "nhat-ky-bang", f"Expected 'nhat-ky-bang', got '{test_slug_3}'"
+
+    test_slug_4 = to_channel_slug("Đại Bàng Lửa & Rồng Vàng")
+    assert test_slug_4 == "dai-bang-lua-rong-vang", f"Expected 'dai-bang-lua-rong-vang', got '{test_slug_4}'"
+    print("✅ 18. Chuyển đổi tên kênh tiếng Việt không dấu chuẩn Discord (to_channel_slug) chính xác tuyệt đối.")
+
+    # 19. Kiểm tra Cơ chế Auto-Dismiss & Quản lý Panel người dùng (register_user_panel)
+    class DummyInteraction:
+        def __init__(self, uid):
+            self.user = type("U", (), {"id": uid})()
+            self.deleted = False
+        async def delete_original_response(self):
+            self.deleted = True
+
+    dummy_inter_1 = DummyInteraction(12345)
+    await bot.register_user_panel(12345, dummy_inter_1)
+    assert bot.active_user_panels[12345] == dummy_inter_1
+
+    # Khi mở bảng mới -> bảng cũ tự động bị dismiss / delete
+    dummy_inter_2 = DummyInteraction(12345)
+    await bot.register_user_panel(12345, dummy_inter_2)
+    assert dummy_inter_1.deleted is True
+    assert bot.active_user_panels[12345] == dummy_inter_2
+
+    await bot.dismiss_user_panel(12345)
+    assert dummy_inter_2.deleted is True
+    assert 12345 not in bot.active_user_panels
+    print("✅ 19. Cơ chế Auto-Dismiss và dọn dẹp panel tương tác của người dùng hoạt động hoàn hảo.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 17 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 19 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db

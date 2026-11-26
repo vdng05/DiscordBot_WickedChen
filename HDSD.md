@@ -17,6 +17,12 @@ Mọi tính năng quan trọng đều được **model hóa 100% bằng nút b�
   - **Vinh danh & Nghệ thuật:** Bấm **`[📜 Cột Mốc Lịch Sử]`**, **`[🖼️ Ảnh Nền Băng (Full HD)]`**, **`[📜 Nhật Ký Băng]`**.
   - **Quản lý & Nhân sự (Cán Bộ / Chủ Băng):** Bấm **`[👥 Quản Lý Thành Viên]`** (Mời qua menu chọn người, Thăng chức, Giáng chức, Trục xuất, Chuyển quyền Chủ Băng), **`[🎖️ Trao Danh Hiệu]`**, **`[⚙️ Cài Đặt Băng]`**, **`[🛡️ Cài Đặt Role]`**.
 
+### 🧹 Cơ Chế Tự Động Dọn Dẹp & Chống Đầy Chat (Auto-Dismiss & In-Place Navigation)
+- **Điều Hướng Tại Chỗ (In-Place Edit):** Khi bấm vào các mục con (Hồ sơ, Nhiệm vụ, Cột mốc, Cài đặt, Bảng xếp hạng...), bot sẽ biến đổi trực tiếp trên cùng một tin nhắn, **không spam thêm tin nhắn mới** làm trôi chat.
+- **Tự Động Thu Hồi Bảng Cũ (Auto-Dismiss):** Khi bạn dùng một lệnh khác hoặc mở tính năng mới, bot sẽ tự động xóa/dismiss bảng điều khiển trước đó để màn hình luôn gọn gàng.
+- **Nút `[🏠 Quay Lại Hub]` & `[🗑️ Đóng Bảng]`:** Tích hợp sẵn trên mọi giao diện để bạn quay về trang chính hoặc đóng bảng ngay lập tức khi hoàn thành thao tác.
+- **Thông Báo Tự Biến Mất:** Các thông báo trạng thái nhỏ (điểm danh thành công, cảnh báo thiếu quyền...) sẽ tự động biến mất sau 5-6 giây.
+
 ---
 
 ## 👤 PHẦN 1: DÀNH CHO THÀNH VIÊN & NGƯỜI CHƠI (GAMERS)
@@ -126,9 +132,11 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 2. Tìm vai trò của Bot $\rightarrow$ **Kéo vai trò của Bot lên vị trí cao nhất** (hoặc cao hơn toàn bộ các Role Băng Đảng).
 3. Đảm bảo vai trò Bot có quyền `Quản lý Vai trò (Manage Roles)` và `Quản lý Kênh (Manage Channels)`.
 
-### 3. Cứu Hộ Tự Động 1-Click: `/clan-admin sync`
-- Nếu ai đó trong server lỡ tay xóa nhầm Role hoặc Kênh của một băng, chỉ cần gõ `/clan-admin sync`.
-- Bot sẽ tự động rà soát cơ sở dữ liệu và **tự động tạo lại Role/Kênh bị thiếu**, gắn lại quyền chuẩn xác 100%!
+### 3. Chuẩn Hóa Tên Kênh Không Dấu & Cứu Hộ 1-Click: `/clan-admin sync`
+- **Tên Kênh Tiếng Việt Không Dấu Chuẩn Discord:** Discord không cho phép dấu tiếng Việt trong tên kênh văn bản (các ký tự có dấu như `ó, đ, ê` trước đây bị Discord cắt thành dấu gạch nối rời rạc `💬・ngu-ch-i-n`). Bot đã tự động chuyển đổi thành slug không dấu chuẩn (`💬・ngu-cho-dien`, `📜・nhat-ky-bang`).
+- **Cứu Hộ & Tự Động Đổi Tên Kênh Cũ:** Khi Admin chạy lệnh `/clan-admin sync`:
+  - Bot tự động quét và đổi tên các kênh chat bị lỗi gạch nối trước đây về tên tiếng Việt không dấu chuẩn đẹp.
+  - Nếu ai đó lỡ tay xóa nhầm Role hoặc Kênh của một băng, bot sẽ **tự động tạo lại Role/Kênh bị thiếu**, gắn lại quyền chuẩn xác 100%!
 
 ### 4. Xóa Bắt Buộc Khi Băng Vi Phạm: `/clan-admin force-delete`
 - Gõ `/clan-admin force-delete [tên_băng] [lý_do]`: Bot sẽ hiện nút xác nhận 2 lớp, sau đó xóa sạch Role, Kênh và dữ liệu của băng vi phạm, đồng thời lưu nhật ký xử lý vào kênh Log server.

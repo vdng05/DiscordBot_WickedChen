@@ -54,6 +54,29 @@ class ClanBot(commands.Bot):
         self.use_privileged_intents = use_privileged_intents
         self.should_sync = should_sync
 
+        # Quản lý bảng điều khiển đang mở của người dùng: user_id -> discord.Interaction
+        # Tự động dismiss / xóa bảng cũ khi người dùng mở hoặc sử dụng tính năng khác
+        self.active_user_panels: dict[int, discord.Interaction] = {}
+
+    async def register_user_panel(self, user_id: int, interaction: discord.Interaction):
+        """Đăng ký panel mới và tự động dismiss panel cũ của user nếu có để tránh đầy chat"""
+        old_interaction = self.active_user_panels.get(user_id)
+        if old_interaction and old_interaction != interaction:
+            try:
+                await old_interaction.delete_original_response()
+            except Exception:
+                pass
+        self.active_user_panels[user_id] = interaction
+
+    async def dismiss_user_panel(self, user_id: int):
+        """Đóng và xóa bảng điều khiển của user nếu đang mở"""
+        old_interaction = self.active_user_panels.pop(user_id, None)
+        if old_interaction:
+            try:
+                await old_interaction.delete_original_response()
+            except Exception:
+                pass
+
     async def setup_hook(self):
         """Khởi động cơ sở dữ liệu SQLite, gắn error handler và tự động nạp toàn bộ cogs"""
         # 1. Khởi tạo cơ sở dữ liệu SQLite WAL mode
