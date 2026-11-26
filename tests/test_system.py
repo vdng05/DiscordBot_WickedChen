@@ -361,8 +361,23 @@ async def run_tests():
         pf.close()
     print("✅ 22. Hệ thống lưu trữ ảnh bền vững (local://), hiển thị Banner tùy chỉnh trên Hồ Sơ Băng & fallback hoạt động 100%.")
 
+    # 23. Kiểm tra Nhật Ký Băng (total_pages), Thư Thách Đấu Băng Đảng & Giới hạn Field 1024 ký tự của Party
+    logs_check = await db.get_clan_logs(clan_id, page=1, page_size=10)
+    assert "total_pages" in logs_check and logs_check["total_pages"] >= 1
+
+    from utils.embeds import build_party_embed, build_challenge_embed
+    from utils.ui_components import ClanChallengeTargetView
+    big_party = build_party_embed("Custom 50 Slots", 9999, 50, None, [9999], [])
+    assert len(big_party.fields[0].value) <= 1024, "Party field value must never exceed 1024 chars"
+
+    ch_embed = build_challenge_embed(clan, 9999, "Valorant", "5v5 • BO3", "21:00", "Giao hữu tối nay nhé!", target_clan=None)
+    assert "THƯ THÁCH ĐẤU" in ch_embed.title
+    ch_view = ClanChallengeTargetView(source_clan=clan, other_clans=[], bot=bot)
+    assert len(ch_view.children) == 3
+    print("✅ 23. Nhật ký băng (total_pages), Thư Thách Đấu Băng Đảng & giới hạn 50 slot Party hoạt động hoàn hảo 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 22 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 23 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db

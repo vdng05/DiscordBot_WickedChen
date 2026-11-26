@@ -1147,14 +1147,30 @@ class ClanCommands(commands.Cog):
         except Exception as e:
             await interaction.followup.send(f"❌ Lỗi khi đổi màu role: `{e}`", ephemeral=True)
 
-    @clan_group.command(name="party", description="Tạo kèo rủ rê anh em trong băng chơi game (LFG)")
+    @clan_group.command(name="party", description="Gửi thư thách đấu tới băng khác hoặc tạo kèo chơi game nội bộ")
     async def clan_party(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
         clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
         if not clan:
-            await interaction.response.send_message("❌ Bạn chưa tham gia bất kỳ băng đảng nào!", ephemeral=True)
+            await interaction.followup.send("❌ Bạn chưa tham gia bất kỳ băng đảng nào!", ephemeral=True)
             return
-        modal = ClanQuickPartyModal(clan=clan, bot=self.bot)
-        await interaction.response.send_modal(modal)
+        all_clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        other_clans = [c for c in all_clans if c["clan_id"] != clan["clan_id"]]
+        from utils.ui_components import ClanChallengeTargetView
+        embed = discord.Embed(
+            title="⚔️ TRUNG TÂM THÁCH ĐẤU & LẬP KÈO BĂNG ĐẢNG",
+            description=(
+                "Chọn hình thức bạn muốn thực hiện bên dưới:\n\n"
+                "• **⚔️ Gửi Thư Thách Đấu:** Chọn 1 băng đối thủ (hoặc **Tất cả các băng**) từ menu thả xuống để nhập Tựa Game, Thể Thức và Nội Dung khiêu chiến!\n"
+                "• **🎮 Lập Kèo Nội Bộ:** Bấm nút bên dưới để rủ anh em cùng băng lập team chơi game."
+            ),
+            color=discord.Color.orange(),
+            timestamp=datetime.now()
+        )
+        view = ClanChallengeTargetView(source_clan=clan, other_clans=other_clans, bot=self.bot)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @clan_group.command(name="quests", description="Xem danh sách nhiệm vụ tuần hợp tác của băng")
     async def clan_quests(self, interaction: discord.Interaction):

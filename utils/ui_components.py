@@ -25,6 +25,7 @@ from utils.embeds import (
     build_members_embed,
     build_logs_embed,
     build_party_embed,
+    build_challenge_embed,
     build_role_setup_embed,
     build_image_settings_embed,
     get_level_info,
@@ -963,6 +964,294 @@ class ClanQuickPartyModal(ui.Modal, title="🎮 Tạo Kèo Rủ Chơi Game Nhanh
         await msg.edit(view=view)
 
         await interaction.followup.send(f"✅ Đã tạo kèo game thành công tại kênh {text_ch.mention}!", ephemeral=True)
+
+
+class ClanChallengeModal(ui.Modal, title="⚔️ Soạn Thư Thách Đấu Băng Đảng"):
+    """Modal nhập thông tin thư thách đấu gửi tới 1 băng cụ thể hoặc toàn thể các băng"""
+    def __init__(self, source_clan: Dict[str, Any], target_clan: Optional[Dict[str, Any]], bot):
+        super().__init__()
+        self.source_clan = source_clan
+        self.target_clan = target_clan  # None = gửi tới TẤT CẢ các băng khác
+        self.bot = bot
+
+    game_title = ui.TextInput(
+        label="Tựa Game Muốn Thách Đấu",
+        placeholder="Ví dụ: Valorant, Liên Quân, CS2, LMHT, PUBG...",
+        min_length=2,
+        max_length=60,
+        required=True
+    )
+    match_format = ui.TextInput(
+        label="Thể Thức & Quy Mô (Số người / BO)",
+        placeholder="Ví dụ: 5v5 • BO3 • Giao hữu vui vẻ / Cược danh dự",
+        default="5v5 • BO3 • Giao hữu vui vẻ",
+        max_length=80,
+        required=True
+    )
+    match_time = ui.TextInput(
+        label="Thời Gian Thi Đấu Dự Kiến",
+        placeholder="Ví dụ: 21:00 tối nay (hoặc để trống để hẹn sau)",
+        max_length=60,
+        required=False
+    )
+    challenge_message = ui.TextInput(
+        label="Nội Dung Thư Khiêu Chiến",
+        style=discord.TextStyle.paragraph,
+        placeholder="Viết lời thách đấu gửi tới băng đối thủ...",
+        min_length=3,
+        max_length=500,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        game = self.game_title.value.strip()
+        fmt = self.match_format.value.strip()
+        mtime = self.match_time.value.strip() or "Thỏa thuận sau"
+        msg_body = self.challenge_message.value.strip()
+
+        if self.target_clan:
+            targets = [self.target_clan]
+        else:
+            all_clans = await self.bot.db.get_all_clans_in_guild(guild.id)
+            targets = [c for c in all_clans if c["clan_id"] != self.source_clan["clan_id"]]
+
+        if not targets:
+            await auto_dismiss_notice(interaction, content="❌ Hiện chưa có băng đảng nào khác trong server để gửi thư thách đấu!", delay=5)
+            return
+
+        sent_names = []
+        for t_clan in targets:
+            ch_id = t_clan.get("text_channel_id")
+            if not ch_id:
+                continue
+            target_ch = guild.get_channel(int(ch_id))
+            if not target_ch:
+                continue
+
+            files: List[discord.File] = []
+            logo_ref = await resolve_clan_logo(self.source_clan, files, fallback_to_default=True)
+            embed = build_challenge_embed(
+                source_clan=self.source_clan,
+                sender_id=interaction.user.id,
+                game_title=game,
+                match_format=fmt,
+                match_time=mtime,
+                challenge_message=msg_body,
+                target_clan=t_clan if self.target_clan else None,
+                logo_filename=logo_ref,
+                status="PENDING"
+            )
+            view = ClanChallengeResponseView(
+                source_clan=self.source_clan,
+                target_clan=t_clan,
+                game_title=game,
+                match_format=fmt,
+                match_time=mtime,
+                challenge_message=msg_body,
+                sender_id=interaction.user.id,
+                bot=self.bot
+            )
+            ping_role = f"<@&{t_clan['role_id']}>" if t_clan.get("role_id") else ""
+            try:
+                await target_ch.send(content=ping_role, embed=embed, files=files, view=view)
+                sent_names.append(f"**[{t_clan['tag']}] {t_clan['name']}**")
+            except Exception as send_err:
+                logger.warning(f"Không thể gửi thư thách đấu tới băng {t_clan['name']}: {send_err}")
+
+        if not sent_names:
+            await auto_dismiss_notice(interaction, content="❌ Không tìm thấy kênh chat hợp lệ của băng đối thủ để gửi thư!", delay=5)
+            return
+
+        # Ghi nhận log & thông báo vào kênh băng mình
+        target_summary = ", ".join(sent_names[:5]) + (f" và {len(sent_names) - 5} băng khác" if len(sent_names) > 5 else "")
+        await self.bot.db.add_clan_log(
+            clan_id=self.source_clan["clan_id"],
+            actor_id=interaction.user.id,
+            action="SEND_CHALLENGE",
+            details=f"Gửi thư thách đấu tựa game {game} tới {target_summary}."
+        )
+
+        src_ch = guild.get_channel(int(self.source_clan["text_channel_id"])) if self.source_clan.get("text_channel_id") else None
+        if src_ch:
+            try:
+                src_files: List[discord.File] = []
+                src_logo = await resolve_clan_logo(self.source_clan, src_files, fallback_to_default=True)
+                src_embed = build_challenge_embed(
+                    source_clan=self.source_clan,
+                    sender_id=interaction.user.id,
+                    game_title=game,
+                    match_format=fmt,
+                    match_time=mtime,
+                    challenge_message=msg_body,
+                    target_clan=self.target_clan,
+                    logo_filename=src_logo,
+                    status="PENDING"
+                )
+                await src_ch.send(content=f"📣 <@{interaction.user.id}> vừa phát đi **Thư Thách Đấu** tới {target_summary}!", embed=src_embed, files=src_files)
+            except Exception:
+                pass
+
+        await auto_dismiss_notice(interaction, content=f"⚔️ **Đã gửi Thư Thách Đấu ({game}) thành công tới:** {target_summary}!", delay=6)
+
+
+class ClanChallengeResponseView(ui.View):
+    """Nút bấm Chấp Nhận / Từ Chối trên Thư Thách Đấu tại kênh băng đối thủ"""
+    def __init__(
+        self,
+        source_clan: Dict[str, Any],
+        target_clan: Dict[str, Any],
+        game_title: str,
+        match_format: str,
+        match_time: str,
+        challenge_message: str,
+        sender_id: int,
+        bot
+    ):
+        super().__init__(timeout=86400)
+        self.source_clan = source_clan
+        self.target_clan = target_clan
+        self.game_title = game_title
+        self.match_format = match_format
+        self.match_time = match_time
+        self.challenge_message = challenge_message
+        self.sender_id = sender_id
+        self.bot = bot
+
+    async def _respond_challenge(self, interaction: discord.Interaction, accepted: bool):
+        user_clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
+        if not user_clan or user_clan["clan_id"] != self.target_clan["clan_id"]:
+            await auto_dismiss_notice(interaction, content="❌ Chỉ thành viên của băng nhận thư mới có thể phản hồi thách đấu này!", delay=5)
+            return
+        if user_clan.get("rank") not in (Ranks.LEADER, Ranks.CO_LEADER, Ranks.OFFICER) and not interaction.user.guild_permissions.administrator:
+            await auto_dismiss_notice(interaction, content="❌ Chỉ Chủ Băng, Phó Băng hoặc Cán Bộ mới có quyền quyết định nhận kèo thách đấu!", delay=5)
+            return
+
+        await interaction.response.defer()
+        new_status = "ACCEPTED" if accepted else "DECLINED"
+        for item in self.children:
+            item.disabled = True
+
+        new_embed = build_challenge_embed(
+            source_clan=self.source_clan,
+            sender_id=self.sender_id,
+            game_title=self.game_title,
+            match_format=self.match_format,
+            match_time=self.match_time,
+            challenge_message=self.challenge_message,
+            target_clan=self.target_clan,
+            status=new_status
+        )
+        await interaction.edit_original_response(embed=new_embed, view=self)
+
+        # Báo tin về kênh băng gửi thư
+        src_ch = interaction.guild.get_channel(int(self.source_clan["text_channel_id"])) if self.source_clan.get("text_channel_id") else None
+        if src_ch:
+            if accepted:
+                notify_embed = discord.Embed(
+                    title="⚔️ KÈO THÁCH ĐẤU ĐÃ ĐƯỢC CHẤP NHẬN!",
+                    description=(
+                        f"Băng **[{self.target_clan['tag']}] {self.target_clan['name']}** (Đại diện: <@{interaction.user.id}>) "
+                        f"đã chính thức **CHẤP NHẬN** lời thách đấu tựa game **{self.game_title}** ({self.match_format})!\n"
+                        f"👉 Hãy mau chóng tập hợp đội hình chuẩn bị giao tranh!"
+                    ),
+                    color=discord.Color.green(),
+                    timestamp=datetime.now()
+                )
+            else:
+                notify_embed = discord.Embed(
+                    title="🛡️ THƯ THÁCH ĐẤU ĐÃ BỊ TỪ CHỐI",
+                    description=(
+                        f"Băng **[{self.target_clan['tag']}] {self.target_clan['name']}** (Đại diện: <@{interaction.user.id}>) "
+                        f"đã từ chối lời thách đấu tựa game **{self.game_title}** ở thời điểm hiện tại."
+                    ),
+                    color=discord.Color.red(),
+                    timestamp=datetime.now()
+                )
+            try:
+                await src_ch.send(content=f"<@{self.sender_id}>", embed=notify_embed)
+            except Exception:
+                pass
+
+    @ui.button(label="Chấp Nhận Thách Đấu", emoji="⚔️", style=discord.ButtonStyle.success)
+    async def accept_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await self._respond_challenge(interaction, accepted=True)
+
+    @ui.button(label="Từ Chối Lịch Sự", emoji="🛡️", style=discord.ButtonStyle.danger)
+    async def decline_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await self._respond_challenge(interaction, accepted=False)
+
+
+class ClanChallengeTargetSelect(ui.Select):
+    """Dropdown chọn đối thủ thách đấu (1 băng cụ thể hoặc Tất cả các băng)"""
+    def __init__(self, source_clan: Dict[str, Any], other_clans: List[Dict[str, Any]], bot):
+        self.source_clan = source_clan
+        self.clans_map = {str(c["clan_id"]): c for c in other_clans}
+        self.bot = bot
+
+        options = [
+            discord.SelectOption(
+                label="📢 GỬI TỚI TẤT CẢ CÁC BĂNG TRONG SERVER",
+                value="ALL",
+                description="Phát thư thách đấu tới toàn bộ các băng khác!",
+                emoji="🔥"
+            )
+        ]
+        for c in other_clans[:24]:
+            options.append(
+                discord.SelectOption(
+                    label=f"[{c['tag']}] {c['name']} (Lv.{c.get('level', 1)})"[:100],
+                    value=str(c["clan_id"]),
+                    description=f"Gửi thư thách đấu tới băng {c['name']}"[:100],
+                    emoji="⚔️"
+                )
+            )
+
+        super().__init__(
+            placeholder="⚔️ Chọn Băng muốn thách đấu (hoặc chọn Tất cả)...",
+            options=options,
+            min_values=1,
+            max_values=1,
+            row=0
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        val = self.values[0]
+        target_clan = None if val == "ALL" else self.clans_map.get(val)
+        modal = ClanChallengeModal(source_clan=self.source_clan, target_clan=target_clan, bot=self.bot)
+        await interaction.response.send_modal(modal)
+
+
+class ClanChallengeTargetView(ui.View):
+    """Bảng chọn hình thức: Gửi Thư Thách Đấu (1 băng / Tất cả băng) hoặc Lập Kèo Nội Bộ"""
+    def __init__(self, source_clan: Dict[str, Any], other_clans: List[Dict[str, Any]], bot):
+        super().__init__(timeout=180)
+        self.source_clan = source_clan
+        self.bot = bot
+
+        if other_clans:
+            self.add_item(ClanChallengeTargetSelect(source_clan=source_clan, other_clans=other_clans, bot=bot))
+
+    @ui.button(label="Lập Kèo Nội Bộ Băng Mình", emoji="🎮", style=discord.ButtonStyle.primary, row=1)
+    async def internal_party_btn(self, interaction: discord.Interaction, button: ui.Button):
+        modal = ClanQuickPartyModal(clan=self.source_clan, bot=self.bot)
+        await interaction.response.send_modal(modal)
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=1)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 # =============================================================================
@@ -2484,13 +2773,30 @@ class ClanHubView(ui.View):
         modal = CreateClanModal(bot=self.bot)
         await interaction.response.send_modal(modal)
 
-    @ui.button(label="Tạo Kèo Game", emoji="🎮", style=discord.ButtonStyle.primary, row=3)
+    @ui.button(label="Thách Đấu / Tạo Kèo", emoji="⚔️", style=discord.ButtonStyle.primary, row=3)
     async def party_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
         if not self.clan:
             await auto_dismiss_notice(interaction, content="❌ Bạn chưa tham gia băng nào!", delay=5)
             return
-        modal = ClanQuickPartyModal(clan=self.clan, bot=self.bot)
-        await interaction.response.send_modal(modal)
+        await interaction.response.defer()
+        all_clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        other_clans = [c for c in all_clans if c["clan_id"] != self.clan["clan_id"]]
+        embed = discord.Embed(
+            title="⚔️ TRUNG TÂM THÁCH ĐẤU & LẬP KÈO BĂNG ĐẢNG",
+            description=(
+                "Chọn hình thức bạn muốn thực hiện bên dưới:\n\n"
+                "• **⚔️ Gửi Thư Thách Đấu:** Chọn 1 băng đối thủ (hoặc **Tất cả các băng**) từ menu thả xuống để nhập Tựa Game, Thể Thức và Nội Dung khiêu chiến!\n"
+                "• **🎮 Lập Kèo Nội Bộ:** Bấm nút bên dưới để rủ anh em cùng băng lập team chơi game."
+            ),
+            color=discord.Color.orange(),
+            timestamp=datetime.now()
+        )
+        view = ClanChallengeTargetView(source_clan=self.clan, other_clans=other_clans, bot=self.bot)
+        await interaction.edit_original_response(content=None, embed=embed, attachments=[], view=view)
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: ui.Item) -> None:
+        logger.error(f"Lỗi tương tác trên ClanHubView ({item}): {error}", exc_info=True)
+        await auto_dismiss_notice(interaction, content="❌ Đã xảy ra lỗi khi xử lý thao tác này! Vui lòng mở lại `/clan hub` hoặc thử lại sau.", delay=6)
 
     @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=3)
     async def close_hub_btn(self, interaction: discord.Interaction, button: ui.Button):

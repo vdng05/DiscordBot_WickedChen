@@ -93,15 +93,14 @@ Mở bảng điều khiển tương tác (dành cho Chủ Băng & Cán Bộ):
   - *🟡 Cần Duyệt (APPROVAL - Mặc định):* Gửi đơn vào kênh chat để cán bộ bấm nút duyệt.
   - *🔒 Chỉ Nhận Lời Mời (INVITE_ONLY):* Khóa nộp đơn ngoài, chỉ cán bộ mời mới vào được.
 
-### 5. Tạo Kèo Chơi Game LFG Nội Bộ: `/clan party`
-- Bất kỳ thành viên nào cũng có thể gõ `/clan party` để mở popup tạo kèo rủ anh em chơi game (Ví dụ: *Leo rank Valorant 5 stack, ARAM vui vẻ, Custom giải đấu...*).
-- Tin nhắn kèo sẽ xuất hiện trong kênh chat riêng của băng với các nút bấm trực quan:
-  - **`[⚔️ Tham Gia]`**: Vào danh sách Đội Hình Chính.
-  - **`[🛡️ Dự Bị]`**: Vào danh sách Dự Bị (dành cho slot sơ cua).
-  - **`[🚪 Rút Lui]`**: Rút lui khỏi kèo nếu bận việc đột xuất.
-  - **`[🔒 Chốt / Đóng Kèo]`**: Dành cho người tạo kèo hoặc Cán Bộ để chốt sổ và bot sẽ tự động tag các thành viên chính chuẩn bị vào trận.
-- **Tự động nhắc nhở:** Trước giờ thi đấu 10 phút, bot sẽ tự động gửi thông báo tag tên toàn thể anh em trong đội hình chính để sẵn sàng vào game!
-- **Thưởng Nhiệm Vụ Tuần:** Mỗi kèo hoàn thành sẽ đóng góp vào tiến độ nhiệm vụ tuần **`PARTY_COMPLETED`** của cả băng!
+### 5. Gửi Thư Thách Đấu Băng Đảng & Lập Kèo Game: `/clan party` (hoặc nút `⚔️ Thách Đấu / Tạo Kèo` trong `/clan hub`)
+- **⚔️ Gửi Thư Thách Đấu (Giao hữu giữa các băng):**
+  - Bấm **`[⚔️ Thách Đấu / Tạo Kèo]`** trong `/clan hub` (hoặc gõ `/clan party`) ➔ chọn **1 băng đối thủ cụ thể** hoặc chọn **📢 Gửi tới TẤT CẢ các băng trong server** từ menu thả xuống.
+  - Điền vào bảng popup: **Tựa Game Muốn Thách Đấu**, **Thể Thức & Quy Mô**, **Thời Gian Dự Kiến**, và **Nội Dung Thư Khiêu Chiến**.
+  - Bot sẽ gửi Thư Thách Đấu kèm tag `@Role Băng Đối Thủ` sang kênh chat của băng nhận, kèm nút **`[⚔️ Chấp Nhận Thách Đấu]`** và **`[🛡️ Từ Chối Lịch Sự]`** để hai bên phản hồi trực tiếp!
+- **🎮 Lập Kèo Nội Bộ Băng Mình (LFG):**
+  - Chọn nút **`[🎮 Lập Kèo Nội Bộ Băng Mình]`** để rủ anh em trong băng lập team leo rank/custom.
+  - Tin nhắn kèo có nút **`[⚔️ Tham Gia]`**, **`[🛡️ Dự Bị]`**, **`[🚪 Rút Lui]`**, **`[🔒 Chốt / Đóng Kèo]`** và bot tự động tag nhắc trước giờ thi đấu 10 phút!
 
 ### 5. Duyệt Đơn & Chào Đón Thành Viên Mới
 - Khi có thành viên nộp đơn, bot sẽ gửi thẻ thông báo vào kênh chat riêng của băng.

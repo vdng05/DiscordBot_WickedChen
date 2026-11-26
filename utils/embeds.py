@@ -414,7 +414,7 @@ def build_party_embed(title: str, creator_id: int, max_slots: int, scheduled_at:
     embed.set_thumbnail(url=game_thumbnail)
     embed.set_image(url=BoardAssets.PARTY_BANNER)
 
-    # Hiển thị từng slot chính trực quan
+    # Hiển thị từng slot chính trực quan (bảo vệ giới hạn 1024 ký tự của Discord Embed field)
     main_lines = []
     for i in range(max_slots):
         if i < len(main_users):
@@ -423,19 +423,74 @@ def build_party_embed(title: str, creator_id: int, max_slots: int, scheduled_at:
         else:
             main_lines.append(f"`[ Slot {i + 1:02d} ]` _(Slot trống — Bấm Tham Gia)_")
 
+    main_val = "\n".join(main_lines)
+    if len(main_val) > 1000:
+        trimmed = []
+        cur_len = 0
+        for line in main_lines:
+            if cur_len + len(line) + 1 > 940:
+                trimmed.append(f"... *và {len(main_lines) - len(trimmed)} slot khác*")
+                break
+            trimmed.append(line)
+            cur_len += len(line) + 1
+        main_val = "\n".join(trimmed)
+
     embed.add_field(
         name=f"🎯 Đội Hình Thi Đấu Chính ({len(main_users)}/{max_slots})",
-        value="\n".join(main_lines),
+        value=main_val or "_Chưa có ai_",
         inline=False
     )
 
     if reserve_users:
         reserve_lines = [f"`[ Dự Bị {i + 1:02d} ]` <@{uid}>" for i, uid in enumerate(reserve_users)]
-        embed.add_field(name=f"🛡️ Hàng Ghế Dự Bị ({len(reserve_users)})", value="\n".join(reserve_lines), inline=False)
+        res_val = "\n".join(reserve_lines)
+        if len(res_val) > 1000:
+            res_val = res_val[:980] + "\n..."
+        embed.add_field(name=f"🛡️ Hàng Ghế Dự Bị ({len(reserve_users)})", value=res_val, inline=False)
     else:
         embed.add_field(name="🛡️ Hàng Ghế Dự Bị", value="_Chưa có thành viên dự bị nào_", inline=False)
 
     embed.set_footer(text="Bot tự động ping nhắc nhở toàn đội trước giờ hẹn 10 phút!")
+    return embed
+
+
+def build_challenge_embed(
+    source_clan: Dict[str, Any],
+    sender_id: int,
+    game_title: str,
+    match_format: str,
+    match_time: str,
+    challenge_message: str,
+    target_clan: Optional[Dict[str, Any]] = None,
+    logo_filename: Optional[str] = None,
+    status: str = "PENDING"
+) -> discord.Embed:
+    """Tạo Embed Thư Thách Đấu giữa các Băng Đảng"""
+    target_label = f"Băng **[{target_clan['tag']}] {target_clan['name']}**" if target_clan else "**TOÀN THỂ CÁC BĂNG ĐẢNG TRONG SERVER**"
+    status_map = {
+        "PENDING": ("⏳ ĐANG CHỜ PHẢN HỒI", discord.Color.orange()),
+        "ACCEPTED": ("⚔️ ĐÃ CHẤP NHẬN THÁCH ĐẤU!", discord.Color.green()),
+        "DECLINED": ("🛡️ ĐÃ TỪ CHỐI LỊCH SỰ", discord.Color.red())
+    }
+    status_text, color = status_map.get(status, ("⏳ ĐANG CHỜ PHẢN HỒI", discord.Color.orange()))
+
+    embed = discord.Embed(
+        title=f"⚔️ THƯ THÁCH ĐẤU TỪ BĂNG [{source_clan['tag']}] {source_clan['name']}",
+        description=(
+            f"📩 **Gửi tới:** {target_label}\n"
+            f"👤 **Đại diện gửi thư:** <@{sender_id}>\n"
+            f"📌 **Trạng thái:** {status_text}"
+        ),
+        color=color,
+        timestamp=datetime.now()
+    )
+    embed.add_field(name="🎮 Tựa Game", value=f"**{game_title}**", inline=True)
+    embed.add_field(name="⚖️ Thể Thức & Quy Mô", value=match_format, inline=True)
+    embed.add_field(name="⏰ Thời Gian Dự Kiến", value=match_time or "Thỏa thuận sau", inline=True)
+    embed.add_field(name="📜 Nội Dung Thư Khiêu Chiến", value=f"*{challenge_message}*", inline=False)
+
+    _set_embed_media_url(embed.set_thumbnail, logo_filename, source_clan.get("logo_url"))
+    embed.set_footer(text="Hệ Thống Giao Hữu & Thách Đấu Băng Đảng")
     return embed
 
 
