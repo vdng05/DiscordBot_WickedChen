@@ -201,8 +201,34 @@ async def run_tests():
     assert ms_embed.title.startswith("📜 BIÊN NIÊN SỬ")
     print("✅ 15. Sinh Wallpaper Full HD (1920x1080) & Embed Cột Mốc Lịch Sử thành công.")
 
+    # 16. Kiểm tra các Views tương tác mới (ClanListInteractiveView, LeaderboardInteractiveView, LeaveClanConfirmView, ClanMemberManagementView)
+    import discord
+    from utils.ui_components import (
+        ClanListInteractiveView,
+        LeaderboardInteractiveView,
+        LeaveClanConfirmView,
+        ClanMemberManagementView
+    )
+    clans_list = [clan]
+    cl_view = ClanListInteractiveView(clans=clans_list, bot=bot)
+    assert len(cl_view.children) >= 2
+
+    lb_view = LeaderboardInteractiveView(guild_name="Test Server", bot=bot, initial_criteria="level")
+    assert len(lb_view.children) == 3
+
+    leave_view = LeaveClanConfirmView(clan=clan, bot=bot)
+    assert len(leave_view.children) == 2
+
+    class DummyUser:
+        id = 9999
+        guild_permissions = discord.Permissions.all()
+
+    mgmt_view = ClanMemberManagementView(clan=clan, user=DummyUser(), bot=bot)
+    assert len(mgmt_view.children) >= 4
+    print("✅ 16. Toàn bộ các View tương tác 1-Click (Danh sách băng, Bảng xếp hạng, Quản lý thành viên, Rời băng) sẵn sàng.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 15 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 16 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db

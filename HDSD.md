@@ -6,34 +6,41 @@
 
 ## ⚡ TRUNG TÂM ĐIỀU KHIỂN 1-CLICK: `/clan hub`
 👉 **Cách nhanh nhất để dùng bot:** Bạn chỉ cần gõ lệnh duy nhất `/clan hub`.
-Mọi tính năng quan trọng sẽ hiện ra ngay dưới dạng các **nút bấm thông minh**:
-- **Nếu chưa có băng:** Bấm nút xem danh sách băng mở tuyển, xem Bảng Xếp Hạng hoặc tự lập băng mới.
-- **Nếu đã có băng:** Bấm nút Điểm danh hằng ngày, Xem Nhiệm vụ tuần, Xem hồ sơ băng, Mở bảng quản lý, Cài đặt Role, Xem Cột mốc lịch sử, Xuất ảnh nền Full HD hoặc Trao danh hiệu... bằng 1 cú click!
+Mọi tính năng quan trọng đều được **model hóa 100% bằng nút bấm, menu thả xuống và popup (Modal)**:
+- **Nếu chưa có băng:**
+  - Bấm **`[📜 Xem Danh Sách Băng Mở Tuyển]`**: Menu thả xuống danh sách băng để chọn xem hồ sơ và bấm **`[📩 Nộp Đơn / Gia Nhập]`** chỉ với 1 click, không cần gõ lệnh.
+  - Bấm **`[✨ Thành Lập Băng Mới]`**: Mở form đăng ký băng mới.
+  - Bấm **`[🏆 Bảng Xếp Hạng Server]`**: Xem bảng vàng danh dự và chuyển đổi các tiêu chí (Cấp độ, Tuần, Sĩ số) bằng nút bấm.
+- **Nếu đã có băng:**
+  - **Hằng ngày:** Bấm **`[📅 Điểm Danh Hằng Ngày]`**, **`[🎯 Nhiệm Vụ Tuần]`**, **`[🏰 Hồ Sơ Băng Của Bạn]`**, hoặc **`[🚪 Rời Băng]`** (có xác nhận 2 lớp an toàn).
+  - **Vinh danh & Nghệ thuật:** Bấm **`[📜 Cột Mốc Lịch Sử]`**, **`[🖼️ Ảnh Nền Băng (Full HD)]`**, **`[📜 Nhật Ký Băng]`**.
+  - **Quản lý & Nhân sự (Cán Bộ / Chủ Băng):** Bấm **`[👥 Quản Lý Thành Viên]`** (Mời qua menu chọn người, Thăng chức, Giáng chức, Trục xuất, Chuyển quyền Chủ Băng), **`[🎖️ Trao Danh Hiệu]`**, **`[⚙️ Cài Đặt Băng]`**, **`[🛡️ Cài Đặt Role]`**.
 
 ---
 
 ## 👤 PHẦN 1: DÀNH CHO THÀNH VIÊN & NGƯỜI CHƠI (GAMERS)
 
-### 1. Cách Tìm Băng & Xin Gia Nhập
-- **Xem tất cả băng trong server:** Gõ `/clan list` để xem băng nào đang mở tuyển và còn slot trống.
-- **Xem chi tiết một băng:** Gõ `/clan info` (chọn tên băng từ danh sách tự động gợi ý). Dưới hồ sơ có sẵn nút **`[📩 Xin Gia Nhập]`**.
-- **Nộp đơn xin vào băng:** Gõ `/clan apply [tên_băng]`. Bot sẽ mở popup nhỏ để bạn gửi vài lời giới thiệu ngắn.
-- **Nếu được mời vào băng:** Khi Cán Bộ mời bạn bằng lệnh `/clan invite`, bạn chỉ việc bấm nút **`[✅ Chấp Nhận Lời Mời]`** màu xanh là vào ngay!
+### 1. Cách Tìm Băng & Xin Gia Nhập (1-Click)
+- **Xem danh sách & xin gia nhập ngay:** Bấm nút **`[📜 Xem Danh Sách Băng Mở Tuyển]`** trong `/clan hub` (hoặc gõ `/clan list`).
+  - Chọn băng bạn quan tâm từ Menu thả xuống.
+  - Bot sẽ hiện hồ sơ chi tiết cùng nút **`[📩 Nộp Đơn / Gia Nhập]`** và **`[👥 Xem Thành Viên]`** ngay dưới tin nhắn!
+- **Nếu được mời vào băng:** Khi Cán Bộ mời bạn, tin nhắn mời sẽ hiện ra kèm nút **`[✅ Chấp Nhận Lời Mời]`** màu xanh — bấm 1 cái là vào ngay!
 
 ### 2. Điểm Danh Nhận Thưởng Hằng Ngày
-- Gõ `/clan checkin` (hoặc bấm nút 📅 trong `/clan hub`).
+- Bấm nút **`[📅 Điểm Danh Hằng Ngày]`** trong `/clan hub` (hoặc gõ `/clan checkin`).
 - Mỗi ngày nhận ngay **+10 Điểm cống hiến cá nhân** và đóng góp **+30 EXP** cho băng.
 - **Chuỗi liên tiếp (Streak):** Điểm danh đều đặn 7 ngày liên tiếp được thưởng thêm **+50 EXP**! *(Reset lúc 00:00 hằng ngày theo giờ Việt Nam)*.
 
 ### 3. Cày Nhiệm Vụ Tuần Đồng Đội (Weekly Quests)
-- Gõ `/clan quests` để theo dõi 3 nhiệm vụ tuần của cả băng:
+- Bấm nút **`[🎯 Nhiệm Vụ Tuần]`** trong `/clan hub` (hoặc gõ `/clan quests`) để theo dõi:
   1. **📅 Điểm Danh Đồng Đội:** Đạt đủ tổng số 35 lượt check-in của cả băng trong tuần (+350 EXP).
   2. **🎙️ Voice Co-op Chơi Game:** Cùng ngồi kênh Voice buôn chuyện / nghe nhạc / treo máy cùng nhau từ 2 người trở lên (+500 EXP khi đạt 300 phút). Mute hay deafen nghe nhạc vẫn tính điểm bình thường!
   3. **💬 Sôi Nổi Kênh Chat:** Tương tác, trò chuyện trong kênh chat riêng của băng (+300 EXP khi đạt 100 tin nhắn).
 - Hoàn thành mỗi nhiệm vụ thưởng thẳng từ **+300 đến +500 EXP** cho băng *(Tự động làm mới vào 00:00 Thứ Hai hằng tuần)*.
 
 ### 4. Rời Băng & Thời Gian Chờ (Cooldown)
-- Nếu muốn rời băng hiện tại, gõ `/clan leave`.
+- Bấm nút **`[🚪 Rời Băng]`** màu đỏ trong `/clan hub` (hoặc gõ `/clan leave`).
+- Bot sẽ mở hộp thoại xác nhận 2 lớp để tránh bấm nhầm.
 - ⚠️ **Lưu ý chống nhảy băng:** Sau khi rời băng (hoặc bị trục xuất), bạn cần chờ **24 giờ** mới có thể tạo băng mới hoặc nộp đơn vào băng khác.
 
 ---
@@ -79,15 +86,15 @@ Mở bảng điều khiển tương tác (dành cho Chủ Băng & Cán Bộ):
 - Cán bộ chỉ cần bấm nút **`[✅ Duyệt Đơn]`** hoặc **`[❌ Từ Chối]`** ngay trên tin nhắn.
 - Sau khi duyệt thành công, bot sẽ gửi tin nhắn chào mừng kèm nút **`[🎉 Chào Mừng! 👋]`** để anh em trong băng bấm vào gửi lời chào đón đồng đội mới!
 
-### 6. Bổ Nhiệm & Quản Lý Nhân Sự
-- **Mời thành viên:** `/clan invite @user` (người được mời có 15 phút để phản hồi).
-- **Thăng chức / Giáng chức:**
-  - `/clan promote @user`: Nâng bậc từ Thành viên lên Cán Bộ hoặc Phó Băng.
-  - `/clan demote @user`: Hạ bậc nhân sự.
-  - *Quy định:* Tối đa 2 Phó Băng và 4 Cán Bộ.
-- **Trục xuất thành viên vi phạm:** `/clan kick @user [lý do]`.
-- **Chuyển giao quyền Chủ Băng:** `/clan transfer @user` (Chủ cũ tự động chuyển thành Phó Băng).
-- **Giải tán băng:** `/clan disband` (Yêu cầu gõ chính xác tên băng để xác nhận an toàn 2 lớp).
+### 6. Bổ Nhiệm & Quản Lý Nhân Sự (Nút `[👥 Quản Lý Thành Viên]` Trong `/clan hub`)
+Bạn không cần phải nhớ các câu lệnh slash command phức tạp, chỉ cần bấm **`[👥 Quản Lý Thành Viên]`** trong `/clan hub`:
+- **➕ Mời thành viên mới:** Menu chọn người dùng Discord (User Picker) trực quan, chọn ai là gửi ngay lời mời có nút xác nhận (hạn 15 phút).
+- **⬆️ Thăng chức:** Bấm nút $\rightarrow$ Chọn thành viên từ menu thả xuống để thăng lên Cán Bộ hoặc Phó Băng.
+- **⬇️ Giáng chức:** Bấm nút $\rightarrow$ Chọn cán bộ để hạ bậc chức vụ. *(Tối đa 2 Phó Băng và 4 Cán Bộ)*.
+- **👢 Trục xuất:** Bấm nút $\rightarrow$ Chọn thành viên vi phạm $\rightarrow$ Nhập lý do trong popup để trục xuất và áp dụng cooldown 24h.
+- **👑 Chuyển giao Chủ Băng:** Chỉ dành cho Chủ Băng, chọn người kế vị từ menu thả xuống và xác nhận an toàn 2 lớp.
+- **💥 Giải Tán Băng:** Nút Giải Tán Băng (yêu cầu gõ chính xác tên băng trong Modal để xác nhận an toàn, tránh bấm nhầm).
+*(Ngoài ra, bạn vẫn có thể dùng các lệnh `/clan invite`, `/clan promote`, `/clan demote`, `/clan kick`, `/clan transfer`, `/clan disband` nếu thích gõ lệnh)*.
 
 ### 7. Trao Danh Hiệu & Biệt Danh Nội Bộ: Nút `[🎖️ Trao Danh Hiệu]` trong `/clan hub`
 - Cán Bộ, Phó Băng và Chủ Băng có thể trao tặng các danh hiệu/biệt danh độc đáo cho thành viên (Ví dụ: `Gánh Team 👑`, `Cú Đêm 🌙`, `Chúa Hề 🤡`, `Trùm Nấu Lẩu 🍲`...).

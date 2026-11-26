@@ -727,7 +727,9 @@ class ClanCommands(commands.Cog):
         await interaction.response.defer()
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         embed = build_clan_list_embed(interaction.guild.name, clans)
-        await interaction.followup.send(embed=embed)
+        from utils.ui_components import ClanListInteractiveView
+        view = ClanListInteractiveView(clans=clans, bot=self.bot)
+        await interaction.followup.send(embed=embed, view=view)
 
     @clan_group.command(name="leaderboard", description="Bảng vinh danh các băng đảng xuất sắc nhất server")
     @app_commands.describe(tieu_chi="Tiêu chí xếp hạng")
@@ -747,7 +749,9 @@ class ClanCommands(commands.Cog):
         embed = build_leaderboard_embed(interaction.guild.name, clans, criteria=tieu_chi, attachment_filename="leaderboard.png")
         if interaction.guild.icon:
             embed.set_thumbnail(url=interaction.guild.icon.url)
-        await interaction.followup.send(embed=embed, file=file)
+        from utils.ui_components import LeaderboardInteractiveView
+        view = LeaderboardInteractiveView(guild_name=interaction.guild.name, bot=self.bot, initial_criteria=tieu_chi)
+        await interaction.followup.send(embed=embed, file=file, view=view)
 
     @clan_group.command(name="logs", description="Xem nhật ký hoạt động gần đây của băng (Cán Bộ trở lên)")
     @app_commands.describe(trang="Số trang cần xem (Mặc định: 1)")
