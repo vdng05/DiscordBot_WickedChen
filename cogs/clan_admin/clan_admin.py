@@ -9,7 +9,8 @@ from discord.ext import commands
 from typing import Optional
 from datetime import datetime
 from utils.logger import setup_logging
-from utils.ui_components import ForceDeleteConfirmView
+from utils.ui_components import ForceDeleteConfirmView, BotAccessControlView
+from utils.embeds import build_bot_access_embed
 
 logger = setup_logging("ClanAdmin")
 
@@ -250,6 +251,22 @@ class ClanAdmin(commands.Cog):
             embed.add_field(name="Chi Tiết Xử Lý", value="\n".join(issues[:10]), inline=False)
 
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="bot-access", description="Chọn Role được phép dùng bot, Bật tất cả hoặc Tắt tất cả (Chỉ Chủ Bot)")
+    async def owner_bot_access(self, interaction: discord.Interaction):
+        is_owner = await self.bot.is_bot_owner(interaction.user) if hasattr(self.bot, "is_bot_owner") else await self.bot.is_owner(interaction.user)
+        if not is_owner:
+            await interaction.response.send_message("🔒 Lệnh này chỉ dành riêng cho **Chủ Bot (Bot Owner)**!", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        if hasattr(self.bot, "register_user_panel"):
+            await self.bot.register_user_panel(interaction.user.id, interaction)
+
+        cfg = await self.bot.db.get_bot_access_config(interaction.guild_id)
+        embed = build_bot_access_embed(interaction.guild.name, cfg["mode"], cfg["role_ids"])
+        view = BotAccessControlView(guild_name=interaction.guild.name, mode=cfg["mode"], role_ids=cfg["role_ids"], bot=self.bot)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

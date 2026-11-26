@@ -409,8 +409,28 @@ async def run_tests():
             assert len(item.label) <= 45
     print("✅ 23. Nhật ký băng, Thư Thách Đấu (gồm chế độ 1 băng duy nhất), giới hạn 45 ký tự Modal & SafeView hoạt động 100%.")
 
+    # 24. Kiểm tra Phân Quyền Sử Dụng Bot Theo Role Dành Cho Chủ Bot (/bot-access)
+    default_acc = await db.get_bot_access_config(123456789)
+    assert default_acc["mode"] == "ALL" and default_acc["role_ids"] == []
+
+    await db.set_bot_access_config(123456789, mode="ROLES", role_ids=["555111", "555222"])
+    roles_acc = await db.get_bot_access_config(123456789)
+    assert roles_acc["mode"] == "ROLES" and roles_acc["role_ids"] == ["555111", "555222"]
+
+    await db.set_bot_access_config(123456789, mode="NONE", role_ids=["555111", "555222"])
+    none_acc = await db.get_bot_access_config(123456789)
+    assert none_acc["mode"] == "NONE"
+
+    from utils.embeds import build_bot_access_embed
+    from utils.ui_components import BotAccessControlView
+    ba_embed = build_bot_access_embed("Test Server", "ROLES", ["555111"])
+    assert "PHÂN QUYỀN SỬ DỤNG BOT" in ba_embed.title
+    ba_view = BotAccessControlView("Test Server", "ROLES", ["555111"], bot=bot)
+    assert len(ba_view.children) == 4
+    print("✅ 24. Phân quyền Role sử dụng bot dành cho Chủ Bot (ALL / ROLES / NONE) hoạt động chuẩn xác 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 23 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 24 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db

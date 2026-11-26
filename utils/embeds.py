@@ -494,6 +494,32 @@ def build_challenge_embed(
     return embed
 
 
+def build_bot_access_embed(guild_name: str, mode: str, role_ids: List[str]) -> discord.Embed:
+    """Tạo Embed Bảng Điều Khiển Phân Quyền Sử Dụng Bot (Dành cho Chủ Bot)."""
+    mode_labels = {
+        "ALL": ("🟢 BẬT TẤT CẢ (Mặc định)", discord.Color.green(), "Tất cả thành viên trong máy chủ đều có thể sử dụng bot."),
+        "ROLES": ("🎯 CHỈ NHỮNG ROLE ĐƯỢC CHỌN", discord.Color.blurple(), "Chỉ thành viên sở hữu ít nhất 1 trong các Role bên dưới mới có thể sử dụng bot."),
+        "NONE": ("🔴 ĐANG TẮT TẤT CẢ", discord.Color.red(), "Bot đang tạm khóa toàn bộ người dùng (chỉ Chủ Bot có thể thao tác).")
+    }
+    mode_title, color, mode_desc = mode_labels.get(mode, mode_labels["ALL"])
+
+    role_text = ", ".join(f"<@&{rid}>" for rid in role_ids) if role_ids else "_Chưa chọn Role cụ thể nào_"
+
+    embed = discord.Embed(
+        title=f"🔐 PHÂN QUYỀN SỬ DỤNG BOT — {guild_name}",
+        description=(
+            f"**Chế độ hiện tại:** {mode_title}\n"
+            f"{mode_desc}\n\n"
+            f"🎭 **Danh sách Role được phép:**\n{role_text}\n\n"
+            "👉 *Dùng menu bên dưới để chọn các Role được phép dùng bot, hoặc bấm **[🟢 Bật Tất Cả]** / **[🔴 Tắt Tất Cả]**.*"
+        ),
+        color=color,
+        timestamp=datetime.now()
+    )
+    embed.set_footer(text="Chủ Bot (Bot Owner) luôn có quyền truy cập kể cả khi tắt tất cả.")
+    return embed
+
+
 def build_role_setup_embed(clan: Dict[str, Any], role: Optional[discord.Role], attachment_filename: Optional[str] = None, logo_filename: Optional[str] = None) -> discord.Embed:
     """Tạo Embed giao diện cài đặt & tùy biến Role Băng Đảng cho Chủ Băng kèm đồ họa"""
     if role:

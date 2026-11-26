@@ -26,6 +26,10 @@ async def global_app_command_error(interaction: discord.Interaction, error: app_
         msg = f"❌ Bot thiếu các quyền Discord sau để thực hiện lệnh: {missing}"
     elif isinstance(error, app_commands.CommandOnCooldown):
         msg = f"⏳ Lệnh đang trong thời gian chờ! Vui lòng thử lại sau `{error.retry_after:.1f}` giây."
+    elif isinstance(error, app_commands.CheckFailure):
+        if interaction.response.is_done():
+            return
+        msg = "🔒 Bạn không có quyền sử dụng tính năng này!"
     else:
         logger.error(f"Lỗi không xác định khi thực thi lệnh /{interaction.command.name if interaction.command else 'unknown'}: {error}", exc_info=True)
         msg = f"❌ Đã xảy ra lỗi nội bộ khi xử lý: `{type(error).__name__}`. Vui lòng liên hệ Admin!"

@@ -4,6 +4,7 @@ Async SQLite Database Manager using aiosqlite with WAL mode
 
 import aiosqlite
 from contextlib import asynccontextmanager
+import json
 from pathlib import Path
 import time
 from typing import Optional, Dict, List, Any
@@ -176,6 +177,14 @@ class DatabaseManager:
                 FOREIGN KEY (clan_id) REFERENCES clans(clan_id) ON DELETE CASCADE
             );
 
+            -- 8. Phân quyền Role sử dụng Bot (Dành cho Chủ Bot)
+            CREATE TABLE IF NOT EXISTS bot_access_configs (
+                guild_id TEXT PRIMARY KEY,
+                access_mode TEXT NOT NULL DEFAULT 'ALL' CHECK (access_mode IN ('ALL', 'ROLES', 'NONE')),
+                allowed_role_ids TEXT NOT NULL DEFAULT '[]',
+                updated_at INTEGER NOT NULL
+            );
+
             -- Các chỉ mục tối ưu hiệu năng
             CREATE INDEX IF NOT EXISTS idx_clan_members_clan ON clan_members(clan_id);
             CREATE INDEX IF NOT EXISTS idx_clan_logs_clan_time ON clan_logs(clan_id, created_at DESC);
@@ -275,6 +284,37 @@ class DatabaseManager:
                 cooldown_hours,
                 now
             ))
+            await db.commit()
+
+    async def get_bot_access_config(self, guild_id: int) -> Dict[str, Any]:
+        """Lấy cấu hình Role được phép sử dụng bot trong server (mặc định: ALL)."""
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM bot_access_configs WHERE guild_id = ?", (str(guild_id),)) as cursor:
+                row = await cursor.fetchone()
+                if not row:
+                    return {"mode": "ALL", "role_ids": []}
+                try:
+                    role_ids = json.loads(row["allowed_role_ids"] or "[]")
+                except Exception:
+                    role_ids = []
+                return {"mode": row["access_mode"], "role_ids": [str(r) for r in role_ids]}
+
+    async def set_bot_access_config(self, guild_id: int, mode: str, role_ids: Optional[List[str]] = None) -> None:
+        """Cập nhật cấu hình phân quyền sử dụng bot (ALL, ROLES, NONE)."""
+        now = int(time.time())
+        clean_mode = mode if mode in ("ALL", "ROLES", "NONE") else "ALL"
+        serialized_roles = json.dumps([str(r) for r in (role_ids or [])])
+        sql = """
+        INSERT INTO bot_access_configs (guild_id, access_mode, allowed_role_ids, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            access_mode = excluded.access_mode,
+            allowed_role_ids = excluded.allowed_role_ids,
+            updated_at = excluded.updated_at
+        """
+        async with self.connect() as db:
+            await db.execute(sql, (str(guild_id), clean_mode, serialized_roles, now))
             await db.commit()
 
     # =========================================================================

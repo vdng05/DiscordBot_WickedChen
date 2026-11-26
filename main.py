@@ -58,6 +58,60 @@ class ClanBot(commands.Bot):
         # Tự động dismiss / xóa bảng cũ khi người dùng mở hoặc sử dụng tính năng khác
         self.active_user_panels: dict[int, discord.Interaction] = {}
 
+        # Cache phân quyền Role sử dụng bot theo server: guild_id -> (mode, set_of_role_ids)
+        self.bot_access_cache: dict[int, tuple[str, set[str]]] = {}
+
+    async def is_bot_owner(self, user: discord.abc.User) -> bool:
+        """Kiểm tra người dùng có phải là Chủ Bot (OWNER_IDS hoặc Discord App Owner) không."""
+        if user.id in Config.OWNER_IDS:
+            return True
+        try:
+            return await self.is_owner(user)
+        except Exception:
+            return False
+
+    def update_bot_access_cache(self, guild_id: int, mode: str, role_ids: list[str]) -> None:
+        self.bot_access_cache[guild_id] = (mode, {str(r) for r in role_ids})
+
+    async def check_user_bot_access(self, interaction: discord.Interaction) -> bool:
+        """Kiểm tra người dùng có được phép sử dụng bot theo cấu hình của Chủ Bot không."""
+        if not interaction.guild_id:
+            return True
+        if await self.is_bot_owner(interaction.user):
+            return True
+
+        cached = self.bot_access_cache.get(interaction.guild_id)
+        if cached is None:
+            cfg = await self.db.get_bot_access_config(interaction.guild_id)
+            cached = (cfg["mode"], set(cfg["role_ids"]))
+            self.bot_access_cache[interaction.guild_id] = cached
+
+        mode, allowed_ids = cached
+        if mode == "ALL":
+            return True
+
+        from utils.text_helper import auto_dismiss_notice
+        if mode == "NONE":
+            await auto_dismiss_notice(
+                interaction,
+                content="🔒 **Bot hiện đang tạm khóa sử dụng** trên máy chủ này bởi Chủ Bot!",
+                delay=5
+            )
+            return False
+
+        if mode == "ROLES":
+            user_role_ids = {str(r.id) for r in getattr(interaction.user, "roles", [])}
+            if user_role_ids & allowed_ids:
+                return True
+            await auto_dismiss_notice(
+                interaction,
+                content="🔒 **Bạn không có Role được phép sử dụng bot!** Vui lòng liên hệ Chủ Bot để được cấp quyền.",
+                delay=5
+            )
+            return False
+
+        return True
+
     async def register_user_panel(self, user_id: int, interaction: discord.Interaction):
         """Đăng ký panel mới và tự động dismiss panel cũ của user nếu có để tránh đầy chat"""
         old_interaction = self.active_user_panels.get(user_id)
@@ -82,8 +136,9 @@ class ClanBot(commands.Bot):
         # 1. Khởi tạo cơ sở dữ liệu SQLite WAL mode
         await self.db.initialize()
 
-        # 2. Gắn bộ xử lý lỗi tập trung cho toàn bộ Slash Commands
+        # 2. Gắn bộ xử lý lỗi tập trung và kiểm tra phân quyền Chủ Bot cho toàn bộ Slash Commands
         self.tree.on_error = global_app_command_error
+        self.tree.interaction_check = self.check_user_bot_access
 
         # 3. Quét và nạp tất cả cogs
         logger.info("Đang tự động nạp các module Cogs...")

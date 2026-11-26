@@ -159,6 +159,12 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 ### 4. Xóa Bắt Buộc Khi Băng Vi Phạm: `/clan-admin force-delete`
 - Gõ `/clan-admin force-delete [tên_băng] [lý_do]`: Bot sẽ hiện nút xác nhận 2 lớp, sau đó xóa sạch Role, Kênh và dữ liệu của băng vi phạm, đồng thời lưu nhật ký xử lý vào kênh Log server.
 
+### 5. Phân Quyền Sử Dụng Bot Theo Role (Dành Riêng Cho Chủ Bot): `/bot-access`
+- Gõ `/bot-access` để mở bảng điều khiển phân quyền theo từng máy chủ:
+  - **🟢 Bật Tất Cả (Mặc định):** Mọi thành viên trong server đều có thể sử dụng bot.
+  - **🎯 Chọn Role Cụ Thể:** Chọn 1 hoặc nhiều Role từ menu thả xuống — chỉ người có Role đó mới dùng được bot.
+  - **🔴 Tắt Tất Cả:** Tạm khóa sử dụng bot với toàn bộ thành viên (riêng Chủ Bot luôn có quyền thao tác để bật lại bất cứ lúc nào).
+
 ---
 
 ## 📈 PHẦN 4: BẢNG CẤP ĐỘ BĂNG & CÁCH KIẾM EXP

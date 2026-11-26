@@ -28,6 +28,7 @@ from utils.embeds import (
     build_challenge_embed,
     build_role_setup_embed,
     build_image_settings_embed,
+    build_bot_access_embed,
     get_level_info,
     parse_hex_color,
     send_dm_notification
@@ -46,7 +47,12 @@ logger = setup_logging("UIComponents")
 
 
 class SafeView(ui.View):
-    """Base View tự động bắt mọi lỗi ngoại lệ để không bao giờ bị treo 'did not respond in time'."""
+    """Base View tự động kiểm tra quyền dùng bot và bắt mọi lỗi ngoại lệ để không bao giờ bị treo."""
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if hasattr(interaction.client, "check_user_bot_access"):
+            return await interaction.client.check_user_bot_access(interaction)
+        return True
+
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: ui.Item) -> None:
         logger.error(f"Lỗi tương tác trên {self.__class__.__name__} ({item}): {error}", exc_info=True)
         await auto_dismiss_notice(
@@ -4224,3 +4230,83 @@ class ForceDeleteConfirmView(SafeView):
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(content="❌ Đã hủy lệnh xóa bắt buộc.", view=self)
+
+
+# =============================================================================
+# PHÂN QUYỀN ROLE SỬ DỤNG BOT (DÀNH CHO CHỦ BOT - BOT OWNER)
+# =============================================================================
+
+class BotAccessRoleSelect(ui.RoleSelect):
+    """Menu chọn nhiều Role được phép sử dụng bot trong server."""
+    def __init__(self):
+        super().__init__(
+            placeholder="🎯 Chọn các Role được phép dùng bot (tự bật chế độ Role)...",
+            min_values=1,
+            max_values=25,
+            row=0
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        view: "BotAccessControlView" = self.view
+        valid_roles = [r for r in self.values if not r.is_default() and not r.managed]
+        if not valid_roles:
+            await auto_dismiss_notice(interaction, content="❌ Vui lòng chọn ít nhất 1 Role hợp lệ (không chọn `@everyone` hoặc Role của Bot)!", delay=5)
+            return
+
+        role_ids = [str(r.id) for r in valid_roles]
+        await view.bot.db.set_bot_access_config(interaction.guild_id, mode="ROLES", role_ids=role_ids)
+        if hasattr(view.bot, "update_bot_access_cache"):
+            view.bot.update_bot_access_cache(interaction.guild_id, "ROLES", role_ids)
+        view.mode = "ROLES"
+        view.role_ids = role_ids
+
+        embed = build_bot_access_embed(interaction.guild.name, view.mode, view.role_ids)
+        await interaction.edit_original_response(embed=embed, view=view)
+        await auto_dismiss_notice(interaction, content=f"🎯 Đã cập nhật **{len(role_ids)} Role** được phép sử dụng bot!", delay=5)
+
+
+class BotAccessControlView(SafeView):
+    """Bảng điều khiển Phân Quyền Sử Dụng Bot dành riêng cho Chủ Bot."""
+    def __init__(self, guild_name: str, mode: str, role_ids: List[str], bot):
+        super().__init__(timeout=600)
+        self.guild_name = guild_name
+        self.mode = mode
+        self.role_ids = role_ids
+        self.bot = bot
+        self.add_item(BotAccessRoleSelect())
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if hasattr(self.bot, "is_bot_owner") and await self.bot.is_bot_owner(interaction.user):
+            return True
+        await auto_dismiss_notice(interaction, content="🔒 Chỉ **Chủ Bot (Bot Owner)** mới có quyền thay đổi cài đặt này!", delay=5)
+        return False
+
+    async def _set_mode(self, interaction: discord.Interaction, new_mode: str, notice_text: str):
+        await interaction.response.defer()
+        await self.bot.db.set_bot_access_config(interaction.guild_id, mode=new_mode, role_ids=self.role_ids)
+        if hasattr(self.bot, "update_bot_access_cache"):
+            self.bot.update_bot_access_cache(interaction.guild_id, new_mode, self.role_ids)
+        self.mode = new_mode
+        embed = build_bot_access_embed(self.guild_name, self.mode, self.role_ids)
+        await interaction.edit_original_response(embed=embed, view=self)
+        await auto_dismiss_notice(interaction, content=notice_text, delay=5)
+
+    @ui.button(label="Bật Tất Cả (Mặc Định)", emoji="🟢", style=discord.ButtonStyle.success, row=1)
+    async def enable_all_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await self._set_mode(interaction, "ALL", "🟢 Đã **BẬT TẤT CẢ** — Mọi thành viên trong server đều có thể sử dụng bot!")
+
+    @ui.button(label="Tắt Tất Cả", emoji="🔴", style=discord.ButtonStyle.danger, row=1)
+    async def disable_all_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await self._set_mode(interaction, "NONE", "🔴 Đã **TẮT TẤT CẢ** — Chỉ Chủ Bot mới có thể sử dụng bot trên máy chủ này!")
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
