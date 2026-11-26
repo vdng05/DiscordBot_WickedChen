@@ -115,22 +115,21 @@ class CreateClanModal(SafeModal, title="🏰 Thành Lập Băng Đảng Mới"):
         config = await self.bot.db.get_guild_config(guild.id)
         is_admin = interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_guild
 
-        # TỰ ĐỘNG KHỞI TẠO ĐỘNG: Nếu server chưa setup, Admin tạo băng thì bot tự tạo Category & Log channel luôn!
+        # TỰ ĐỘNG KHỞI TẠO ĐỘNG: Nếu server chưa setup, Admin tạo băng thì bot tự tạo duy nhất 1 Category BĂNG ĐẢNG
         if not config:
             if is_admin:
                 try:
                     category = await guild.create_category("🏰 BĂNG ĐẢNG", reason="Tự động khởi tạo hệ thống Băng Đảng")
-                    log_ch = await guild.create_text_channel("📜・nhat-ky-bang", category=category, reason="Tự động tạo kênh log băng")
                     await self.bot.db.save_guild_config(
                         guild_id=guild.id,
                         category_id=category.id,
-                        log_channel_id=log_ch.id,
+                        log_channel_id=None,
                         allow_member_create=True,
                         required_role_id=None,
                         cooldown_hours=24
                     )
                     config = await self.bot.db.get_guild_config(guild.id)
-                    logger.info(f"Đã tự động khởi tạo Category & Kênh Log cho server {guild.name} ({guild.id})")
+                    logger.info(f"Đã tự động khởi tạo Category BĂNG ĐẢNG cho server {guild.name} ({guild.id})")
                 except Exception as auto_err:
                     await interaction.followup.send(f"❌ Không thể tự động tạo Category: `{auto_err}`. Vui lòng kiểm tra quyền của Bot!", ephemeral=True)
                     return
@@ -197,66 +196,78 @@ class CreateClanModal(SafeModal, title="🏰 Thành Lập Băng Đảng Mới"):
                 reason=f"Tạo băng mới bởi {user.name}"
             )
 
-            # 2. Tạo Kênh Text & Voice trong Category (Tự phục hồi nếu category bị xóa & tự mở rộng Category nếu đầy 50 kênh)
-            category = guild.get_channel(int(config["clan_category_id"]))
+            # 2. Sử dụng duy nhất 1 Category BĂNG ĐẢNG (Tự tạo nếu chưa có)
+            category = guild.get_channel(int(config["clan_category_id"])) if config.get("clan_category_id") else None
             if not category:
                 try:
-                    category = await guild.create_category("🏰 BĂNG ĐẢNG", reason="Tự phục hồi Category bị thiếu")
+                    category = await guild.create_category("🏰 BĂNG ĐẢNG", reason="Tự phục hồi Category BĂNG ĐẢNG")
                     await self.bot.db.save_guild_config(
                         guild_id=guild.id,
                         category_id=category.id,
                         log_channel_id=config.get("log_channel_id"),
                         allow_member_create=bool(config.get("allow_member_create", 1)),
                         required_role_id=config.get("required_role_id"),
-                        cooldown_hours=int(config.get("leave_cooldown_hours", 24))
+                        cooldown_hours=int(config.get("leave_cooldown_hours", 0))
                     )
                 except Exception:
                     category = None
-            elif len(category.channels) >= 48:
-                # Category hiện tại đã gần đầy 50 kênh -> Tự động tìm hoặc tạo Category mở rộng (Part II, III...)
-                overflow_cat = None
-                for cat in guild.categories:
-                    if "BĂNG ĐẢNG" in cat.name.upper() and len(cat.channels) < 48:
-                        overflow_cat = cat
-                        break
-                if not overflow_cat:
-                    num_cats = sum(1 for c in guild.categories if "BĂNG ĐẢNG" in c.name.upper()) + 1
-                    roman_map = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"]
-                    sub_title = roman_map[num_cats - 1] if num_cats <= len(roman_map) else str(num_cats)
-                    try:
-                        overflow_cat = await guild.create_category(f"🏰 BĂNG ĐẢNG {sub_title}", reason="Tự động mở rộng Category khi đạt giới hạn 50 kênh")
-                    except Exception:
-                        overflow_cat = category
-                category = overflow_cat
 
             from utils.text_helper import to_channel_slug
             clean_channel_slug = to_channel_slug(name)[:30]
             text_channel_name = f"💬・{clean_channel_slug}"
+            log_channel_name = f"📜・nhat-ky-{clean_channel_slug}"[:35]
             voice_channel_name = f"🔊・[{tag}] Phòng Sinh Hoạt"
 
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False, send_messages=False),
+            # Kênh chat của băng: chỉ thành viên băng mới nhìn thấy & nhắn tin
+            text_overwrites = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
                 clan_role: discord.PermissionOverwrite(
                     view_channel=True, send_messages=True, embed_links=True, attach_files=True,
-                    read_message_history=True, connect=True, speak=True, use_voice_activation=True
+                    read_message_history=True
                 ),
                 me: discord.PermissionOverwrite(
                     view_channel=True, send_messages=True, manage_messages=True, manage_channels=True,
-                    manage_roles=True, connect=True, move_members=True
+                    manage_roles=True, read_message_history=True
                 )
+            }
+
+            # Kênh nhật ký của băng: chỉ thành viên băng mới nhìn thấy (chỉ đọc, bot ghi log)
+            log_overwrites = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
+                clan_role: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=False, read_message_history=True
+                ),
+                me: discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, embed_links=True, attach_files=True,
+                    read_message_history=True, manage_channels=True
+                )
+            }
+
+            # Kênh voice của băng: PUBLIC cho toàn thể thành viên server
+            voice_overwrites = {
+                guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True, use_voice_activation=True),
+                clan_role: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True, use_voice_activation=True),
+                me: discord.PermissionOverwrite(view_channel=True, connect=True, move_members=True, manage_channels=True)
             }
 
             text_channel = await guild.create_text_channel(
                 name=text_channel_name,
                 category=category,
                 topic=f"Kênh sinh hoạt chính thức của Băng [{tag}] {name} | Khẩu hiệu: {slogan}",
-                overwrites=overwrites
+                overwrites=text_overwrites
+            )
+
+            log_channel = await guild.create_text_channel(
+                name=log_channel_name,
+                category=category,
+                topic=f"Nhật ký hoạt động nội bộ của Băng [{tag}] {name}",
+                overwrites=log_overwrites
             )
 
             voice_channel = await guild.create_voice_channel(
                 name=voice_channel_name,
                 category=category,
-                overwrites=overwrites
+                overwrites=voice_overwrites
             )
 
             # 3. Gán Role cho người tạo
@@ -272,7 +283,8 @@ class CreateClanModal(SafeModal, title="🏰 Thành Lập Băng Đảng Mới"):
                 text_channel_id=text_channel.id,
                 voice_channel_id=voice_channel.id,
                 leader_id=user.id,
-                color_hex="#5865F2"
+                color_hex="#5865F2",
+                log_channel_id=log_channel.id
             )
 
             await self.bot.db.add_member(
@@ -875,7 +887,7 @@ class DisbandClanModal(SafeModal):
         await self.bot.db.delete_clan(clan_id)
 
         # 2. Xóa các kênh
-        for ch_key in ("text_channel_id", "voice_channel_id", "extra_voice_channel_id"):
+        for ch_key in ("text_channel_id", "log_channel_id", "voice_channel_id", "extra_voice_channel_id"):
             ch_id = self.clan.get(ch_key)
             if ch_id:
                 ch = guild.get_channel(int(ch_id))
@@ -3395,9 +3407,9 @@ class ClanImageUploadDashboardView(SafeView):
                 pass
             return
 
-        # Xóa tin nhắn tải ảnh của user trong kênh để giữ sạch phòng chat
+        # Không tự ý xóa tin nhắn của user trong Discord; chỉ thả reaction xác nhận đã nhận ảnh
         try:
-            await msg.delete()
+            await msg.add_reaction("✅")
         except Exception:
             pass
 
@@ -3884,11 +3896,9 @@ class ClanRoleSetupView(SafeView):
         att = msg.attachments[0]
         try:
             img_bytes = await att.read()
-        finally:
-            try:
-                await msg.delete()
-            except Exception:
-                pass
+            await msg.add_reaction("✅")
+        except Exception:
+            img_bytes = await att.read()
 
         try:
             await role.edit(display_icon=img_bytes, reason=f"Chủ Băng tải Icon Role: {interaction.user.name}")
@@ -4170,7 +4180,7 @@ class ForceDeleteConfirmView(SafeView):
         await self.bot.db.delete_clan(clan["clan_id"])
 
         # 2. Xóa các kênh
-        for ch_key in ("text_channel_id", "voice_channel_id", "extra_voice_channel_id"):
+        for ch_key in ("text_channel_id", "log_channel_id", "voice_channel_id", "extra_voice_channel_id"):
             ch_id = clan.get(ch_key)
             if ch_id:
                 ch = guild.get_channel(int(ch_id))

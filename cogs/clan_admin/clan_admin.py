@@ -154,19 +154,20 @@ class ClanAdmin(commands.Cog):
                 except Exception as e:
                     issues.append(f"Không thể tạo lại Role cho băng **{c['name']}**: {e}")
 
-            # 2. Kiểm tra Kênh Chat & Chuẩn Hóa Tên Kênh Không Dấu
+            # 2. Kiểm tra Kênh Chat, Nhật Ký Băng & Voice Public (KHÔNG tự ý sửa đổi/xóa kênh đang tồn tại)
             from utils.text_helper import to_channel_slug
             clean_slug = to_channel_slug(c["name"])[:30]
             expected_ch_name = f"💬・{clean_slug}"
+            expected_log_name = f"📜・nhat-ky-{clean_slug}"[:35]
 
-            text_ch = guild.get_channel(int(c["text_channel_id"]))
+            text_ch = guild.get_channel(int(c["text_channel_id"])) if c.get("text_channel_id") else None
             if not text_ch and role:
                 try:
                     text_ch = await guild.create_text_channel(
                         name=expected_ch_name,
                         category=category,
                         overwrites={
-                            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                            guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
                             role: discord.PermissionOverwrite(view_channel=True, send_messages=True)
                         }
                     )
@@ -175,13 +176,41 @@ class ClanAdmin(commands.Cog):
                     issues.append(f"Khôi phục kênh chat cho băng **{c['name']}** ({expected_ch_name}).")
                 except Exception as e:
                     issues.append(f"Không thể tạo lại kênh chat cho băng **{c['name']}**: {e}")
-            elif text_ch and text_ch.name != expected_ch_name:
+
+            log_ch = guild.get_channel(int(c["log_channel_id"])) if c.get("log_channel_id") else None
+            if not log_ch and role:
                 try:
-                    await text_ch.edit(name=expected_ch_name, reason="Chuẩn hóa tên kênh không dấu chuẩn Discord")
+                    log_ch = await guild.create_text_channel(
+                        name=expected_log_name,
+                        category=category,
+                        overwrites={
+                            guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
+                            role: discord.PermissionOverwrite(view_channel=True, send_messages=False, read_message_history=True),
+                            guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, embed_links=True, read_message_history=True)
+                        }
+                    )
+                    await self.bot.db.update_clan(c["clan_id"], log_channel_id=str(log_ch.id))
                     channels_fixed += 1
-                    issues.append(f"Chuẩn hóa tên kênh chat của băng **{c['name']}** sang không dấu: `{expected_ch_name}`.")
+                    issues.append(f"Khôi phục kênh nhật ký cho băng **{c['name']}** ({expected_log_name}).")
                 except Exception as e:
-                    logger.warning(f"Không thể đổi tên text channel: {e}")
+                    issues.append(f"Không thể tạo lại kênh nhật ký cho băng **{c['name']}**: {e}")
+
+            voice_ch = guild.get_channel(int(c["voice_channel_id"])) if c.get("voice_channel_id") else None
+            if not voice_ch and role:
+                try:
+                    voice_ch = await guild.create_voice_channel(
+                        name=f"🔊・[{c['tag']}] Phòng Sinh Hoạt",
+                        category=category,
+                        overwrites={
+                            guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True),
+                            role: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True)
+                        }
+                    )
+                    await self.bot.db.update_clan(c["clan_id"], voice_channel_id=str(voice_ch.id))
+                    channels_fixed += 1
+                    issues.append(f"Khôi phục kênh voice public cho băng **{c['name']}**.")
+                except Exception as e:
+                    issues.append(f"Không thể tạo lại kênh voice cho băng **{c['name']}**: {e}")
 
             # 3. Đồng bộ thành viên Role vs DB
             if role:

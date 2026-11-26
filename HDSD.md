@@ -136,9 +136,13 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 
 ## 👑 PHẦN 3: DÀNH CHO QUẢN TRỊ VIÊN SERVER (ADMIN)
 
-### 1. Cơ Chế Tự Động Hóa Thông Minh (Dynamic Auto-Provisioning)
-- **Không cần cấu hình phức tạp:** Nếu Admin chưa kịp cài đặt, ngay lần đầu tiên gõ `/clan create`, bot sẽ **tự động khởi tạo Category `🏰 BĂNG ĐẢNG`** và kênh ghi nhật ký `#📜・nhật-ký-băng` hoàn toàn tự động!
-- **Tùy chỉnh thủ công (nếu muốn):** Dùng `/clan-admin setup` để chỉ định Category hoặc kênh Log riêng theo ý bạn.
+### 1. Cơ Chế Tổ Chức Kênh & An Toàn Dữ Liệu Discord
+- **Duy nhất 1 Category `🏰 BĂNG ĐẢNG`:** Toàn bộ các băng trong server đều được gom gọn trong 1 Category duy nhất. Mỗi băng sở hữu 3 kênh:
+  1. **💬 Kênh Chat Riêng của băng** *(Riêng tư — chỉ thành viên băng mới nhìn thấy & nhắn tin, không sợ rối sidebar)*.
+  2. **📜 Kênh Nhật Ký của băng (`📜・nhat-ky-...`)** *(Riêng tư — chỉ thành viên băng mới nhìn thấy để theo dõi lịch sử hoạt động)*.
+  3. **🔊 Kênh Voice của băng** *(Công khai/Public — mọi thành viên server đều có thể nhìn thấy và vào giao lưu)*.
+- **Không tự tiện sửa/xóa kênh & tin nhắn:** Bot **tuyệt đối không tự ý sửa tên, thay đổi hay xóa bất kỳ kênh, role hoặc tin nhắn nào** của người dùng trên Discord nếu không có lệnh thực thi trực tiếp từ Chủ Băng hoặc Quản Trị Viên.
+- **Tùy chỉnh thủ công (nếu muốn):** Dùng `/clan-admin setup` để chỉ định Category hoặc kênh Log server riêng theo ý bạn.
 
 ### 2. Phân Quyền Vai Trò Của Bot Trên Discord (RẤT QUAN TRỌNG)
 Để bot có thể cấp role và quản lý kênh cho các thành viên:

@@ -391,18 +391,15 @@ class ClanEvents(commands.Cog):
                 remaining = [m for m in await self.bot.db.get_clan_members(clan["clan_id"]) if int(m["user_id"]) != user_id]
 
                 if not remaining:
-                    # Băng không còn ai -> Tự động giải tán và dọn dẹp
-                    logger.info(f"Băng {clan['name']} trống sau khi Chủ Băng rời. Tự động giải tán băng.")
-                    for ch_key in ("text_channel_id", "voice_channel_id", "extra_voice_channel_id"):
-                        ch_id = clan.get(ch_key)
-                        if ch_id:
-                            ch = guild.get_channel(int(ch_id))
-                            if ch:
-                                await ch.delete(reason="Băng trống tự giải tán")
-                    role = guild.get_role(int(clan["role_id"]))
-                    if role:
-                        await role.delete(reason="Băng trống tự giải tán")
-                    await self.bot.db.delete_clan(clan["clan_id"])
+                    # Không tự ý xóa kênh/role trên Discord; chỉ ghi nhận trong DB để Admin tự quyết định
+                    logger.warn(f"Băng {clan['name']} hiện không còn thành viên nào sau khi Chủ Băng rời server.")
+                    await self.bot.db.remove_member(guild.id, user_id)
+                    await self.bot.db.add_clan_log(
+                        clan_id=clan["clan_id"],
+                        actor_id=user_id,
+                        action="LEADER_LEFT_EMPTY",
+                        details="Chủ Băng cuối cùng đã rời server. Kênh và Role được giữ nguyên để Admin xử lý."
+                    )
                     return
 
                 # Kế vị: Chọn người thâm niên & chức vụ cao nhất đứng đầu danh sách
@@ -496,24 +493,19 @@ class ClanEvents(commands.Cog):
         if lvl_info["level"] > old_level:
             extra_voice_id = clan.get("extra_voice_channel_id")
 
-            # Mở khóa Level 3: Tạo Voice Channel thứ 2
+            # Mở khóa Level 3: Tạo Voice Channel thứ 2 (Public trong duy nhất Category BĂNG ĐẢNG)
             if lvl_info["level"] >= 3 and not extra_voice_id:
                 try:
                     cfg = await self.bot.db.get_guild_config(guild.id)
-                    category = guild.get_channel(int(cfg["clan_category_id"])) if cfg else None
-                    if category and len(category.channels) >= 50:
-                        # Tránh lỗi 30013: Tìm category mở rộng còn chỗ trống
-                        for cat in guild.categories:
-                            if "BĂNG ĐẢNG" in cat.name.upper() and len(cat.channels) < 50:
-                                category = cat
-                                break
-                    clan_role = guild.get_role(int(clan["role_id"]))
+                    category = guild.get_channel(int(cfg["clan_category_id"])) if (cfg and cfg.get("clan_category_id")) else None
+                    clan_role = guild.get_role(int(clan["role_id"])) if clan.get("role_id") else None
 
                     overwrites = {
-                        guild.default_role: discord.PermissionOverwrite(view_channel=False, connect=False),
-                        clan_role: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True, use_voice_activation=True),
+                        guild.default_role: discord.PermissionOverwrite(view_channel=True, connect=True, speak=True, use_voice_activation=True),
                         guild.me: discord.PermissionOverwrite(view_channel=True, connect=True, manage_channels=True, move_members=True)
                     }
+                    if clan_role:
+                        overwrites[clan_role] = discord.PermissionOverwrite(view_channel=True, connect=True, speak=True, use_voice_activation=True)
 
                     vc2 = await guild.create_voice_channel(
                         name=f"🔊・[{clan['tag']}] Voice 2",

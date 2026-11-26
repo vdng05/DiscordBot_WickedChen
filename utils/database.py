@@ -58,6 +58,7 @@ class DatabaseManager:
                 description TEXT DEFAULT 'Chưa có khẩu hiệu.',
                 role_id TEXT NOT NULL UNIQUE,
                 text_channel_id TEXT NOT NULL UNIQUE,
+                log_channel_id TEXT,
                 voice_channel_id TEXT NOT NULL UNIQUE,
                 extra_voice_channel_id TEXT,
                 leader_id TEXT NOT NULL,
@@ -187,12 +188,16 @@ class DatabaseManager:
             await db.executescript(schema)
             await db.commit()
 
-            # Migration: thêm secondary_color_hex nếu chưa có
-            try:
-                await db.execute("ALTER TABLE clans ADD COLUMN secondary_color_hex TEXT")
-                await db.commit()
-            except Exception:
-                pass
+            # Migration: thêm secondary_color_hex và log_channel_id nếu chưa có
+            for alter_sql in (
+                "ALTER TABLE clans ADD COLUMN secondary_color_hex TEXT",
+                "ALTER TABLE clans ADD COLUMN log_channel_id TEXT",
+            ):
+                try:
+                    await db.execute(alter_sql)
+                    await db.commit()
+                except Exception:
+                    pass
 
             # Migration: thêm custom_title cho clan_members nếu chưa có
             try:
@@ -277,17 +282,19 @@ class DatabaseManager:
     # =========================================================================
     async def create_clan(self, guild_id: int, name: str, tag: str, description: str,
                           role_id: int, text_channel_id: int, voice_channel_id: int,
-                          leader_id: int, color_hex: str = "#5865F2") -> int:
+                          leader_id: int, color_hex: str = "#5865F2",
+                          log_channel_id: Optional[int] = None) -> int:
         now = int(time.time())
         sql = """
         INSERT INTO clans (
-            guild_id, name, tag, description, role_id, text_channel_id, voice_channel_id, leader_id, color_hex, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            guild_id, name, tag, description, role_id, text_channel_id, log_channel_id, voice_channel_id, leader_id, color_hex, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         async with self.connect() as db:
             cursor = await db.execute(sql, (
                 str(guild_id), name, tag, description, str(role_id),
-                str(text_channel_id), str(voice_channel_id), str(leader_id), color_hex, now
+                str(text_channel_id), str(log_channel_id) if log_channel_id else None,
+                str(voice_channel_id), str(leader_id), color_hex, now
             ))
             await db.commit()
             return cursor.lastrowid
@@ -323,8 +330,8 @@ class DatabaseManager:
     async def get_clan_by_channel_id(self, channel_id: int) -> Optional[Dict[str, Any]]:
         async with self.connect() as db:
             db.row_factory = aiosqlite.Row
-            query = "SELECT * FROM clans WHERE text_channel_id = ? OR voice_channel_id = ? OR extra_voice_channel_id = ?"
-            async with db.execute(query, (str(channel_id), str(channel_id), str(channel_id))) as cursor:
+            query = "SELECT * FROM clans WHERE text_channel_id = ? OR log_channel_id = ? OR voice_channel_id = ? OR extra_voice_channel_id = ?"
+            async with db.execute(query, (str(channel_id), str(channel_id), str(channel_id), str(channel_id))) as cursor:
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 

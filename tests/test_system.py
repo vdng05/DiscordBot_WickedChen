@@ -44,7 +44,7 @@ async def run_tests():
     assert cfg["clan_category_id"] == "987654321"
     print("✅ 2. Guild Config lưu và đọc chính xác.")
 
-    # 2. Tạo Clan
+    # 2. Tạo Clan (kèm log_channel_id riêng của băng)
     clan_id = await db.create_clan(
         guild_id=123456789,
         name="Hoàng Gia",
@@ -53,7 +53,8 @@ async def run_tests():
         role_id=1001,
         text_channel_id=2001,
         voice_channel_id=3001,
-        leader_id=9999
+        leader_id=9999,
+        log_channel_id=4001
     )
     assert clan_id > 0
 
@@ -61,7 +62,10 @@ async def run_tests():
     assert clan["name"] == "Hoàng Gia"
     assert clan["tag"] == "HG"
     assert clan["level"] == 1
-    print("✅ 3. Tạo Clan thành công (ID: %d)." % clan_id)
+    assert clan["log_channel_id"] == "4001"
+    by_log = await db.get_clan_by_channel_id(4001)
+    assert by_log is not None and by_log["clan_id"] == clan_id
+    print("✅ 3. Tạo Clan thành công (ID: %d, kèm log_channel_id riêng)." % clan_id)
 
     # 3. Thêm Thành Viên & Phân Quyền
     await db.add_member(123456789, 9999, clan_id, Ranks.LEADER)
