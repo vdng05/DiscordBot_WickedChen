@@ -61,6 +61,15 @@ def create_progress_bar(current: int, max_val: int, size: int = 12) -> str:
     return f"`[{bar}]` **{percent}%**"
 
 
+def _set_embed_media_url(setter, explicit_ref: Optional[str], fallback_uri: Optional[str]) -> None:
+    """Gán thumbnail/image an toàn cho Embed (hỗ trợ http(s)://, attachment://, tránh truyền local:// thô)."""
+    if explicit_ref:
+        url = explicit_ref if explicit_ref.startswith(("http://", "https://", "attachment://")) else f"attachment://{explicit_ref}"
+        setter(url=url)
+    elif fallback_uri and fallback_uri.startswith(("http://", "https://")):
+        setter(url=fallback_uri)
+
+
 def parse_hex_color(hex_str: Optional[str]) -> discord.Color:
     """Chuyển mã Hex sang discord.Color an toàn"""
     if not hex_str:
@@ -147,17 +156,12 @@ def build_clan_info_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], l
     embed.add_field(name="🚪 Chế Độ Tuyển Quân", value=JoinModes.NAMES.get(clan.get("join_mode"), clan.get("join_mode", "APPROVAL")), inline=True)
     embed.add_field(name="📅 Ngày Khởi Lập", value=f"<t:{clan['created_at']}:D> (<t:{clan['created_at']}:R>)", inline=True)
 
-    if clan.get("logo_url"):
-        embed.set_thumbnail(url=clan["logo_url"])
-    elif logo_filename:
-        embed.set_thumbnail(url=f"attachment://{logo_filename}")
+    _set_embed_media_url(embed.set_thumbnail, logo_filename, clan.get("logo_url"))
 
     if attachment_filename:
-        embed.set_image(url=f"attachment://{attachment_filename}")
-    elif clan.get("banner_url"):
-        embed.set_image(url=clan["banner_url"])
-    elif banner_filename:
-        embed.set_image(url=f"attachment://{banner_filename}")
+        _set_embed_media_url(embed.set_image, attachment_filename, None)
+    else:
+        _set_embed_media_url(embed.set_image, banner_filename, clan.get("banner_url"))
 
     embed.set_footer(text=f"ID Băng: {clan['clan_id']} • Cấp {level_info['level']} ({level_info['title']})")
     return embed
@@ -202,10 +206,7 @@ def build_members_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], pag
         color=embed_color,
         timestamp=datetime.now()
     )
-    if clan.get("logo_url"):
-        embed.set_thumbnail(url=clan["logo_url"])
-    elif logo_filename:
-        embed.set_thumbnail(url=f"attachment://{logo_filename}")
+    _set_embed_media_url(embed.set_thumbnail, logo_filename, clan.get("logo_url"))
     embed.set_footer(text=f"Trang {current_page} / {total_pages} • Sĩ số: {len(members)}/{clan['max_members']}")
     return embed, total_pages
 
@@ -228,10 +229,7 @@ def build_milestones_embed(clan: Dict[str, Any], milestones: List[Dict[str, Any]
                 value=m.get("description") or "_Không có mô tả chi tiết._",
                 inline=False
             )
-    if clan.get("logo_url"):
-        embed.set_thumbnail(url=clan["logo_url"])
-    elif logo_filename:
-        embed.set_thumbnail(url=f"attachment://{logo_filename}")
+    _set_embed_media_url(embed.set_thumbnail, logo_filename, clan.get("logo_url"))
     embed.set_footer(text="Cột mốc được tự động ghi nhận theo thời gian thực")
     return embed
 
@@ -485,14 +483,19 @@ def build_role_setup_embed(clan: Dict[str, Any], role: Optional[discord.Role], a
         color=embed_color,
         timestamp=datetime.now()
     )
-    if clan.get("logo_url"):
-        embed.set_thumbnail(url=clan["logo_url"])
-    elif logo_filename:
-        embed.set_thumbnail(url=f"attachment://{logo_filename}")
+    _set_embed_media_url(embed.set_thumbnail, logo_filename, clan.get("logo_url"))
     if attachment_filename:
-        embed.set_image(url=f"attachment://{attachment_filename}")
+        _set_embed_media_url(embed.set_image, attachment_filename, None)
     embed.set_footer(text="Hỗ trợ đầy đủ tính năng Server Boost: Gradient 2 màu và Icon Vai Trò")
     return embed
+
+
+def _format_image_status(uri: Optional[str], default_label: str) -> str:
+    if not uri:
+        return default_label
+    if uri.startswith("local://"):
+        return "✅ Đã tải lên trực tiếp từ thiết bị *(Lưu trữ bền vững)*"
+    return f"✅ Đã cài đặt ([Xem ảnh gốc]({uri}))"
 
 
 def build_image_settings_embed(
@@ -501,15 +504,15 @@ def build_image_settings_embed(
     default_banner_filename: Optional[str] = None
 ) -> discord.Embed:
     """Tạo Embed trung tâm quản lý và tải ảnh trực tiếp cho Logo & Banner Băng"""
-    logo_status = f"✅ Đã tải lên ([Xem ảnh gốc]({clan['logo_url']}))" if clan.get("logo_url") else "✨ Đang dùng Logo Bát Giác Hoàng Gia Canvas (Mặc định)"
-    banner_status = f"✅ Đã tải lên ([Xem ảnh gốc]({clan['banner_url']}))" if clan.get("banner_url") else "✨ Đang dùng Banner Cyber Gaming Canvas (Mặc định)"
+    logo_status = _format_image_status(clan.get("logo_url"), "✨ Đang dùng Logo Bát Giác Hoàng Gia Canvas (Mặc định)")
+    banner_status = _format_image_status(clan.get("banner_url"), "✨ Đang dùng Banner Cyber Gaming Canvas (Mặc định)")
 
     desc = (
         f"🏰 Băng đảng: **[{clan['tag']}] {clan['name']}** (Cấp độ: **{clan.get('level', 1)}**)\n\n"
         f"🖼️ **Trạng thái Logo:** {logo_status}\n"
         f"🎨 **Trạng thái Banner:** {banner_status}\n\n"
         "**👉 HƯỚNG DẪN TẢI ẢNH LÊN TIỆN LỢI:**\n"
-        "• **Cách 1 (Nhanh nhất):** Bấm nút **`[📤 Gửi Tệp Logo]`** hoặc **`[🎨 Gửi Tệp Banner]`** bên dưới ➔ Kéo thả hoặc chọn file ảnh gửi thẳng vào kênh chat này trong 60 giây *(Bot sẽ tự động bắt file ảnh và xóa tin nhắn để giữ sạch phòng chat)*.\n"
+        "• **Cách 1 (Nhanh nhất):** Bấm nút **`[📤 Gửi Tệp Logo]`** hoặc **`[🎨 Gửi Tệp Banner]`** bên dưới ➔ Kéo thả hoặc chọn file ảnh gửi thẳng vào kênh chat này trong 60 giây *(Bot sẽ tự động tải về lưu trữ bền vững và xóa tin nhắn để giữ sạch phòng chat)*.\n"
         "• **Cách 2:** Dùng lệnh Slash Command `/clan upload-image loai:[logo/banner] file:[chọn tệp]`.\n"
         "• **Cách 3:** Bấm **`[🔗 Dán Link URL]`** nếu bạn đã có sẵn link ảnh online.\n"
         "• **Khôi phục:** Bấm các nút **`[🔄 Về Mặc Định]`** nếu muốn chuyển lại về đồ họa Canvas tự động của bot."
@@ -521,15 +524,8 @@ def build_image_settings_embed(
         color=parse_hex_color(clan.get("color_hex")),
         timestamp=datetime.now()
     )
-    if clan.get("logo_url"):
-        embed.set_thumbnail(url=clan["logo_url"])
-    elif default_logo_filename:
-        embed.set_thumbnail(url=f"attachment://{default_logo_filename}")
-
-    if clan.get("banner_url"):
-        embed.set_image(url=clan["banner_url"])
-    elif default_banner_filename:
-        embed.set_image(url=f"attachment://{default_banner_filename}")
+    _set_embed_media_url(embed.set_thumbnail, default_logo_filename, clan.get("logo_url"))
+    _set_embed_media_url(embed.set_image, default_banner_filename, clan.get("banner_url"))
 
     embed.set_footer(text="Hỗ trợ mọi định dạng: PNG, JPG, JPEG, WEBP, GIF (Dung lượng tối đa 8MB)")
     return embed

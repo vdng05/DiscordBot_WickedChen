@@ -34,6 +34,12 @@ from utils.embeds import (
 from utils.logger import setup_logging
 from utils.time_helper import get_current_week_key
 from utils.text_helper import to_channel_slug, auto_dismiss_notice
+from utils.image_storage import (
+    save_clan_attachment,
+    delete_local_asset,
+    resolve_clan_logo,
+    resolve_clan_banner
+)
 
 logger = setup_logging("UIComponents")
 
@@ -376,7 +382,7 @@ class RenameClanModal(ui.Modal):
             return
 
         # Cập nhật Role Discord
-        role = guild.get_role(int(self.clan["role_id"]))
+        role = guild.get_role(int(self.clan["role_id"])) if self.clan.get("role_id") else None
         if role:
             try:
                 await role.edit(name=f"[{tag}] {name}")
@@ -386,14 +392,14 @@ class RenameClanModal(ui.Modal):
         # Cập nhật Tên Kênh Chat & Voice Không Dấu
         from utils.text_helper import to_channel_slug
         clean_slug = to_channel_slug(name)[:30]
-        text_ch = guild.get_channel(int(self.clan["text_channel_id"]))
+        text_ch = guild.get_channel(int(self.clan["text_channel_id"])) if self.clan.get("text_channel_id") else None
         if text_ch:
             try:
                 await text_ch.edit(name=f"💬・{clean_slug}", topic=f"Kênh sinh hoạt chính thức của Băng [{tag}] {name} | Khẩu hiệu: {slogan}")
             except Exception as e:
                 logger.warn(f"Không thể đổi tên text channel: {e}")
 
-        voice_ch = guild.get_channel(int(self.clan["voice_channel_id"]))
+        voice_ch = guild.get_channel(int(self.clan["voice_channel_id"])) if self.clan.get("voice_channel_id") else None
         if voice_ch:
             try:
                 await voice_ch.edit(name=f"🔊・[{tag}] Phòng Sinh Hoạt")
@@ -521,12 +527,12 @@ class ImagesClanModal(ui.Modal, title="🖼️ Dán Link URL Logo & Banner"):
 
         self.logo_url = ui.TextInput(
             label="Link Ảnh Logo (Bắt đầu bằng http/https)",
-            default=clan.get("logo_url") or "",
+            default=clan.get("logo_url") if (clan.get("logo_url") or "").startswith(("http://", "https://")) else "",
             required=False
         )
         self.banner_url = ui.TextInput(
             label="Link Ảnh Banner (Bắt đầu bằng http/https)",
-            default=clan.get("banner_url") or "",
+            default=clan.get("banner_url") if (clan.get("banner_url") or "").startswith(("http://", "https://")) else "",
             required=False
         )
         self.add_item(self.logo_url)
@@ -544,9 +550,18 @@ class ImagesClanModal(ui.Modal, title="🖼️ Dán Link URL Logo & Banner"):
             await auto_dismiss_notice(interaction, content="❌ Link Banner phải bắt đầu bằng `http://` hoặc `https://`!", delay=5)
             return
 
-        await self.bot.db.update_clan(self.clan["clan_id"], logo_url=logo, banner_url=banner)
-        self.clan["logo_url"] = logo
-        self.clan["banner_url"] = banner
+        # Giữ lại ảnh local nếu người dùng để trống ô link trong modal URL
+        final_logo = logo if logo is not None else (self.clan.get("logo_url") if (self.clan.get("logo_url") or "").startswith("local://") else None)
+        final_banner = banner if banner is not None else (self.clan.get("banner_url") if (self.clan.get("banner_url") or "").startswith("local://") else None)
+
+        if logo and (self.clan.get("logo_url") or "").startswith("local://"):
+            delete_local_asset(self.clan.get("logo_url"))
+        if banner and (self.clan.get("banner_url") or "").startswith("local://"):
+            delete_local_asset(self.clan.get("banner_url"))
+
+        await self.bot.db.update_clan(self.clan["clan_id"], logo_url=final_logo, banner_url=final_banner)
+        self.clan["logo_url"] = final_logo
+        self.clan["banner_url"] = final_banner
 
         await self.bot.db.add_clan_log(
             clan_id=self.clan["clan_id"],
@@ -556,8 +571,8 @@ class ImagesClanModal(ui.Modal, title="🖼️ Dán Link URL Logo & Banner"):
         )
 
         if self.parent_view:
-            self.parent_view.clan["logo_url"] = logo
-            self.parent_view.clan["banner_url"] = banner
+            self.parent_view.clan["logo_url"] = final_logo
+            self.parent_view.clan["banner_url"] = final_banner
             try:
                 new_embed, files = await _build_image_settings_payload(self.parent_view.clan, interaction.guild, self.bot.db)
                 await interaction.response.edit_message(embed=new_embed, attachments=files, view=self.parent_view)
@@ -708,7 +723,7 @@ class ApplyClanModal(ui.Modal):
 
         # Chế độ MỞ TỰ DO (OPEN): Vào thẳng!
         if clan["join_mode"] == JoinModes.OPEN:
-            role = guild.get_role(int(clan["role_id"]))
+            role = guild.get_role(int(clan["role_id"])) if clan.get("role_id") else None
             if role:
                 await user.add_roles(role, reason="Gia nhập băng mở tự do")
 
@@ -721,7 +736,7 @@ class ApplyClanModal(ui.Modal):
             )
 
             # Chào mừng trong kênh chat riêng
-            text_ch = guild.get_channel(int(clan["text_channel_id"]))
+            text_ch = guild.get_channel(int(clan["text_channel_id"])) if clan.get("text_channel_id") else None
             if text_ch:
                 welcome_embed = discord.Embed(
                     title="👋 THÀNH VIÊN MỚI GIA NHẬP!",
@@ -916,7 +931,7 @@ class ClanQuickPartyModal(ui.Modal, title="🎮 Tạo Kèo Rủ Chơi Game Nhanh
             return
 
         scheduled_at = parse_scheduled_time(self.party_time.value)
-        text_ch = interaction.guild.get_channel(int(self.clan["text_channel_id"]))
+        text_ch = interaction.guild.get_channel(int(self.clan["text_channel_id"])) if self.clan.get("text_channel_id") else None
         if not text_ch:
             await interaction.followup.send("❌ Không tìm thấy kênh chat của băng!", ephemeral=True)
             return
@@ -1053,37 +1068,8 @@ class ClanInfoView(ui.View):
             await interaction.followup.send("❌ Băng không tồn tại!", ephemeral=True)
             return
         members = await self.bot.db.get_clan_members(self.clan_id)
-        from utils.embeds import parse_hex_color
-        from datetime import datetime
-        if clan.get("banner_url"):
-            embed = discord.Embed(
-                title=f"🚩 BANNER BĂNG: [{clan['tag']}] {clan['name']}",
-                color=parse_hex_color(clan.get("color_hex")),
-                timestamp=datetime.now()
-            )
-            embed.set_image(url=clan["banner_url"])
-            if clan.get("logo_url"):
-                embed.set_thumbnail(url=clan["logo_url"])
-            embed.set_footer(text=f"Banner chính thức của băng [{clan['tag']}] {clan['name']}")
-            await interaction.followup.send(embed=embed, ephemeral=True)
-        else:
-            from utils.canvas import generate_default_clan_banner
-            import asyncio
-            leader_mem = interaction.guild.get_member(int(clan["leader_id"])) if clan.get("leader_id") else None
-            leader_name = leader_mem.display_name if leader_mem else None
-            buf = await asyncio.to_thread(generate_default_clan_banner, clan, len(members), leader_name)
-            file = discord.File(fp=buf, filename="default_banner.png")
-            embed = discord.Embed(
-                title=f"🚩 BANNER BĂNG ĐẢNG (MẶC ĐỊNH): [{clan['tag']}] {clan['name']}",
-                description="✨ *Chủ băng chưa tải lên banner tùy chỉnh. Hệ thống đã tự động kiến tạo Banner đồ họa Hoàng Gia Gaming cực chất!*",
-                color=parse_hex_color(clan.get("color_hex")),
-                timestamp=datetime.now()
-            )
-            embed.set_image(url="attachment://default_banner.png")
-            if clan.get("logo_url"):
-                embed.set_thumbnail(url=clan["logo_url"])
-            embed.set_footer(text="Đồ họa kiến tạo tự động bởi Hệ Thống Discord Bot Gaming")
-            await interaction.followup.send(embed=embed, file=file, ephemeral=True)
+        embed, files = await _build_banner_preview_payload(clan, len(members), interaction.guild)
+        await interaction.followup.send(embed=embed, files=files, ephemeral=True)
 
     @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, custom_id="clan_info_back_hub_btn", row=1)
     async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
@@ -1264,15 +1250,9 @@ class ClanSelectDropdown(ui.Select):
         buf = await asyncio.to_thread(generate_clan_profile_image, clan, len(members), level_info, leader_name)
         file = discord.File(fp=buf, filename="clan_profile.png")
         files = [file]
-        logo_filename = None
-        if not clan.get("logo_url"):
-            logo_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
-            files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
-            logo_filename = "default_logo.png"
+        logo_ref = await resolve_clan_logo(clan, files, fallback_to_default=True)
 
-        embed = build_clan_info_embed(clan, members, level_info, attachment_filename="clan_profile.png", logo_filename=logo_filename)
-        if clan.get("logo_url"):
-            embed.set_thumbnail(url=clan["logo_url"])
+        embed = build_clan_info_embed(clan, members, level_info, attachment_filename="clan_profile.png", logo_filename=logo_ref)
 
         view = ClanDetailView(clan=clan, can_apply=can_apply, is_member=is_member, is_leader=is_leader, bot=self.bot)
         await interaction.followup.send(embed=embed, files=files, view=view, ephemeral=True)
@@ -1301,17 +1281,11 @@ class ClanDetailView(ui.View):
     async def members_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer(ephemeral=True)
         members = await self.bot.db.get_clan_members(self.clan["clan_id"])
-        if not self.clan.get("logo_url"):
-            from utils.canvas import generate_default_clan_logo
-            logo_buf = await asyncio.to_thread(generate_default_clan_logo, self.clan)
-            logo_file = discord.File(fp=logo_buf, filename="default_logo.png")
-            embed, total_pages = build_members_embed(self.clan, members, page=1, page_size=10, logo_filename="default_logo.png")
-            view = MembersPaginationView(clan_id=self.clan["clan_id"], current_page=1, total_pages=total_pages, current_filter="ALL", bot=self.bot)
-            await interaction.followup.send(embed=embed, file=logo_file, view=view, ephemeral=True)
-        else:
-            embed, total_pages = build_members_embed(self.clan, members, page=1, page_size=10)
-            view = MembersPaginationView(clan_id=self.clan["clan_id"], current_page=1, total_pages=total_pages, current_filter="ALL", bot=self.bot)
-            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        files = []
+        logo_ref = await resolve_clan_logo(self.clan, files, fallback_to_default=True)
+        embed, total_pages = build_members_embed(self.clan, members, page=1, page_size=10, logo_filename=logo_ref)
+        view = MembersPaginationView(clan_id=self.clan["clan_id"], current_page=1, total_pages=total_pages, current_filter="ALL", bot=self.bot)
+        await interaction.followup.send(embed=embed, files=files, view=view, ephemeral=True)
 
     @ui.button(label="Xem Banner Băng", emoji="🚩", style=discord.ButtonStyle.secondary)
     async def banner_btn(self, interaction: discord.Interaction, button: ui.Button):
@@ -1321,36 +1295,8 @@ class ClanDetailView(ui.View):
             await interaction.followup.send("❌ Băng không tồn tại!", ephemeral=True)
             return
         members = await self.bot.db.get_clan_members(clan["clan_id"])
-        from utils.embeds import parse_hex_color
-        from datetime import datetime
-        if clan.get("banner_url"):
-            embed = discord.Embed(
-                title=f"🚩 BANNER BĂNG: [{clan['tag']}] {clan['name']}",
-                color=parse_hex_color(clan.get("color_hex")),
-                timestamp=datetime.now()
-            )
-            embed.set_image(url=clan["banner_url"])
-            if clan.get("logo_url"):
-                embed.set_thumbnail(url=clan["logo_url"])
-            embed.set_footer(text=f"Banner chính thức của băng [{clan['tag']}] {clan['name']}")
-            await interaction.followup.send(embed=embed, ephemeral=True)
-        else:
-            from utils.canvas import generate_default_clan_banner
-            leader_mem = interaction.guild.get_member(int(clan["leader_id"])) if clan.get("leader_id") else None
-            leader_name = leader_mem.display_name if leader_mem else None
-            buf = await asyncio.to_thread(generate_default_clan_banner, clan, len(members), leader_name)
-            file = discord.File(fp=buf, filename="default_banner.png")
-            embed = discord.Embed(
-                title=f"🚩 BANNER BĂNG ĐẢNG (MẶC ĐỊNH): [{clan['tag']}] {clan['name']}",
-                description="✨ *Chủ băng chưa tải lên banner tùy chỉnh. Hệ thống đã tự động kiến tạo Banner đồ họa Hoàng Gia Gaming cực chất!*",
-                color=parse_hex_color(clan.get("color_hex")),
-                timestamp=datetime.now()
-            )
-            embed.set_image(url="attachment://default_banner.png")
-            if clan.get("logo_url"):
-                embed.set_thumbnail(url=clan["logo_url"])
-            embed.set_footer(text="Đồ họa kiến tạo tự động bởi Hệ Thống Discord Bot Gaming")
-            await interaction.followup.send(embed=embed, file=file, ephemeral=True)
+        embed, files = await _build_banner_preview_payload(clan, len(members), interaction.guild)
+        await interaction.followup.send(embed=embed, files=files, ephemeral=True)
 
     @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary)
     async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
@@ -2329,13 +2275,8 @@ class ClanHubView(ui.View):
         buf = await asyncio.to_thread(generate_quests_image, self.clan, quests, week_key)
         file = discord.File(fp=buf, filename="quests.png")
         files = [file]
-        embed = build_quests_embed(self.clan, quests, week_key, attachment_filename="quests.png")
-        if self.clan.get("logo_url"):
-            embed.set_thumbnail(url=self.clan["logo_url"])
-        else:
-            logo_buf = await asyncio.to_thread(generate_default_clan_logo, self.clan)
-            files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
-            embed.set_thumbnail(url="attachment://default_logo.png")
+        logo_ref = await resolve_clan_logo(self.clan, files, fallback_to_default=True)
+        embed = build_quests_embed(self.clan, quests, week_key, attachment_filename="quests.png", logo_filename=logo_ref)
         view = ClanQuestsView(clan=self.clan, user=interaction.user, bot=self.bot)
         await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
 
@@ -2355,15 +2296,9 @@ class ClanHubView(ui.View):
         buf = await asyncio.to_thread(generate_clan_profile_image, clan, len(members), level_info, leader_name)
         file = discord.File(fp=buf, filename="clan_profile.png")
         files = [file]
-        logo_filename = None
-        if not clan.get("logo_url"):
-            logo_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
-            files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
-            logo_filename = "default_logo.png"
+        logo_ref = await resolve_clan_logo(clan, files, fallback_to_default=True)
 
-        embed = build_clan_info_embed(clan, members, level_info, attachment_filename="clan_profile.png", logo_filename=logo_filename)
-        if clan.get("logo_url"):
-            embed.set_thumbnail(url=clan["logo_url"])
+        embed = build_clan_info_embed(clan, members, level_info, attachment_filename="clan_profile.png", logo_filename=logo_ref)
         view = ClanInfoView(clan_id=clan["clan_id"], can_apply=False, is_member=True, is_leader=(int(clan["leader_id"]) == interaction.user.id), bot=self.bot)
         await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
 
@@ -2418,14 +2353,8 @@ class ClanHubView(ui.View):
         from utils.embeds import build_milestones_embed
         milestones = await self.bot.db.get_clan_milestones(self.clan["clan_id"], limit=10)
         files = []
-        if self.clan.get("logo_url"):
-            embed = build_milestones_embed(self.clan, milestones)
-            embed.set_thumbnail(url=self.clan["logo_url"])
-        else:
-            from utils.canvas import generate_default_clan_logo
-            logo_buf = await asyncio.to_thread(generate_default_clan_logo, self.clan)
-            files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
-            embed = build_milestones_embed(self.clan, milestones, logo_filename="default_logo.png")
+        logo_ref = await resolve_clan_logo(self.clan, files, fallback_to_default=True)
+        embed = build_milestones_embed(self.clan, milestones, logo_filename=logo_ref)
         view = ClanMilestonesView(clan=self.clan, user=interaction.user, bot=self.bot)
         await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
 
@@ -2914,34 +2843,71 @@ class PartyView(ui.View):
             pass
 
 
+async def _build_banner_preview_payload(clan: Dict[str, Any], member_count: int, guild: Optional[discord.Guild]) -> tuple[discord.Embed, list[discord.File]]:
+    """Tạo Embed & file đính kèm xem Banner (luôn kèm Logo tùy chỉnh/mặc định và Banner tùy chỉnh/mặc định)."""
+    from utils.embeds import parse_hex_color
+    files: List[discord.File] = []
+    leader_mem = guild.get_member(int(clan["leader_id"])) if (guild and clan.get("leader_id")) else None
+    leader_name = leader_mem.display_name if leader_mem else None
+
+    logo_ref = await resolve_clan_logo(clan, files, fallback_to_default=True)
+    banner_ref = await resolve_clan_banner(clan, files, member_count=member_count, leader_name=leader_name, fallback_to_default=True)
+
+    is_custom_banner = bool(clan.get("banner_url")) and (banner_ref != "attachment://default_banner.png")
+    if is_custom_banner:
+        embed = discord.Embed(
+            title=f"🚩 BANNER BĂNG: [{clan['tag']}] {clan['name']}",
+            color=parse_hex_color(clan.get("color_hex")),
+            timestamp=datetime.now()
+        )
+        embed.set_footer(text=f"Banner chính thức của băng [{clan['tag']}] {clan['name']}")
+    else:
+        embed = discord.Embed(
+            title=f"🚩 BANNER BĂNG ĐẢNG (MẶC ĐỊNH): [{clan['tag']}] {clan['name']}",
+            description="✨ *Chủ băng chưa tải lên banner tùy chỉnh. Hệ thống đã tự động kiến tạo Banner đồ họa Hoàng Gia Gaming cực chất!*",
+            color=parse_hex_color(clan.get("color_hex")),
+            timestamp=datetime.now()
+        )
+        embed.set_footer(text="Đồ họa kiến tạo tự động bởi Hệ Thống Discord Bot Gaming")
+
+    if banner_ref:
+        embed.set_image(url=banner_ref)
+    if logo_ref:
+        embed.set_thumbnail(url=logo_ref)
+    return embed, files
+
+
 async def _build_image_settings_payload(clan: Dict[str, Any], guild: Optional[discord.Guild], db: Any) -> tuple[discord.Embed, list[discord.File]]:
-    """Tạo Embed & danh sách file đính kèm (luôn chèn đồ họa mặc định cho Logo hoặc Banner nếu chưa upload)"""
-    from utils.canvas import generate_default_clan_logo, generate_default_clan_banner
-    files = []
-    default_logo_filename = None
-    default_banner_filename = None
+    """Tạo Embed & danh sách file đính kèm (luôn chèn đồ họa mặc định hoặc ảnh local cho Logo & Banner)"""
+    files: List[discord.File] = []
+    member_count = await db.get_member_count(clan["clan_id"])
+    leader_mem = guild.get_member(int(clan["leader_id"])) if (guild and clan.get("leader_id")) else None
+    leader_name = leader_mem.display_name if leader_mem else None
 
-    if not clan.get("logo_url"):
-        logo_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
-        files.append(discord.File(fp=logo_buf, filename="default_logo.png"))
-        default_logo_filename = "default_logo.png"
-
-    if not clan.get("banner_url"):
-        member_count = await db.get_member_count(clan["clan_id"])
-        leader_name = None
-        if guild and clan.get("leader_id"):
-            leader_mem = guild.get_member(int(clan["leader_id"]))
-            if leader_mem:
-                leader_name = leader_mem.display_name
-        banner_buf = await asyncio.to_thread(generate_default_clan_banner, clan, member_count, leader_name)
-        files.append(discord.File(fp=banner_buf, filename="default_banner.png"))
-        default_banner_filename = "default_banner.png"
+    logo_ref = await resolve_clan_logo(clan, files, fallback_to_default=True)
+    banner_ref = await resolve_clan_banner(clan, files, member_count=member_count, leader_name=leader_name, fallback_to_default=True)
 
     embed = build_image_settings_embed(
         clan,
-        default_logo_filename=default_logo_filename,
-        default_banner_filename=default_banner_filename
+        default_logo_filename=logo_ref,
+        default_banner_filename=banner_ref
     )
+    return embed, files
+
+
+async def _build_role_setup_payload(clan: Dict[str, Any], role: Optional[discord.Role]) -> tuple[discord.Embed, list[discord.File]]:
+    """Tạo Embed & file ảnh xem trước Role + Logo (hỗ trợ local:// và ảnh mặc định)."""
+    from utils.canvas import generate_role_setup_image
+    role_name = role.name if role else f"[{clan['tag']}] {clan['name']}"
+    color_hex = clan.get("color_hex") or "#5865F2"
+    sec_hex = clan.get("secondary_color_hex")
+    hoist = role.hoist if role else True
+    mentionable = role.mentionable if role else True
+
+    buf = await asyncio.to_thread(generate_role_setup_image, clan, role_name, color_hex, sec_hex, hoist, mentionable)
+    files: List[discord.File] = [discord.File(fp=buf, filename="role_setup.png")]
+    logo_ref = await resolve_clan_logo(clan, files, fallback_to_default=True)
+    embed = build_role_setup_embed(clan, role, attachment_filename="role_setup.png", logo_filename=logo_ref)
     return embed, files
 
 
@@ -2983,6 +2949,7 @@ class ClanImageUploadDashboardView(ui.View):
     @ui.button(label="Về Logo Mặc Định", emoji="🔄", style=discord.ButtonStyle.secondary, row=1)
     async def reset_logo_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
+        delete_local_asset(self.clan.get("logo_url"))
         await self.bot.db.update_clan(self.clan["clan_id"], logo_url=None)
         self.clan["logo_url"] = None
         await self.bot.db.add_clan_log(
@@ -2998,6 +2965,7 @@ class ClanImageUploadDashboardView(ui.View):
     @ui.button(label="Về Banner Mặc Định", emoji="🔄", style=discord.ButtonStyle.secondary, row=1)
     async def reset_banner_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
+        delete_local_asset(self.clan.get("banner_url"))
         await self.bot.db.update_clan(self.clan["clan_id"], banner_url=None)
         self.clan["banner_url"] = None
         await self.bot.db.add_clan_log(
@@ -3027,11 +2995,13 @@ class ClanImageUploadDashboardView(ui.View):
 
     async def _start_upload_listener(self, interaction: discord.Interaction, image_type: str):
         label = "Logo Bát Giác" if image_type == "logo" else "Banner Băng"
-        await interaction.response.send_message(
-            f"📸 **CHẾ ĐỘ TẢI ẢNH TRỰC TIẾP ({label.upper()}) ĐÃ KÍCH HOẠT (60 GIÂY)**\n"
-            f"👉 Hãy **gửi 1 file ảnh (kéo thả hoặc bấm dấu `+` chọn tệp)** vào kênh chat này ngay bây giờ!\n"
-            f"*(Bot sẽ tự động bắt file ảnh, xóa tin nhắn trong kênh để giữ sạch phòng chat và gán làm {label} của Băng ngay lập tức)*",
-            ephemeral=True
+        await interaction.response.defer()
+        await interaction.edit_original_response(
+            content=(
+                f"📸 **CHẾ ĐỘ TẢI ẢNH TRỰC TIẾP ({label.upper()}) ĐÃ KÍCH HOẠT (60 GIÂY)**\n"
+                f"👉 Hãy **gửi 1 file ảnh (kéo thả hoặc bấm dấu `+` chọn tệp)** vào kênh chat này ngay bây giờ!\n"
+                f"*(Bot sẽ tự động lưu trữ bền vững, xóa tin nhắn ảnh trong kênh để giữ sạch phòng chat và cập nhật lại bảng này ngay lập tức)*"
+            )
         )
 
         def check(m: discord.Message):
@@ -3040,8 +3010,9 @@ class ClanImageUploadDashboardView(ui.View):
         try:
             msg = await self.bot.wait_for("message", timeout=60.0, check=check)
         except asyncio.TimeoutError:
+            cur_embed, cur_files = await _build_image_settings_payload(self.clan, interaction.guild, self.bot.db)
             try:
-                await interaction.followup.send("⏱️ Hết thời gian chờ gửi ảnh (60s). Bạn có thể bấm nút thử lại bất kỳ lúc nào!", ephemeral=True)
+                await interaction.edit_original_response(content="⏱️ *Hết thời gian chờ gửi ảnh (60s). Bạn có thể bấm nút thử lại bất kỳ lúc nào!*", embed=cur_embed, attachments=cur_files, view=self)
             except Exception:
                 pass
             return
@@ -3054,7 +3025,16 @@ class ClanImageUploadDashboardView(ui.View):
                 await msg.delete()
             except Exception:
                 pass
-            await interaction.followup.send("❌ Tệp bạn vừa gửi không phải là hình ảnh hợp lệ (PNG, JPG, WEBP, GIF)!", ephemeral=True)
+            cur_embed, cur_files = await _build_image_settings_payload(self.clan, interaction.guild, self.bot.db)
+            await interaction.edit_original_response(content="❌ Tệp bạn vừa gửi không phải là hình ảnh hợp lệ (PNG, JPG, WEBP, GIF)!", embed=cur_embed, attachments=cur_files, view=self)
+            return
+
+        # Tải và lưu ảnh bền vững vào thư mục data/clan_assets/ trước khi xóa tin nhắn của user
+        try:
+            saved_uri = await save_clan_attachment(self.clan["clan_id"], image_type, att)
+        except Exception as save_err:
+            cur_embed, cur_files = await _build_image_settings_payload(self.clan, interaction.guild, self.bot.db)
+            await interaction.edit_original_response(content=f"❌ Không thể lưu ảnh: `{save_err}`", embed=cur_embed, attachments=cur_files, view=self)
             return
 
         # Xóa tin nhắn tải ảnh của user trong kênh để giữ sạch phòng chat
@@ -3065,13 +3045,13 @@ class ClanImageUploadDashboardView(ui.View):
 
         # Cập nhật DB
         if image_type == "logo":
-            await self.bot.db.update_clan(self.clan["clan_id"], logo_url=att.url)
-            self.clan["logo_url"] = att.url
+            await self.bot.db.update_clan(self.clan["clan_id"], logo_url=saved_uri)
+            self.clan["logo_url"] = saved_uri
             action = "UPDATE_LOGO"
             details = "Tải lên ảnh Logo mới trực tiếp từ thiết bị."
         else:
-            await self.bot.db.update_clan(self.clan["clan_id"], banner_url=att.url)
-            self.clan["banner_url"] = att.url
+            await self.bot.db.update_clan(self.clan["clan_id"], banner_url=saved_uri)
+            self.clan["banner_url"] = saved_uri
             action = "UPDATE_BANNER"
             details = "Tải lên ảnh Banner mới trực tiếp từ thiết bị."
 
@@ -3082,14 +3062,9 @@ class ClanImageUploadDashboardView(ui.View):
             details=details
         )
 
-        # Cập nhật lại giao diện
+        # Cập nhật lại giao diện bảng cài đặt (luôn kèm ảnh mặc định nếu phần còn lại chưa upload)
         new_embed, files = await _build_image_settings_payload(self.clan, interaction.guild, self.bot.db)
-        try:
-            await interaction.message.edit(embed=new_embed, attachments=files, view=self)
-        except Exception:
-            pass
-
-        await interaction.followup.send(f"🎉 **Đã tải lên và cập nhật {label} thành công từ file ảnh bạn vừa gửi!**", ephemeral=True)
+        await interaction.edit_original_response(content=f"🎉 **Đã tải lên và cập nhật {label} thành công!**", embed=new_embed, attachments=files, view=self)
 
 
 class SettingsDashboardView(ui.View):
@@ -3122,9 +3097,9 @@ class SettingsDashboardView(ui.View):
         elif val in ("color", "role_setup"):
             await interaction.response.defer()
             role = interaction.guild.get_role(int(self.clan["role_id"])) if self.clan.get("role_id") else None
-            embed = build_role_setup_embed(self.clan, role)
+            embed, files = await _build_role_setup_payload(self.clan, role)
             view = ClanRoleSetupView(clan=self.clan, bot=self.bot)
-            await interaction.edit_original_response(content=None, embed=embed, attachments=[], view=view)
+            await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
         elif val == "images":
             await interaction.response.defer()
             embed, files = await _build_image_settings_payload(self.clan, interaction.guild, self.bot.db)
@@ -3195,7 +3170,7 @@ class ExistingRoleSelect(ui.RoleSelect):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         selected_role: discord.Role = self.values[0]
         view: "ClanRoleSetupView" = self.view
         guild = interaction.guild
@@ -3272,17 +3247,17 @@ class ExistingRoleSelect(ui.RoleSelect):
         view.clan["color_hex"] = hex_color
         view.clan["secondary_color_hex"] = None
 
-        new_embed = build_role_setup_embed(view.clan, selected_role)
-        try:
-            await interaction.message.edit(embed=new_embed, view=view)
-        except Exception:
-            pass
+        new_embed, files = await _build_role_setup_payload(view.clan, selected_role)
+        await interaction.edit_original_response(embed=new_embed, attachments=files, view=view)
 
-        await interaction.followup.send(
-            f"✅ **Đã liên kết thành công Role mới cho Băng:** {selected_role.mention}!\n"
-            f"• Toàn bộ quyền truy cập kênh riêng đã được chuyển giao cho Role mới.\n"
-            f"• Role mới đã được tự động cấp cho các thành viên trong băng.",
-            ephemeral=True
+        await auto_dismiss_notice(
+            interaction,
+            content=(
+                f"✅ **Đã liên kết thành công Role mới cho Băng:** {selected_role.mention}!\n"
+                f"• Toàn bộ quyền truy cập kênh riêng đã được chuyển giao cho Role mới.\n"
+                f"• Role mới đã được tự động cấp cho các thành viên trong băng."
+            ),
+            delay=6
         )
 
 
@@ -3300,7 +3275,7 @@ class GradientPaletteSelect(ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         chosen_pair = self.values[0]
         start_hex, end_hex = chosen_pair.split(":")
         view: "ClanRoleSetupView" = self.view
@@ -3308,14 +3283,17 @@ class GradientPaletteSelect(ui.Select):
 
         role = guild.get_role(int(view.clan["role_id"])) if view.clan.get("role_id") else None
         if not role:
-            await interaction.followup.send("❌ Không tìm thấy Role của băng trên máy chủ!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Không tìm thấy Role của băng trên máy chủ!", delay=5)
             return
 
         if role >= guild.me.top_role:
-            await interaction.followup.send(
-                f"⚠️ Role {role.mention} đang nằm cao hơn hoặc bằng Role của Bot!\n"
-                "Vui lòng vào **Server Settings -> Roles** kéo Role của Bot lên cao hơn.",
-                ephemeral=True
+            await auto_dismiss_notice(
+                interaction,
+                content=(
+                    f"⚠️ Role {role.mention} đang nằm cao hơn hoặc bằng Role của Bot!\n"
+                    "Vui lòng vào **Server Settings -> Roles** kéo Role của Bot lên cao hơn."
+                ),
+                delay=6
             )
             return
 
@@ -3343,17 +3321,17 @@ class GradientPaletteSelect(ui.Select):
             view.clan["color_hex"] = start_hex
             view.clan["secondary_color_hex"] = end_hex
 
-            new_embed = build_role_setup_embed(view.clan, role)
-            try:
-                await interaction.message.edit(embed=new_embed, view=view)
-            except Exception:
-                pass
+            new_embed, files = await _build_role_setup_payload(view.clan, role)
+            await interaction.edit_original_response(embed=new_embed, attachments=files, view=view)
 
-            await interaction.followup.send(
-                f"🌈 **Đã áp dụng màu Gradient thành công!**\n"
-                f"• Dải màu: **{start_hex}** ➔ **{end_hex}**\n"
-                f"*(Màu gradient hiển thị chuyển sắc tuyệt đẹp trên danh sách thành viên!)*",
-                ephemeral=True
+            await auto_dismiss_notice(
+                interaction,
+                content=(
+                    f"🌈 **Đã áp dụng màu Gradient thành công!**\n"
+                    f"• Dải màu: **{start_hex}** ➔ **{end_hex}**\n"
+                    f"*(Màu gradient hiển thị chuyển sắc tuyệt đẹp trên danh sách thành viên!)*"
+                ),
+                delay=6
             )
         except (discord.HTTPException, discord.InvalidArgument) as err:
             logger.warning(f"Không thể áp dụng gradient (server có thể chưa đủ boost): {err}")
@@ -3363,21 +3341,21 @@ class GradientPaletteSelect(ui.Select):
                 await view.bot.db.update_clan(view.clan["clan_id"], color_hex=start_hex, secondary_color_hex=None)
                 view.clan["color_hex"] = start_hex
                 view.clan["secondary_color_hex"] = None
-                new_embed = build_role_setup_embed(view.clan, role)
-                try:
-                    await interaction.message.edit(embed=new_embed, view=view)
-                except Exception:
-                    pass
+                new_embed, files = await _build_role_setup_payload(view.clan, role)
+                await interaction.edit_original_response(embed=new_embed, attachments=files, view=view)
 
-                await interaction.followup.send(
-                    f"⚠️ **Server của bạn chưa mở tính năng màu Gradient 2 màu (Yêu cầu Server Boost)!**\n"
-                    f"👉 Bot đã tự động áp dụng **màu đơn sắc chính {start_hex}** cho Role của bạn.",
-                    ephemeral=True
+                await auto_dismiss_notice(
+                    interaction,
+                    content=(
+                        f"⚠️ **Server của bạn chưa mở tính năng màu Gradient 2 màu (Yêu cầu Server Boost)!**\n"
+                        f"👉 Bot đã tự động áp dụng **màu đơn sắc chính {start_hex}** cho Role của bạn."
+                    ),
+                    delay=6
                 )
             except Exception as fb_err:
-                await interaction.followup.send(f"❌ Lỗi khi đổi màu role: `{fb_err}`", ephemeral=True)
+                await auto_dismiss_notice(interaction, content=f"❌ Lỗi khi đổi màu role: `{fb_err}`", delay=5)
         except Exception as e:
-            await interaction.followup.send(f"❌ Lỗi khi đổi màu role: `{e}`", ephemeral=True)
+            await auto_dismiss_notice(interaction, content=f"❌ Lỗi khi đổi màu role: `{e}`", delay=5)
 
 
 class ColorPaletteSelect(ui.Select):
@@ -3394,7 +3372,7 @@ class ColorPaletteSelect(ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         chosen_hex = self.values[0]
         view: "ClanRoleSetupView" = self.view
         guild = interaction.guild
@@ -3425,13 +3403,10 @@ class ColorPaletteSelect(ui.Select):
             view.clan["color_hex"] = chosen_hex
             view.clan["secondary_color_hex"] = None
 
-            new_embed = build_role_setup_embed(view.clan, role)
-            try:
-                await interaction.message.edit(embed=new_embed, view=view)
-            except Exception:
-                pass
+            new_embed, files = await _build_role_setup_payload(view.clan, role)
+            await interaction.edit_original_response(embed=new_embed, attachments=files, view=view)
 
-            await interaction.followup.send(f"🎨 Đã đổi màu Role thành công sang mã màu: **{chosen_hex}**!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content=f"🎨 Đã đổi màu Role thành công sang mã màu: **{chosen_hex}**!", delay=5)
         except discord.Forbidden:
             await interaction.followup.send("❌ Bot bị thiếu quyền `Manage Roles` để đổi màu role!", ephemeral=True)
         except Exception as e:
@@ -3466,53 +3441,47 @@ class ClanRoleSetupView(ui.View):
 
     @ui.button(label="Tách Nhóm (Hoist)", emoji="📌", style=discord.ButtonStyle.secondary, row=4)
     async def toggle_hoist_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         role = interaction.guild.get_role(int(self.clan["role_id"])) if self.clan.get("role_id") else None
         if not role:
-            await interaction.followup.send("❌ Không tìm thấy Role của băng trên server!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Không tìm thấy Role của băng trên server!", delay=5)
             return
 
         if role >= interaction.guild.me.top_role:
-            await interaction.followup.send("⚠️ Role này nằm cao hơn hoặc bằng Role của Bot!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="⚠️ Role này nằm cao hơn hoặc bằng Role của Bot!", delay=5)
             return
 
         try:
             new_hoist = not role.hoist
             await role.edit(hoist=new_hoist, reason=f"Chủ Băng bật/tắt hoist: {interaction.user.name}")
-            new_embed = build_role_setup_embed(self.clan, role)
-            try:
-                await interaction.message.edit(embed=new_embed, view=self)
-            except Exception:
-                pass
+            new_embed, files = await _build_role_setup_payload(self.clan, role)
+            await interaction.edit_original_response(embed=new_embed, attachments=files, view=self)
             status_text = "**BẬT** (Hiển thị riêng trên danh sách thành viên)" if new_hoist else "**TẮT** (Gộp chung với nhóm thông thường)"
-            await interaction.followup.send(f"📌 Đã chuyển trạng thái Tách nhóm (Hoist) sang: {status_text}!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content=f"📌 Đã chuyển trạng thái Tách nhóm (Hoist) sang: {status_text}!", delay=5)
         except Exception as e:
-            await interaction.followup.send(f"❌ Lỗi khi đổi trạng thái Hoist: `{e}`", ephemeral=True)
+            await auto_dismiss_notice(interaction, content=f"❌ Lỗi khi đổi trạng thái Hoist: `{e}`", delay=5)
 
     @ui.button(label="Cho Phép Tag", emoji="🔔", style=discord.ButtonStyle.secondary, row=4)
     async def toggle_mention_btn(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer()
         role = interaction.guild.get_role(int(self.clan["role_id"])) if self.clan.get("role_id") else None
         if not role:
-            await interaction.followup.send("❌ Không tìm thấy Role của băng trên server!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Không tìm thấy Role của băng trên server!", delay=5)
             return
 
         if role >= interaction.guild.me.top_role:
-            await interaction.followup.send("⚠️ Role này nằm cao hơn hoặc bằng Role của Bot!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="⚠️ Role này nằm cao hơn hoặc bằng Role của Bot!", delay=5)
             return
 
         try:
             new_mention = not role.mentionable
             await role.edit(mentionable=new_mention, reason=f"Chủ Băng bật/tắt mention: {interaction.user.name}")
-            new_embed = build_role_setup_embed(self.clan, role)
-            try:
-                await interaction.message.edit(embed=new_embed, view=self)
-            except Exception:
-                pass
+            new_embed, files = await _build_role_setup_payload(self.clan, role)
+            await interaction.edit_original_response(embed=new_embed, attachments=files, view=self)
             status_text = "**BẬT** (Bất kỳ ai cũng có thể tag role này)" if new_mention else "**TẮT** (Chỉ ai có quyền đặc biệt mới tag được)"
-            await interaction.followup.send(f"🔔 Đã chuyển trạng thái Cho phép Tag sang: {status_text}!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content=f"🔔 Đã chuyển trạng thái Cho phép Tag sang: {status_text}!", delay=5)
         except Exception as e:
-            await interaction.followup.send(f"❌ Lỗi khi đổi trạng thái Cho phép Tag: `{e}`", ephemeral=True)
+            await auto_dismiss_notice(interaction, content=f"❌ Lỗi khi đổi trạng thái Cho phép Tag: `{e}`", delay=5)
 
     @ui.button(label="Tải Icon Role", emoji="🖼️", style=discord.ButtonStyle.primary, row=4)
     async def upload_icon_guide_btn(self, interaction: discord.Interaction, button: ui.Button):

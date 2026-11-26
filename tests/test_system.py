@@ -326,8 +326,34 @@ async def run_tests():
     assert not any(p["party_id"] == p_id for p in upcoming_after)
     print("✅ 21. Hệ thống Kèo chơi game LFG & Vòng lặp tự động nhắc nhở trước giờ thi đấu chuẩn xác 100%.")
 
+    # 22. Kiểm tra Lưu trữ & Phân giải Ảnh Bền Vững (utils/image_storage.py)
+    from utils.image_storage import resolve_clan_logo, resolve_clan_banner, delete_local_asset, ensure_assets_dir
+    assets_dir = ensure_assets_dir()
+    fake_logo = assets_dir / "clan_999999_logo.png"
+    fake_logo.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+    local_clan = dict(clan)
+    local_clan["logo_url"] = f"local://{fake_logo.as_posix()}"
+    local_clan["banner_url"] = None
+
+    resolved_files = []
+    logo_ref = await resolve_clan_logo(local_clan, resolved_files, fallback_to_default=True)
+    banner_ref = await resolve_clan_banner(local_clan, resolved_files, member_count=2, leader_name="Vũ Đăng", fallback_to_default=True)
+    assert logo_ref == "attachment://clan_logo.png"
+    assert banner_ref == "attachment://default_banner.png"
+    assert len(resolved_files) == 2
+
+    res_embed = build_image_settings_embed(local_clan, default_logo_filename=logo_ref, default_banner_filename=banner_ref)
+    assert res_embed.thumbnail.url == "attachment://clan_logo.png"
+    assert res_embed.image.url == "attachment://default_banner.png"
+    assert "Lưu trữ bền vững" in res_embed.description
+    for rf in resolved_files:
+        rf.close()
+    delete_local_asset(local_clan["logo_url"])
+    assert not fake_logo.exists()
+    print("✅ 22. Hệ thống lưu trữ ảnh bền vững (local://) & fallback đồ họa mặc định hoạt động hoàn hảo 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 21 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 22 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db
