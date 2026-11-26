@@ -412,36 +412,46 @@ class ClanCommands(commands.Cog):
         )
 
         embed = discord.Embed(
-            title="💌 LỜI MỜI GIA NHẬP BĂNG ĐẢNG",
-            description=f"Chào {user.mention}!\nBạn vừa nhận được lời mời gia nhập băng **[{clan['tag']}] {clan['name']}** từ <@{inviter.id}>.",
+            title="💌 BẠN NHẬN ĐƯỢC LỜI MỜI GIA NHẬP BĂNG ĐẢNG",
+            description=f"Chào {user.mention}!\nCán Bộ <@{inviter.id}> đã gửi lời mời bạn gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}**!",
             color=discord.Color.blue(),
             timestamp=datetime.now()
         )
         embed.add_field(name="🏰 Tên Băng", value=f"[{clan['tag']}] {clan['name']}", inline=True)
         embed.add_field(name="👑 Chủ Băng", value=f"<@{clan['leader_id']}>", inline=True)
+        embed.add_field(name="⏳ Hạn Lời Mời", value=f"<t:{expires_at}:R>", inline=True)
         embed.add_field(name="📜 Khẩu Hiệu", value=clan.get("description") or "Chưa có khẩu hiệu.", inline=False)
-        embed.add_field(name="⏳ Hạn Chót", value=f"Lời mời tự hết hạn vào: <t:{expires_at}:R>", inline=False)
-        embed.set_footer(text="Bấm nút bên dưới để Chấp Nhận hoặc Từ Chối")
+        embed.set_footer(text=f"{guild.name} • Bấm nút bên dưới để Chấp Nhận hoặc Từ Chối", icon_url=guild.icon.url if guild.icon else None)
 
         view = RequestView(request_id=req_id, bot=self.bot, is_invite=True)
-        msg = await interaction.followup.send(content=user.mention, embed=embed, view=view)
+        msg = None
+        sent_where = None
+
+        # Ưu tiên gửi trực tiếp kèm nút bấm qua DM để không bị kẹt kênh riêng
+        try:
+            msg = await user.send(embed=embed, view=view)
+            sent_where = "DM"
+        except (discord.Forbidden, discord.HTTPException):
+            private_ids = {
+                int(x) for x in (clan.get("text_channel_id"), clan.get("log_channel_id")) if x
+            }
+            if interaction.channel and interaction.channel.id not in private_ids:
+                if interaction.channel.permissions_for(user).view_channel and interaction.channel.permissions_for(guild.me).send_messages:
+                    msg = await interaction.followup.send(content=user.mention, embed=embed, view=view)
+                    sent_where = f"<#{interaction.channel.id}>"
+
+        if not msg:
+            await self.bot.db.update_request_status(req_id, "CANCELLED")
+            await interaction.followup.send(
+                f"❌ Không thể gửi lời mời tới {user.mention} vì họ đã **khóa tin nhắn riêng (DM)** và không thể xem kênh này! Hãy mời ở một kênh công khai.",
+                ephemeral=True
+            )
+            return
 
         # Lưu message_id
         await self.bot.db.update_request_message_id(req_id, msg.id)
-
-        # Gửi DM thông báo nhận lời mời
-        dm_invite = discord.Embed(
-            title="💌 BẠN NHẬN ĐƯỢC LỜI MỜI VÀO BĂNG",
-            description=f"Cán Bộ <@{inviter.id}> đã gửi lời mời bạn gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}**!",
-            color=discord.Color.blue(),
-            timestamp=datetime.now()
-        )
-        dm_invite.add_field(name="🏰 Tên Băng", value=f"[{clan['tag']}] {clan['name']}", inline=True)
-        dm_invite.add_field(name="👑 Chủ Băng", value=f"<@{clan['leader_id']}>", inline=True)
-        dm_invite.add_field(name="⏳ Hạn Lời Mời", value=f"<t:{expires_at}:R>", inline=True)
-        dm_invite.add_field(name="👉 Thao Tác", value=f"Hãy vào máy chủ **{guild.name}** để bấm nút [✅ Chấp Nhận Lời Mời] nhé!", inline=False)
-        dm_invite.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        await send_dm_notification(user, dm_invite)
+        if sent_where == "DM":
+            await interaction.followup.send(f"✅ Đã gửi lời mời tham gia băng tới {user.mention} qua tin nhắn riêng (DM) thành công!", ephemeral=True)
 
     @clan_group.command(name="apply", description="Nộp đơn xin gia nhập một băng đảng")
     @app_commands.describe(ten_bang="Tên hoặc Tag của băng muốn xin vào (bỏ trống để chọn danh sách)")

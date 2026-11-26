@@ -593,7 +593,7 @@ def build_image_settings_embed(
         f"🖼️ **Trạng thái Logo:** {logo_status}\n"
         f"🎨 **Trạng thái Banner:** {banner_status}\n\n"
         "**👉 HƯỚNG DẪN TẢI ẢNH LÊN TIỆN LỢI:**\n"
-        "• **Cách 1 (Nhanh nhất):** Bấm nút **`[📤 Gửi Tệp Logo]`** hoặc **`[🎨 Gửi Tệp Banner]`** bên dưới ➔ Kéo thả hoặc chọn file ảnh gửi thẳng vào kênh chat này trong 60 giây *(Bot sẽ tự động tải về lưu trữ bền vững và xóa tin nhắn để giữ sạch phòng chat)*.\n"
+        "• **Cách 1 (Nhanh nhất):** Bấm nút **`[📤 Gửi Tệp Logo]`** hoặc **`[🎨 Gửi Tệp Banner]`** bên dưới ➔ Kéo thả hoặc chọn file ảnh gửi thẳng vào kênh chat này trong 15 phút *(Bot sẽ tự động tải về lưu trữ bền vững và xóa tin nhắn để giữ sạch phòng chat)*.\n"
         "• **Cách 2:** Dùng lệnh Slash Command `/clan upload-image loai:[logo/banner] file:[chọn tệp]`.\n"
         "• **Cách 3:** Bấm **`[🔗 Dán Link URL]`** nếu bạn đã có sẵn link ảnh online.\n"
         "• **Khôi phục:** Bấm các nút **`[🔄 Về Mặc Định]`** nếu muốn chuyển lại về đồ họa Canvas tự động của bot."

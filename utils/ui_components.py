@@ -1829,7 +1829,7 @@ class LeaderboardInteractiveView(SafeView):
 class LeaveClanConfirmView(SafeView):
     """View xác nhận 2 lớp cho việc tự nguyện rời băng"""
     def __init__(self, clan: Dict[str, Any], bot):
-        super().__init__(timeout=60)
+        super().__init__(timeout=900)
         self.clan = clan
         self.bot = bot
 
@@ -2266,38 +2266,65 @@ class MemberInviteUserSelect(ui.UserSelect):
         )
 
         embed = discord.Embed(
-            title="💌 LỜI MỜI GIA NHẬP BĂNG ĐẢNG",
-            description=f"Chào {target_user.mention}!\nBạn vừa nhận được lời mời gia nhập băng **[{clan['tag']}] {clan['name']}** từ Cán Bộ <@{inviter.id}>.",
+            title="💌 BẠN NHẬN ĐƯỢC LỜI MỜI GIA NHẬP BĂNG ĐẢNG",
+            description=f"Chào {target_user.mention}!\nCán Bộ <@{inviter.id}> đã gửi lời mời bạn gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}**!",
             color=discord.Color.blue(),
             timestamp=datetime.now()
         )
         embed.add_field(name="🏰 Tên Băng", value=f"[{clan['tag']}] {clan['name']}", inline=True)
         embed.add_field(name="👑 Chủ Băng", value=f"<@{clan['leader_id']}>", inline=True)
+        embed.add_field(name="⏳ Hạn Lời Mời", value=f"<t:{expires_at}:R>", inline=True)
         embed.add_field(name="📜 Khẩu Hiệu", value=clan.get("description") or "Chưa có khẩu hiệu.", inline=False)
-        embed.add_field(name="⏳ Hạn Chót", value=f"Lời mời tự hết hạn vào: <t:{expires_at}:R>", inline=False)
-        embed.set_footer(text="Bấm nút bên dưới để Chấp Nhận hoặc Từ Chối")
+        embed.set_footer(text=f"{guild.name} • Bấm nút bên dưới để Chấp Nhận hoặc Từ Chối", icon_url=guild.icon.url if guild.icon else None)
 
         view = RequestView(request_id=req_id, bot=self.bot, is_invite=True)
-        clan_text_ch = guild.get_channel(int(clan["text_channel_id"])) if clan.get("text_channel_id") else None
-        target_ch = clan_text_ch or interaction.channel
-        msg = await target_ch.send(content=target_user.mention, embed=embed, view=view)
+        sent_where = None
+        msg = None
+
+        # Ưu tiên gửi trực tiếp kèm nút bấm qua DM để người được mời bấm ngay (không bị kẹt kênh riêng)
+        try:
+            msg = await target_user.send(embed=embed, view=view)
+            sent_where = "DM"
+        except (discord.Forbidden, discord.HTTPException):
+            # Nếu người dùng khóa DM, tìm kênh công khai mà họ có quyền xem (tuyệt đối không gửi vào kênh riêng của băng)
+            private_ids = {
+                int(x) for x in (clan.get("text_channel_id"), clan.get("log_channel_id")) if x
+            }
+            candidate_ch = None
+            if interaction.channel and interaction.channel.id not in private_ids:
+                perms = interaction.channel.permissions_for(target_user)
+                bot_perms = interaction.channel.permissions_for(guild.me)
+                if perms.view_channel and bot_perms.send_messages:
+                    candidate_ch = interaction.channel
+
+            if not candidate_ch:
+                settings = await self.bot.db.get_guild_settings(guild.id)
+                hub_id = settings.get("hub_channel_id") if settings else None
+                for ch in [
+                    guild.get_channel(int(hub_id)) if hub_id else None,
+                    guild.system_channel,
+                    *guild.text_channels
+                ]:
+                    if ch and ch.id not in private_ids:
+                        if ch.permissions_for(target_user).view_channel and ch.permissions_for(guild.me).send_messages:
+                            candidate_ch = ch
+                            break
+
+            if candidate_ch:
+                msg = await candidate_ch.send(content=target_user.mention, embed=embed, view=view)
+                sent_where = f"<#{candidate_ch.id}>"
+
+        if not msg:
+            await self.bot.db.update_request_status(req_id, "CANCELLED")
+            await interaction.followup.send(
+                f"❌ Không thể gửi lời mời tới {target_user.mention} vì họ đã **khóa tin nhắn riêng (DM)** và không có kênh công khai phù hợp để nhận lời mời!",
+                ephemeral=True
+            )
+            return
+
         await self.bot.db.update_request_message_id(req_id, msg.id)
-
-        # Gửi DM thông báo nhận lời mời
-        dm_invite = discord.Embed(
-            title="💌 BẠN NHẬN ĐƯỢC LỜI MỜI VÀO BĂNG",
-            description=f"Cán Bộ <@{inviter.id}> đã gửi lời mời bạn gia nhập băng **[{clan['tag']}] {clan['name']}** tại máy chủ **{guild.name}**!",
-            color=discord.Color.blue(),
-            timestamp=datetime.now()
-        )
-        dm_invite.add_field(name="🏰 Tên Băng", value=f"[{clan['tag']}] {clan['name']}", inline=True)
-        dm_invite.add_field(name="👑 Chủ Băng", value=f"<@{clan['leader_id']}>", inline=True)
-        dm_invite.add_field(name="⏳ Hạn Lời Mời", value=f"<t:{expires_at}:R>", inline=True)
-        dm_invite.add_field(name="👉 Thao Tác", value=f"Hãy vào kênh <#{target_ch.id}> trên máy chủ **{guild.name}** để bấm nút [✅ Chấp Nhận Lời Mời] nhé!", inline=False)
-        dm_invite.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
-        await send_dm_notification(target_user, dm_invite)
-
-        await interaction.followup.send(f"✅ Đã gửi lời mời tham gia băng tới {target_user.mention} thành công!", ephemeral=True)
+        where_note = "qua tin nhắn riêng (DM)" if sent_where == "DM" else f"tại kênh {sent_where} (do người này khóa DM)"
+        await interaction.followup.send(f"✅ Đã gửi lời mời tham gia băng tới {target_user.mention} {where_note} thành công!", ephemeral=True)
 
 
 class ClanMemberManagementView(SafeView):
@@ -2941,9 +2968,17 @@ class RequestView(SafeView):
             return
 
         clan = await self.bot.db.get_clan_by_id(req["clan_id"])
-        guild = interaction.guild
+        guild = interaction.guild or self.bot.get_guild(int(req["guild_id"]))
+        if not guild:
+            await interaction.followup.send("❌ Không tìm thấy máy chủ của yêu cầu này!", ephemeral=True)
+            return
 
         if decision == "ACCEPTED":
+            existing_clan = await self.bot.db.get_clan_by_member(guild.id, int(req["user_id"]))
+            if existing_clan:
+                await interaction.followup.send(f"❌ Người này đã tham gia băng **{existing_clan['name']}** rồi!", ephemeral=True)
+                return
+
             # Kiểm tra sĩ số
             count = await self.bot.db.get_member_count(clan["clan_id"])
             if count >= clan["max_members"]:
@@ -3003,7 +3038,7 @@ class RequestView(SafeView):
                 dm_accepted.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
                 await send_dm_notification(target_user, dm_accepted)
             elif self.is_invite:
-                inviter = guild.get_member(int(req["actor_id"]))
+                inviter = guild.get_member(int(req["actor_id"])) or self.bot.get_user(int(req["actor_id"]))
                 if inviter:
                     dm_inv_acc = discord.Embed(
                         title="✅ LỜI MỜI ĐÃ ĐƯỢC CHẤP NHẬN",
@@ -3036,7 +3071,7 @@ class RequestView(SafeView):
                     dm_reject.set_footer(text=guild.name, icon_url=guild.icon.url if guild.icon else None)
                     await send_dm_notification(target_user, dm_reject)
             else:
-                inviter = guild.get_member(int(req["actor_id"]))
+                inviter = guild.get_member(int(req["actor_id"])) or self.bot.get_user(int(req["actor_id"]))
                 if inviter:
                     dm_inv_rej = discord.Embed(
                         title="❌ LỜI MỜI ĐÃ BỊ TỪ CHỐI",
@@ -3055,7 +3090,10 @@ class RequestView(SafeView):
         except Exception:
             pass
 
-        res_msg = f"✅ Đã chấp nhận <@{req['user_id']}> vào băng **{clan['name']}**!" if decision == "ACCEPTED" else f"❌ Đã từ chối yêu cầu của <@{req['user_id']}>."
+        if decision == "ACCEPTED":
+            res_msg = f"🎉 Bạn đã gia nhập băng **[{clan['tag']}] {clan['name']}** thành công!" if self.is_invite else f"✅ Đã chấp nhận <@{req['user_id']}> vào băng **{clan['name']}**!"
+        else:
+            res_msg = f"❌ Bạn đã từ chối lời mời gia nhập băng **{clan['name']}**." if self.is_invite else f"❌ Đã từ chối yêu cầu của <@{req['user_id']}>."
         await interaction.followup.send(res_msg, ephemeral=True)
 
 
@@ -3365,7 +3403,7 @@ class ClanImageUploadDashboardView(SafeView):
         await interaction.response.defer()
         prompt_msg = await interaction.followup.send(
             f"📸 **BƯỚC TIẾP THEO — HÃY GỬI ẢNH {label.upper()} VÀO KHUNG CHAT!**\n"
-            f"👉 Bạn chỉ cần **kéo thả hoặc bấm nút `+` gửi 1 tấm ảnh vào kênh này ngay bây giờ** *(như gửi ảnh bình thường, trong 60 giây)*.\n"
+            f"👉 Bạn chỉ cần **kéo thả hoặc bấm nút `+` gửi 1 tấm ảnh vào kênh này ngay bây giờ** *(như gửi ảnh bình thường, trong 15 phút)*.\n"
             f"*(Bot sẽ tự động nhận ảnh, thu hồi tin nhắn của bạn để giữ sạch phòng chat và cập nhật ngay cho Băng!)*",
             ephemeral=True,
             wait=True
@@ -3375,10 +3413,10 @@ class ClanImageUploadDashboardView(SafeView):
             return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and len(m.attachments) > 0
 
         try:
-            msg = await self.bot.wait_for("message", timeout=60.0, check=check)
+            msg = await self.bot.wait_for("message", timeout=900.0, check=check)
         except asyncio.TimeoutError:
             try:
-                await prompt_msg.edit(content="⏱️ **Hết thời gian chờ gửi ảnh (60s).** Bạn có thể bấm nút thử lại bất kỳ lúc nào!")
+                await prompt_msg.edit(content="⏱️ **Hết thời gian chờ gửi ảnh (15 phút).** Bạn có thể bấm nút thử lại bất kỳ lúc nào!")
                 await asyncio.sleep(5)
                 await prompt_msg.delete()
             except Exception:
@@ -3878,7 +3916,7 @@ class ClanRoleSetupView(SafeView):
 
         await interaction.response.defer()
         prompt_msg = await interaction.followup.send(
-            "🌟 **HÃY GỬI ẢNH ICON ROLE VÀO KHUNG CHAT (60 GIÂY)**\n"
+            "🌟 **HÃY GỬI ẢNH ICON ROLE VÀO KHUNG CHAT (15 PHÚT)**\n"
             "👉 Bạn chỉ cần **gửi 1 ảnh vuông (PNG/JPG, dưới 256KB)** vào kênh này ngay bây giờ *(như gửi ảnh bình thường)*.\n"
             "*(Lưu ý: Discord yêu cầu máy chủ đạt **Boost Cấp 2** mới có thể gắn Icon cho Role)*",
             ephemeral=True,
@@ -3889,10 +3927,10 @@ class ClanRoleSetupView(SafeView):
             return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and len(m.attachments) > 0
 
         try:
-            msg = await self.bot.wait_for("message", timeout=60.0, check=check)
+            msg = await self.bot.wait_for("message", timeout=900.0, check=check)
         except asyncio.TimeoutError:
             try:
-                await prompt_msg.edit(content="⏱️ **Hết thời gian chờ gửi ảnh Icon Role (60s).** Bạn có thể bấm nút thử lại bất kỳ lúc nào!")
+                await prompt_msg.edit(content="⏱️ **Hết thời gian chờ gửi ảnh Icon Role (15 phút).** Bạn có thể bấm nút thử lại bất kỳ lúc nào!")
                 await asyncio.sleep(5)
                 await prompt_msg.delete()
             except Exception:
@@ -3940,7 +3978,7 @@ class ClanRoleSetupView(SafeView):
 class JoinModeSelectView(SafeView):
     """View chọn chế độ tuyển quân"""
     def __init__(self, clan_id: int, current_mode: str, bot):
-        super().__init__(timeout=60)
+        super().__init__(timeout=900)
         self.clan_id = clan_id
         self.bot = bot
 
@@ -4103,9 +4141,9 @@ class LogsPaginationView(SafeView):
 
 
 class TransferConfirmView(SafeView):
-    """View xác nhận chuyển giao quyền Chủ Băng (30 giây)"""
+    """View xác nhận chuyển giao quyền Chủ Băng (15 phút)"""
     def __init__(self, clan: Dict[str, Any], old_leader_id: int, new_leader_id: int, bot):
-        super().__init__(timeout=30)
+        super().__init__(timeout=900)
         self.clan = clan
         self.old_leader_id = old_leader_id
         self.new_leader_id = new_leader_id
@@ -4171,7 +4209,7 @@ class TransferConfirmView(SafeView):
 class ForceDeleteConfirmView(SafeView):
     """View xác nhận 2 lớp cho lệnh /clan-admin force-delete"""
     def __init__(self, clan: Dict[str, Any], reason: str, bot):
-        super().__init__(timeout=60)
+        super().__init__(timeout=900)
         self.clan = clan
         self.reason = reason
         self.bot = bot
