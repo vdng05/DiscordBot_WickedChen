@@ -44,11 +44,34 @@ from utils.image_storage import (
 
 logger = setup_logging("UIComponents")
 
+
+class SafeView(ui.View):
+    """Base View tự động bắt mọi lỗi ngoại lệ để không bao giờ bị treo 'did not respond in time'."""
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item: ui.Item) -> None:
+        logger.error(f"Lỗi tương tác trên {self.__class__.__name__} ({item}): {error}", exc_info=True)
+        await auto_dismiss_notice(
+            interaction,
+            content="❌ Đã xảy ra lỗi khi xử lý thao tác này! Vui lòng mở lại `/clan hub` hoặc thử lại sau.",
+            delay=6
+        )
+
+
+class SafeModal(ui.Modal):
+    """Base Modal tự động bắt mọi lỗi ngoại lệ khi người dùng bấm Gửi."""
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        logger.error(f"Lỗi Modal {self.__class__.__name__}: {error}", exc_info=True)
+        await auto_dismiss_notice(
+            interaction,
+            content="❌ Đã xảy ra lỗi khi xử lý biểu mẫu này! Vui lòng kiểm tra lại thông tin và thử lại.",
+            delay=6
+        )
+
+
 # =============================================================================
 # MODALS
 # =============================================================================
 
-class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
+class CreateClanModal(SafeModal, title="🏰 Thành Lập Băng Đảng Mới"):
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
@@ -318,9 +341,9 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
             await interaction.followup.send(f"❌ Đã xảy ra lỗi khi tạo băng: `{err}`", ephemeral=True)
 
 
-class RenameClanModal(ui.Modal):
+class RenameClanModal(SafeModal):
     def __init__(self, clan: Dict[str, Any], bot):
-        super().__init__(title=f"✏️ Đổi Thông Tin: {clan['name']}")
+        super().__init__(title=f"✏️ Đổi Thông Tin: {clan['name']}"[:45])
         self.clan = clan
         self.bot = bot
 
@@ -426,7 +449,7 @@ class RenameClanModal(ui.Modal):
         await interaction.followup.send(f"✅ Đã đổi tên và khẩu hiệu thành công sang: **[{tag}] {name}**!", ephemeral=True)
 
 
-class ColorClanModal(ui.Modal, title="🎨 Đổi Màu Sắc Role Băng"):
+class ColorClanModal(SafeModal, title="🎨 Đổi Màu Sắc Role Băng"):
     def __init__(self, clan: Dict[str, Any], bot):
         super().__init__()
         self.clan = clan
@@ -472,7 +495,7 @@ class ColorClanModal(ui.Modal, title="🎨 Đổi Màu Sắc Role Băng"):
         await interaction.followup.send(f"✅ Đã cập nhật màu Role thành công sang mã màu: **{clean_hex}**!", ephemeral=True)
 
 
-class RoleNameModal(ui.Modal, title="✏️ Đổi Tên Hiển Thị Role Băng"):
+class RoleNameModal(SafeModal, title="✏️ Đổi Tên Hiển Thị Role Băng"):
     def __init__(self, clan: Dict[str, Any], bot):
         super().__init__()
         self.clan = clan
@@ -519,7 +542,7 @@ class RoleNameModal(ui.Modal, title="✏️ Đổi Tên Hiển Thị Role Băng"
 
 
 
-class ImagesClanModal(ui.Modal, title="🖼️ Dán Link URL Logo & Banner"):
+class ImagesClanModal(SafeModal, title="🖼️ Dán Link URL Logo & Banner"):
     def __init__(self, clan: Dict[str, Any], bot, parent_view: Optional[Any] = None):
         super().__init__()
         self.clan = clan
@@ -584,7 +607,7 @@ class ImagesClanModal(ui.Modal, title="🖼️ Dán Link URL Logo & Banner"):
             await auto_dismiss_notice(interaction, content="✅ Đã cập nhật Logo và Banner hồ sơ thành công!", delay=5)
 
 
-class GradientColorModal(ui.Modal, title="🌈 Nhập Dải Màu Gradient Tùy Chọn"):
+class GradientColorModal(SafeModal, title="🌈 Nhập Dải Màu Gradient Tùy Chọn"):
     """Modal nhập dải màu 2 màu chuyển sắc Gradient cho Role Băng (Yêu cầu Server Boost)"""
     def __init__(self, clan: Dict[str, Any], bot):
         super().__init__()
@@ -686,9 +709,9 @@ class GradientColorModal(ui.Modal, title="🌈 Nhập Dải Màu Gradient Tùy C
             await interaction.followup.send(f"❌ Lỗi khi đổi màu role: `{e}`", ephemeral=True)
 
 
-class ApplyClanModal(ui.Modal):
+class ApplyClanModal(SafeModal):
     def __init__(self, clan: Dict[str, Any], bot):
-        super().__init__(title=f"📝 Đơn Xin Vào: {clan['name']}")
+        super().__init__(title=f"📝 Đơn Xin Vào: {clan['name']}"[:45])
         self.clan = clan
         self.bot = bot
 
@@ -826,14 +849,14 @@ class ApplyClanModal(ui.Modal):
         await interaction.followup.send(f"✅ Đơn xin gia nhập của bạn đã được gửi đến ban cán bộ băng **[{clan['tag']}] {clan['name']}**!", ephemeral=True)
 
 
-class DisbandClanModal(ui.Modal):
+class DisbandClanModal(SafeModal):
     def __init__(self, clan: Dict[str, Any], bot):
-        super().__init__(title=f"⚠️ Giải Tán Băng: {clan['name']}")
+        super().__init__(title=f"⚠️ Giải Tán Băng: {clan['name']}"[:45])
         self.clan = clan
         self.bot = bot
 
         self.confirm_name = ui.TextInput(
-            label=f'Gõ chính xác tên băng: "{clan["name"]}"',
+            label=f'Gõ tên băng: "{clan["name"]}"'[:45],
             placeholder=clan["name"],
             required=True
         )
@@ -892,7 +915,7 @@ class DisbandClanModal(ui.Modal):
 # MODAL TẠO KÈO PARTY NHANH 1-CLICK CHO MEMBER
 # =============================================================================
 
-class ClanQuickPartyModal(ui.Modal, title="🎮 Tạo Kèo Rủ Chơi Game Nhanh"):
+class ClanQuickPartyModal(SafeModal, title="🎮 Tạo Kèo Rủ Chơi Game Nhanh"):
     def __init__(self, clan: Dict[str, Any], bot):
         super().__init__()
         self.clan = clan
@@ -913,7 +936,7 @@ class ClanQuickPartyModal(ui.Modal, title="🎮 Tạo Kèo Rủ Chơi Game Nhanh
         required=True
     )
     party_time = ui.TextInput(
-        label="Thời Gian Bắt Đầu (Ví dụ: 21:00 hoặc để trống)",
+        label="Thời Gian Bắt Đầu (21:00 hoặc để trống)",
         placeholder="Để trống để chơi ngay khi đủ người!",
         required=False
     )
@@ -966,7 +989,7 @@ class ClanQuickPartyModal(ui.Modal, title="🎮 Tạo Kèo Rủ Chơi Game Nhanh
         await interaction.followup.send(f"✅ Đã tạo kèo game thành công tại kênh {text_ch.mention}!", ephemeral=True)
 
 
-class ClanChallengeModal(ui.Modal, title="⚔️ Soạn Thư Thách Đấu Băng Đảng"):
+class ClanChallengeModal(SafeModal, title="⚔️ Soạn Thư Thách Đấu Băng Đảng"):
     """Modal nhập thông tin thư thách đấu gửi tới 1 băng cụ thể hoặc toàn thể các băng"""
     def __init__(self, source_clan: Dict[str, Any], target_clan: Optional[Dict[str, Any]], bot):
         super().__init__()
@@ -1096,7 +1119,7 @@ class ClanChallengeModal(ui.Modal, title="⚔️ Soạn Thư Thách Đấu Băng
         await auto_dismiss_notice(interaction, content=f"⚔️ **Đã gửi Thư Thách Đấu ({game}) thành công tới:** {target_summary}!", delay=6)
 
 
-class ClanChallengeResponseView(ui.View):
+class ClanChallengeResponseView(SafeView):
     """Nút bấm Chấp Nhận / Từ Chối trên Thư Thách Đấu tại kênh băng đối thủ"""
     def __init__(
         self,
@@ -1223,10 +1246,31 @@ class ClanChallengeTargetSelect(ui.Select):
         await interaction.response.send_modal(modal)
 
 
-class ClanChallengeTargetView(ui.View):
+def build_challenge_target_embed(other_clans: List[Dict[str, Any]]) -> discord.Embed:
+    """Tạo Embed cho Trung Tâm Thách Đấu & Lập Kèo (tự động báo nếu là băng duy nhất trên server)."""
+    if other_clans:
+        desc = (
+            "Chọn hình thức bạn muốn thực hiện bên dưới:\n\n"
+            f"• **⚔️ Gửi Thư Thách Đấu:** Chọn 1 trong **{len(other_clans)}** băng đối thủ (hoặc **Tất cả các băng**) từ menu thả xuống để nhập Tựa Game, Thể Thức và Nội Dung khiêu chiến!\n"
+            "• **🎮 Lập Kèo Nội Bộ:** Bấm nút bên dưới để rủ anh em cùng băng lập team chơi game."
+        )
+    else:
+        desc = (
+            "ℹ️ **Lưu ý:** Băng của bạn hiện đang là **băng đảng duy nhất** trong máy chủ này nên chưa có băng đối thủ để gửi thư thách đấu!\n\n"
+            "👉 Bạn có thể bấm nút **[🎮 Lập Kèo Nội Bộ Băng Mình]** bên dưới để rủ anh em cùng băng lập team chiến game nhé."
+        )
+    return discord.Embed(
+        title="⚔️ TRUNG TÂM THÁCH ĐẤU & LẬP KÈO BĂNG ĐẢNG",
+        description=desc,
+        color=discord.Color.orange(),
+        timestamp=datetime.now()
+    )
+
+
+class ClanChallengeTargetView(SafeView):
     """Bảng chọn hình thức: Gửi Thư Thách Đấu (1 băng / Tất cả băng) hoặc Lập Kèo Nội Bộ"""
     def __init__(self, source_clan: Dict[str, Any], other_clans: List[Dict[str, Any]], bot):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.source_clan = source_clan
         self.bot = bot
 
@@ -1258,7 +1302,7 @@ class ClanChallengeTargetView(ui.View):
 # VIEWS & BUTTONS
 # =============================================================================
 
-class ClanInfoView(ui.View):
+class ClanInfoView(SafeView):
     """View tương tác động dưới /clan info tùy theo vai trò của người xem"""
     def __init__(self, clan_id: int, can_apply: bool = False, is_member: bool = False, is_leader: bool = False, bot: Any = None):
         super().__init__(timeout=None)
@@ -1377,7 +1421,7 @@ class ClanInfoView(ui.View):
             await self.bot.dismiss_user_panel(interaction.user.id)
 
 
-class WelcomeGreetingView(ui.View):
+class WelcomeGreetingView(SafeView):
     """Nút bấm tương tác chào đón thành viên mới vào kênh chat băng"""
     def __init__(self, new_member_id: int):
         super().__init__(timeout=86400)  # 24 giờ
@@ -1411,7 +1455,7 @@ class WelcomeGreetingView(ui.View):
         await interaction.response.send_message(random.choice(greetings))
 
 
-class CustomTitleModal(ui.Modal):
+class CustomTitleModal(SafeModal):
     """Modal đặt hoặc gỡ danh hiệu tùy chỉnh nội bộ cho thành viên"""
     def __init__(self, target_member: discord.Member, clan: Dict[str, Any], bot):
         super().__init__(title=f"🎖️ Danh Hiệu: {target_member.display_name[:15]}")
@@ -1487,7 +1531,7 @@ class ClanCustomTitleMemberSelect(ui.Select):
         await interaction.response.send_modal(modal)
 
 
-class ClanCustomTitleMemberSelectView(ui.View):
+class ClanCustomTitleMemberSelectView(SafeView):
     """View bọc Menu chọn thành viên trao danh hiệu"""
     def __init__(self, clan: Dict[str, Any], members: List[Dict[str, Any]], guild: discord.Guild, bot):
         super().__init__(timeout=120)
@@ -1540,10 +1584,10 @@ class ClanSelectDropdown(ui.Select):
         await interaction.followup.send(embed=embed, files=files, view=view, ephemeral=True)
 
 
-class ClanDetailView(ui.View):
+class ClanDetailView(SafeView):
     """View hiển thị hồ sơ chi tiết của băng được chọn từ danh sách"""
     def __init__(self, clan: Dict[str, Any], can_apply: bool, is_member: bool, is_leader: bool, bot):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clan = clan
         self.bot = bot
 
@@ -1633,17 +1677,17 @@ class QuickApplyDropdown(ui.Select):
         await interaction.response.send_modal(modal)
 
 
-class QuickApplySelectView(ui.View):
+class QuickApplySelectView(SafeView):
     """View phụ chứa Dropdown nộp đơn nhanh"""
     def __init__(self, clans: List[Dict[str, Any]], bot):
         super().__init__(timeout=120)
         self.add_item(QuickApplyDropdown(clans=clans, bot=bot))
 
 
-class ClanListInteractiveView(ui.View):
+class ClanListInteractiveView(SafeView):
     """View tương tác cho Bảng danh mục Băng Đảng kèm Dropdown và Nút Lập Băng Mới"""
     def __init__(self, clans: List[Dict[str, Any]], bot):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clans = clans
         self.bot = bot
 
@@ -1707,10 +1751,10 @@ class ClanListInteractiveView(ui.View):
 # BẢNG XẾP HẠNG TƯƠNG TÁC (LEADERBOARD INTERACTIVE VIEW)
 # =============================================================================
 
-class LeaderboardInteractiveView(ui.View):
+class LeaderboardInteractiveView(SafeView):
     """View tương tác động chuyển đổi giữa các tiêu chí Bảng Xếp Hạng Server"""
     def __init__(self, guild_name: str, bot, initial_criteria: str = "level"):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.guild_name = guild_name
         self.bot = bot
         self.current_criteria = initial_criteria
@@ -1764,7 +1808,7 @@ class LeaderboardInteractiveView(ui.View):
 # RỜI BĂNG TỰ NGUYỆN (LEAVE CLAN CONFIRM VIEW)
 # =============================================================================
 
-class LeaveClanConfirmView(ui.View):
+class LeaveClanConfirmView(SafeView):
     """View xác nhận 2 lớp cho việc tự nguyện rời băng"""
     def __init__(self, clan: Dict[str, Any], bot):
         super().__init__(timeout=60)
@@ -1828,7 +1872,7 @@ class LeaveClanConfirmView(ui.View):
 # QUẢN LÝ THÀNH VIÊN & NHÂN SỰ (MEMBER MANAGEMENT)
 # =============================================================================
 
-class KickMemberModal(ui.Modal):
+class KickMemberModal(SafeModal):
     """Modal nhập lý do trục xuất thành viên"""
     def __init__(self, target_member: discord.Member, clan: Dict[str, Any], bot):
         super().__init__(title=f"👢 Trục Xuất: {target_member.display_name[:15]}")
@@ -1934,7 +1978,7 @@ class KickSelectDropdown(ui.Select):
         await interaction.response.send_modal(modal)
 
 
-class KickSelectView(ui.View):
+class KickSelectView(SafeView):
     def __init__(self, clan: Dict[str, Any], eligible_members: List[Dict[str, Any]], guild: discord.Guild, bot):
         super().__init__(timeout=120)
         self.add_item(KickSelectDropdown(clan, eligible_members, guild, bot))
@@ -2026,7 +2070,7 @@ class PromoteSelectDropdown(ui.Select):
         await interaction.followup.send(f"🎉 Đã thăng chức cho <@{target_uid}> lên **{RANK_NAMES[new_rank]}** thành công!", ephemeral=True)
 
 
-class PromoteSelectView(ui.View):
+class PromoteSelectView(SafeView):
     def __init__(self, clan: Dict[str, Any], eligible_members: List[Dict[str, Any]], guild: discord.Guild, bot):
         super().__init__(timeout=120)
         self.add_item(PromoteSelectDropdown(clan, eligible_members, guild, bot))
@@ -2111,7 +2155,7 @@ class DemoteSelectDropdown(ui.Select):
         await interaction.followup.send(f"📉 Đã giáng chức <@{target_uid}> xuống **{RANK_NAMES[new_rank]}** thành công!", ephemeral=True)
 
 
-class DemoteSelectView(ui.View):
+class DemoteSelectView(SafeView):
     def __init__(self, clan: Dict[str, Any], eligible_members: List[Dict[str, Any]], guild: discord.Guild, bot):
         super().__init__(timeout=120)
         self.add_item(DemoteSelectDropdown(clan, eligible_members, guild, bot))
@@ -2154,7 +2198,7 @@ class TransferLeaderSelectDropdown(ui.Select):
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-class TransferLeaderSelectView(ui.View):
+class TransferLeaderSelectView(SafeView):
     def __init__(self, clan: Dict[str, Any], members: List[Dict[str, Any]], guild: discord.Guild, bot):
         super().__init__(timeout=120)
         self.add_item(TransferLeaderSelectDropdown(clan, members, guild, bot))
@@ -2238,10 +2282,10 @@ class MemberInviteUserSelect(ui.UserSelect):
         await interaction.followup.send(f"✅ Đã gửi lời mời tham gia băng tới {target_user.mention} thành công!", ephemeral=True)
 
 
-class ClanMemberManagementView(ui.View):
+class ClanMemberManagementView(SafeView):
     """Trung Tâm Điều Khiển Quản Lý Thành Viên & Nhân Sự 1-Click"""
     def __init__(self, clan: Dict[str, Any], user: discord.Member, bot):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clan = clan
         self.user = user
         self.bot = bot
@@ -2388,10 +2432,10 @@ async def return_to_hub(interaction: discord.Interaction, user: Any, bot: Any):
     await interaction.edit_original_response(content=None, embed=embed, attachments=[file], view=view)
 
 
-class ClanQuestsView(ui.View):
+class ClanQuestsView(SafeView):
     """View hiển thị Bảng Nhiệm Vụ Tuần hỗ trợ quay lại Hub và đóng bảng"""
     def __init__(self, clan: Dict[str, Any], user: Any, bot: Any):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clan = clan
         self.user = user
         self.bot = bot
@@ -2412,10 +2456,10 @@ class ClanQuestsView(ui.View):
             await self.bot.dismiss_user_panel(interaction.user.id)
 
 
-class ClanMilestonesView(ui.View):
+class ClanMilestonesView(SafeView):
     """View hiển thị Cột Mốc Lịch Sử hỗ trợ quay lại Hub và đóng bảng"""
     def __init__(self, clan: Dict[str, Any], user: Any, bot: Any):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clan = clan
         self.user = user
         self.bot = bot
@@ -2436,10 +2480,10 @@ class ClanMilestonesView(ui.View):
             await self.bot.dismiss_user_panel(interaction.user.id)
 
 
-class ClanWallpaperView(ui.View):
+class ClanWallpaperView(SafeView):
     """View hiển thị Wallpaper Full HD hỗ trợ quay lại Hub và đóng bảng"""
     def __init__(self, clan: Dict[str, Any], user: Any, bot: Any):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clan = clan
         self.user = user
         self.bot = bot
@@ -2464,10 +2508,10 @@ class ClanWallpaperView(ui.View):
 # TRUNG TÂM ĐIỀU KHIỂN BĂNG ĐẢNG (CLAN HUB)
 # =============================================================================
 
-class ClanHubView(ui.View):
+class ClanHubView(SafeView):
     """Trung Tâm Điều Khiển Băng Đảng Tương Tác 1-Click Dành Cho Thành Viên Cộng Đồng"""
     def __init__(self, user: discord.Member, clan: Optional[Dict[str, Any]], bot):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.user = user
         self.clan = clan
         self.bot = bot
@@ -2781,16 +2825,7 @@ class ClanHubView(ui.View):
         await interaction.response.defer()
         all_clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         other_clans = [c for c in all_clans if c["clan_id"] != self.clan["clan_id"]]
-        embed = discord.Embed(
-            title="⚔️ TRUNG TÂM THÁCH ĐẤU & LẬP KÈO BĂNG ĐẢNG",
-            description=(
-                "Chọn hình thức bạn muốn thực hiện bên dưới:\n\n"
-                "• **⚔️ Gửi Thư Thách Đấu:** Chọn 1 băng đối thủ (hoặc **Tất cả các băng**) từ menu thả xuống để nhập Tựa Game, Thể Thức và Nội Dung khiêu chiến!\n"
-                "• **🎮 Lập Kèo Nội Bộ:** Bấm nút bên dưới để rủ anh em cùng băng lập team chơi game."
-            ),
-            color=discord.Color.orange(),
-            timestamp=datetime.now()
-        )
+        embed = build_challenge_target_embed(other_clans)
         view = ClanChallengeTargetView(source_clan=self.clan, other_clans=other_clans, bot=self.bot)
         await interaction.edit_original_response(content=None, embed=embed, attachments=[], view=view)
 
@@ -2810,7 +2845,7 @@ class ClanHubView(ui.View):
             await self.bot.dismiss_user_panel(interaction.user.id)
 
 
-class RejectRequestModal(ui.Modal):
+class RejectRequestModal(SafeModal):
     """Modal nhập lý do từ chối đơn gia nhập băng để gửi DM cho người nộp đơn"""
     def __init__(self, req_view: "RequestView", bot):
         super().__init__(title="❌ Từ Chối Đơn Xin Vào Băng")
@@ -2831,7 +2866,7 @@ class RejectRequestModal(ui.Modal):
         await self.req_view._handle_decision(interaction, "REJECTED", reason=reason)
 
 
-class RequestView(ui.View):
+class RequestView(SafeView):
     """View duyệt đơn hoặc phản hồi lời mời với điều kiện changes == 1 chống race condition"""
     def __init__(self, request_id: int, bot, is_invite: bool = False):
         super().__init__(timeout=None)
@@ -3006,7 +3041,7 @@ class RequestView(ui.View):
         await interaction.followup.send(res_msg, ephemeral=True)
 
 
-class PartyView(ui.View):
+class PartyView(SafeView):
     """View điều khiển kèo Party LFG nội bộ"""
     def __init__(self, party_id: int, bot):
         super().__init__(timeout=None)
@@ -3225,10 +3260,10 @@ async def _build_role_setup_payload(clan: Dict[str, Any], role: Optional[discord
     return embed, files
 
 
-class ClanImageUploadDashboardView(ui.View):
+class ClanImageUploadDashboardView(SafeView):
     """Bảng điều khiển trực quan quản lý và tải ảnh trực tiếp cho Logo & Banner Băng"""
     def __init__(self, clan: Dict[str, Any], bot):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clan = clan
         self.bot = bot
 
@@ -3397,10 +3432,10 @@ class ClanImageUploadDashboardView(ui.View):
             pass
 
 
-class SettingsDashboardView(ui.View):
+class SettingsDashboardView(SafeView):
     """Bảng điều khiển Ephemeral cài đặt băng"""
     def __init__(self, clan: Dict[str, Any], bot):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clan = clan
         self.bot = bot
 
@@ -3743,10 +3778,10 @@ class ColorPaletteSelect(ui.Select):
             await interaction.followup.send(f"❌ Lỗi khi đổi màu role: `{e}`", ephemeral=True)
 
 
-class ClanRoleSetupView(ui.View):
+class ClanRoleSetupView(SafeView):
     """Bảng điều khiển tương tác toàn diện cài đặt & tùy biến Role Băng"""
     def __init__(self, clan: Dict[str, Any], bot):
-        super().__init__(timeout=180)
+        super().__init__(timeout=600)
         self.clan = clan
         self.bot = bot
 
@@ -3886,7 +3921,7 @@ class ClanRoleSetupView(ui.View):
             await self.bot.dismiss_user_panel(interaction.user.id)
 
 
-class JoinModeSelectView(ui.View):
+class JoinModeSelectView(SafeView):
     """View chọn chế độ tuyển quân"""
     def __init__(self, clan_id: int, current_mode: str, bot):
         super().__init__(timeout=60)
@@ -3931,7 +3966,7 @@ class JoinModeSelectView(ui.View):
             await self.bot.dismiss_user_panel(interaction.user.id)
 
 
-class MembersPaginationView(ui.View):
+class MembersPaginationView(SafeView):
     """View phân trang và lọc thành viên"""
     def __init__(self, clan_id: int, current_page: int, total_pages: int, current_filter: str, bot):
         super().__init__(timeout=120)
@@ -4002,7 +4037,7 @@ class MembersPaginationView(ui.View):
         await interaction.edit_original_response(embed=embed, view=view)
 
 
-class LogsPaginationView(ui.View):
+class LogsPaginationView(SafeView):
     """View phân trang nhật ký hoạt động"""
     def __init__(self, clan_id: int, current_page: int, total_pages: int, bot):
         super().__init__(timeout=120)
@@ -4051,7 +4086,7 @@ class LogsPaginationView(ui.View):
         await interaction.edit_original_response(embed=embed, view=view)
 
 
-class TransferConfirmView(ui.View):
+class TransferConfirmView(SafeView):
     """View xác nhận chuyển giao quyền Chủ Băng (30 giây)"""
     def __init__(self, clan: Dict[str, Any], old_leader_id: int, new_leader_id: int, bot):
         super().__init__(timeout=30)
@@ -4117,7 +4152,7 @@ class TransferConfirmView(ui.View):
         await interaction.response.edit_message(content="❌ Đã hủy thao tác chuyển giao quyền Chủ Băng.", view=self)
 
 
-class ForceDeleteConfirmView(ui.View):
+class ForceDeleteConfirmView(SafeView):
     """View xác nhận 2 lớp cho lệnh /clan-admin force-delete"""
     def __init__(self, clan: Dict[str, Any], reason: str, bot):
         super().__init__(timeout=60)

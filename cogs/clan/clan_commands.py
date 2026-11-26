@@ -1158,17 +1158,8 @@ class ClanCommands(commands.Cog):
             return
         all_clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         other_clans = [c for c in all_clans if c["clan_id"] != clan["clan_id"]]
-        from utils.ui_components import ClanChallengeTargetView
-        embed = discord.Embed(
-            title="⚔️ TRUNG TÂM THÁCH ĐẤU & LẬP KÈO BĂNG ĐẢNG",
-            description=(
-                "Chọn hình thức bạn muốn thực hiện bên dưới:\n\n"
-                "• **⚔️ Gửi Thư Thách Đấu:** Chọn 1 băng đối thủ (hoặc **Tất cả các băng**) từ menu thả xuống để nhập Tựa Game, Thể Thức và Nội Dung khiêu chiến!\n"
-                "• **🎮 Lập Kèo Nội Bộ:** Bấm nút bên dưới để rủ anh em cùng băng lập team chơi game."
-            ),
-            color=discord.Color.orange(),
-            timestamp=datetime.now()
-        )
+        from utils.ui_components import ClanChallengeTargetView, build_challenge_target_embed
+        embed = build_challenge_target_embed(other_clans)
         view = ClanChallengeTargetView(source_clan=clan, other_clans=other_clans, bot=self.bot)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 

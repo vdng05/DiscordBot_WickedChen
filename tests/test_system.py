@@ -366,7 +366,14 @@ async def run_tests():
     assert "total_pages" in logs_check and logs_check["total_pages"] >= 1
 
     from utils.embeds import build_party_embed, build_challenge_embed
-    from utils.ui_components import ClanChallengeTargetView
+    from utils.ui_components import (
+        ClanChallengeTargetView,
+        build_challenge_target_embed,
+        ClanQuickPartyModal,
+        DisbandClanModal,
+        ClanChallengeModal,
+        SafeView
+    )
     big_party = build_party_embed("Custom 50 Slots", 9999, 50, None, [9999], [])
     assert len(big_party.fields[0].value) <= 1024, "Party field value must never exceed 1024 chars"
 
@@ -374,7 +381,29 @@ async def run_tests():
     assert "THƯ THÁCH ĐẤU" in ch_embed.title
     ch_view = ClanChallengeTargetView(source_clan=clan, other_clans=[], bot=bot)
     assert len(ch_view.children) == 3
-    print("✅ 23. Nhật ký băng (total_pages), Thư Thách Đấu Băng Đảng & giới hạn 50 slot Party hoạt động hoàn hảo 100%.")
+    assert isinstance(ch_view, SafeView)
+
+    # Kiểm tra thông báo khi server chỉ có 1 băng duy nhất
+    solo_embed = build_challenge_target_embed([])
+    assert "băng đảng duy nhất" in solo_embed.description
+
+    # Kiểm tra giới hạn 45 ký tự của Modal Title & TextInput Label (tránh lỗi 'didn't respond in time')
+    party_modal = ClanQuickPartyModal(clan=clan, bot=bot)
+    assert len(party_modal.title) <= 45
+    assert len(party_modal.party_time.label) <= 45
+
+    long_clan = dict(clan)
+    long_clan["name"] = "Băng Đảng Siêu Cấp Vô Địch"  # 26 ký tự
+    disband_modal = DisbandClanModal(clan=long_clan, bot=bot)
+    assert len(disband_modal.title) <= 45
+    assert len(disband_modal.confirm_name.label) <= 45
+
+    ch_modal = ClanChallengeModal(source_clan=clan, target_clan=None, bot=bot)
+    assert len(ch_modal.title) <= 45
+    for item in ch_modal.children:
+        if hasattr(item, "label"):
+            assert len(item.label) <= 45
+    print("✅ 23. Nhật ký băng, Thư Thách Đấu (gồm chế độ 1 băng duy nhất), giới hạn 45 ký tự Modal & SafeView hoạt động 100%.")
 
     print("=" * 60)
     print("🎉 TẤT CẢ 23 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
