@@ -4237,10 +4237,10 @@ class ForceDeleteConfirmView(SafeView):
 # =============================================================================
 
 class BotAccessRoleSelect(ui.RoleSelect):
-    """Menu chọn nhiều Role được phép sử dụng bot trong server."""
+    """Menu tìm & thêm nhiều Role được phép sử dụng bot trong server (gõ tên để tìm trong 190+ Role)."""
     def __init__(self):
         super().__init__(
-            placeholder="🎯 Chọn các Role được phép dùng bot (tự bật chế độ Role)...",
+            placeholder="🔍 Gõ tên Role để tìm & thêm (hỗ trợ 190+ Role)...",
             min_values=1,
             max_values=25,
             row=0
@@ -4254,16 +4254,141 @@ class BotAccessRoleSelect(ui.RoleSelect):
             await auto_dismiss_notice(interaction, content="❌ Vui lòng chọn ít nhất 1 Role hợp lệ (không chọn `@everyone` hoặc Role của Bot)!", delay=5)
             return
 
-        role_ids = [str(r.id) for r in valid_roles]
-        await view.bot.db.set_bot_access_config(interaction.guild_id, mode="ROLES", role_ids=role_ids)
+        new_ids = [str(r.id) for r in valid_roles]
+        merged_ids = list(dict.fromkeys([*view.role_ids, *new_ids]))
+        await view.bot.db.set_bot_access_config(interaction.guild_id, mode="ROLES", role_ids=merged_ids)
         if hasattr(view.bot, "update_bot_access_cache"):
-            view.bot.update_bot_access_cache(interaction.guild_id, "ROLES", role_ids)
+            view.bot.update_bot_access_cache(interaction.guild_id, "ROLES", merged_ids)
         view.mode = "ROLES"
-        view.role_ids = role_ids
+        view.role_ids = merged_ids
 
         embed = build_bot_access_embed(interaction.guild.name, view.mode, view.role_ids)
         await interaction.edit_original_response(embed=embed, view=view)
-        await auto_dismiss_notice(interaction, content=f"🎯 Đã cập nhật **{len(role_ids)} Role** được phép sử dụng bot!", delay=5)
+        await auto_dismiss_notice(interaction, content=f"🎯 Đã thêm **{len(new_ids)} Role**! Tổng cộng hiện có **{len(merged_ids)} Role** được phép dùng bot.", delay=5)
+
+
+class BotAccessRolePageSelect(ui.Select):
+    """Dropdown hiển thị 25 Role của trang hiện tại để bật/tắt (toggle) quyền dùng bot."""
+    def __init__(self, page_roles: List[discord.Role], allowed_ids: List[str], page: int, total_pages: int, total_roles: int):
+        allowed_set = set(allowed_ids)
+        options = []
+        for r in page_roles[:25]:
+            is_allowed = str(r.id) in allowed_set
+            options.append(
+                discord.SelectOption(
+                    label=f"{'✅ ' if is_allowed else ''}{r.name}"[:100],
+                    value=str(r.id),
+                    description=f"{'Đang BẬT — Bấm để gỡ' if is_allowed else 'Đang TẮT — Bấm để thêm'} • {len(r.members)} thành viên"[:100],
+                    emoji="✅" if is_allowed else "⬜"
+                )
+            )
+        super().__init__(
+            placeholder=f"📋 Trang {page}/{total_pages} ({total_roles} Role) — Chọn để Bật/Tắt Role...",
+            options=options,
+            min_values=1,
+            max_values=len(options),
+            row=0
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        view: "BotAccessRoleBrowserView" = self.view
+        current_set = set(view.role_ids)
+        toggled_on = 0
+        toggled_off = 0
+        for rid in self.values:
+            if rid in current_set:
+                current_set.remove(rid)
+                toggled_off += 1
+            else:
+                current_set.add(rid)
+                toggled_on += 1
+
+        new_role_ids = [str(r.id) for r in view.all_roles if str(r.id) in current_set]
+        new_mode = "ROLES" if new_role_ids else view.mode
+        await view.bot.db.set_bot_access_config(interaction.guild_id, mode=new_mode, role_ids=new_role_ids)
+        if hasattr(view.bot, "update_bot_access_cache"):
+            view.bot.update_bot_access_cache(interaction.guild_id, new_mode, new_role_ids)
+
+        new_view = BotAccessRoleBrowserView(
+            guild=interaction.guild,
+            mode=new_mode,
+            role_ids=new_role_ids,
+            page=view.page,
+            bot=view.bot
+        )
+        embed = build_bot_access_embed(interaction.guild.name, new_mode, new_role_ids)
+        await interaction.edit_original_response(embed=embed, view=new_view)
+        await auto_dismiss_notice(
+            interaction,
+            content=f"✅ Đã cập nhật: **+{toggled_on} Role bật**, **-{toggled_off} Role tắt** (Tổng: **{len(new_role_ids)} Role**).",
+            delay=5
+        )
+
+
+class BotAccessRoleBrowserView(SafeView):
+    """Trình duyệt toàn bộ Role của Server theo từng trang (25 Role/trang, hỗ trợ 190-250 Role)."""
+    def __init__(self, guild: discord.Guild, mode: str, role_ids: List[str], page: int, bot):
+        super().__init__(timeout=600)
+        self.guild = guild
+        self.mode = mode
+        self.role_ids = role_ids
+        self.bot = bot
+
+        self.all_roles = [r for r in reversed(guild.roles) if not r.is_default() and not r.managed]
+        self.total_pages = max(1, (len(self.all_roles) + 24) // 25)
+        self.page = max(1, min(page, self.total_pages))
+
+        start = (self.page - 1) * 25
+        page_roles = self.all_roles[start:start + 25]
+        if page_roles:
+            self.add_item(BotAccessRolePageSelect(page_roles, role_ids, self.page, self.total_pages, len(self.all_roles)))
+
+        self.prev_btn.disabled = self.page <= 1
+        self.page_indicator.label = f"{self.page} / {self.total_pages}"
+        self.next_btn.disabled = self.page >= self.total_pages
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if hasattr(self.bot, "is_bot_owner") and await self.bot.is_bot_owner(interaction.user):
+            return True
+        await auto_dismiss_notice(interaction, content="🔒 Chỉ **Chủ Bot (Bot Owner)** mới có quyền thay đổi cài đặt này!", delay=5)
+        return False
+
+    async def _go_page(self, interaction: discord.Interaction, new_page: int):
+        await interaction.response.defer()
+        new_view = BotAccessRoleBrowserView(self.guild, self.mode, self.role_ids, new_page, self.bot)
+        embed = build_bot_access_embed(self.guild.name, self.mode, self.role_ids)
+        await interaction.edit_original_response(embed=embed, view=new_view)
+
+    @ui.button(label="Trang Trước", emoji="◀️", style=discord.ButtonStyle.secondary, row=1)
+    async def prev_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await self._go_page(interaction, self.page - 1)
+
+    @ui.button(label="1 / 1", style=discord.ButtonStyle.primary, disabled=True, row=1)
+    async def page_indicator(self, interaction: discord.Interaction, button: ui.Button):
+        pass
+
+    @ui.button(label="Trang Sau", emoji="▶️", style=discord.ButtonStyle.secondary, row=1)
+    async def next_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await self._go_page(interaction, self.page + 1)
+
+    @ui.button(label="Quay Lại", emoji="🔙", style=discord.ButtonStyle.secondary, row=1)
+    async def back_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        main_view = BotAccessControlView(self.guild.name, self.mode, self.role_ids, self.bot)
+        embed = build_bot_access_embed(self.guild.name, self.mode, self.role_ids)
+        await interaction.edit_original_response(embed=embed, view=main_view)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
 
 
 class BotAccessControlView(SafeView):
@@ -4292,6 +4417,13 @@ class BotAccessControlView(SafeView):
         await interaction.edit_original_response(embed=embed, view=self)
         await auto_dismiss_notice(interaction, content=notice_text, delay=5)
 
+    @ui.button(label="Duyệt Toàn Bộ Role", emoji="📋", style=discord.ButtonStyle.primary, row=1)
+    async def browse_roles_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        browser_view = BotAccessRoleBrowserView(interaction.guild, self.mode, self.role_ids, page=1, bot=self.bot)
+        embed = build_bot_access_embed(self.guild_name, self.mode, self.role_ids)
+        await interaction.edit_original_response(embed=embed, view=browser_view)
+
     @ui.button(label="Bật Tất Cả (Mặc Định)", emoji="🟢", style=discord.ButtonStyle.success, row=1)
     async def enable_all_btn(self, interaction: discord.Interaction, button: ui.Button):
         await self._set_mode(interaction, "ALL", "🟢 Đã **BẬT TẤT CẢ** — Mọi thành viên trong server đều có thể sử dụng bot!")
@@ -4300,7 +4432,18 @@ class BotAccessControlView(SafeView):
     async def disable_all_btn(self, interaction: discord.Interaction, button: ui.Button):
         await self._set_mode(interaction, "NONE", "🔴 Đã **TẮT TẤT CẢ** — Chỉ Chủ Bot mới có thể sử dụng bot trên máy chủ này!")
 
-    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(label="Xóa Hết Role Đã Chọn", emoji="🧹", style=discord.ButtonStyle.secondary, row=2)
+    async def clear_roles_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        self.role_ids = []
+        await self.bot.db.set_bot_access_config(interaction.guild_id, mode=self.mode, role_ids=[])
+        if hasattr(self.bot, "update_bot_access_cache"):
+            self.bot.update_bot_access_cache(interaction.guild_id, self.mode, [])
+        embed = build_bot_access_embed(self.guild_name, self.mode, self.role_ids)
+        await interaction.edit_original_response(embed=embed, view=self)
+        await auto_dismiss_notice(interaction, content="🧹 Đã xóa sạch danh sách Role đã chọn!", delay=5)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=2)
     async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
         if not interaction.response.is_done():
             await interaction.response.defer()

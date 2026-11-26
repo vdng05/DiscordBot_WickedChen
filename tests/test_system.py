@@ -426,7 +426,7 @@ async def run_tests():
     ba_embed = build_bot_access_embed("Test Server", "ROLES", ["555111"])
     assert "PHÂN QUYỀN SỬ DỤNG BOT" in ba_embed.title
     ba_view = BotAccessControlView("Test Server", "ROLES", ["555111"], bot=bot)
-    assert len(ba_view.children) == 4
+    assert len(ba_view.children) == 6
     print("✅ 24. Phân quyền Role sử dụng bot dành cho Chủ Bot (ALL / ROLES / NONE) hoạt động chuẩn xác 100%.")
 
     print("=" * 60)
