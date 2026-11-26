@@ -1891,7 +1891,7 @@ class ClanHubView(ui.View):
         view = ClanInfoView(clan_id=clan["clan_id"], can_apply=False, is_member=True, is_leader=(int(clan["leader_id"]) == interaction.user.id), bot=self.bot)
         await interaction.followup.send(embed=embed, file=file, view=view, ephemeral=True)
 
-    @ui.button(label="Rời Băng", emoji="🚪", style=discord.ButtonStyle.danger, row=0)
+    @ui.button(label="Rời Băng", emoji="🚪", style=discord.ButtonStyle.danger, row=3)
     async def leave_btn(self, interaction: discord.Interaction, button: ui.Button):
         if not self.clan:
             await interaction.response.send_message("❌ Bạn chưa tham gia băng nào!", ephemeral=True)
