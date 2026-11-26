@@ -81,7 +81,7 @@ Không cần phải đi copy link ảnh trên mạng phức tạp, bạn có th�
   - Bấm **`[🔄 Về Mặc Định]`** nếu muốn chuyển lại về đồ họa Bát Giác & Cyber Gaming Canvas hoàng gia cực chất.
 - **⚡ Cách 2 — Bằng Slash Command:**
   - **🖼️ Logo Băng:** `/clan upload-image loai:logo file:[chọn ảnh]` — Ảnh đại diện hiển thị ở góc hồ sơ băng.
-  - **🎨 Banner Băng (Cấp 2+):** `/clan upload-image loai:banner file:[chọn ảnh]` — Ảnh bìa lớn trang trí hồ sơ băng.
+  - **🎨 Banner Băng:** `/clan upload-image loai:banner file:[chọn ảnh]` — Ảnh bìa lớn trang trí hồ sơ băng.
   - **🌟 Icon Role Băng:** `/clan upload-image loai:role_icon file:[chọn ảnh]` — Gán Icon hiển thị ngay bên cạnh tên của toàn thể anh em trong server *(Yêu cầu Server Boost Cấp 2)*.
 
 ### 4. Bảng Cài Đặt Băng Tổng Thể: `/clan settings`
@@ -163,7 +163,7 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 | Cấp Độ | EXP Yêu Cầu | Sĩ Số Tối Đa | Đặc Quyền Nổi Bật |
 | :---: | :---: | :---: | :--- |
 | **Cấp 1** | 0 EXP | 15 người | 1 Kênh Chat + 1 Kênh Voice riêng, đổi màu Role đơn sắc & Gradient |
-| **Cấp 2** | 1.000 EXP | 25 người | Mở khóa tải ảnh bìa Banner hồ sơ băng |
+| **Cấp 2** | 1.000 EXP | 25 người | Tăng sĩ số tối đa, tùy chỉnh khẩu hiệu nâng cao |
 | **Cấp 3** | 3.500 EXP | 40 người | 🔥 **Tự động mở khóa Kênh Voice thứ 2** để chia team chơi game |
 | **Cấp 4** | 8.000 EXP | 60 người | Tăng sĩ số tối đa, mở khóa Icon Role (nếu server đạt Boost Lv.2) |
 | **Cấp 5** | 15.000 EXP | 100 người | Đỉnh cao danh vọng, tối đa quyền hạn hội nhóm |

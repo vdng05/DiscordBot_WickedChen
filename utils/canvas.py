@@ -283,7 +283,7 @@ def generate_default_clan_logo(clan: Dict[str, Any]) -> io.BytesIO:
     return buf
 
 
-def generate_default_clan_banner(clan: Dict[str, Any], member_count: int = 1) -> io.BytesIO:
+def generate_default_clan_banner(clan: Dict[str, Any], member_count: int = 1, leader_name: Optional[str] = None) -> io.BytesIO:
     """Tạo Banner Header Băng Đảng Mặc Định Siêu Đẹp (1200 x 420)"""
     W, H = 1200, 420
     color_rgb = hex_to_rgb(clan.get("color_hex"), (88, 101, 242))
@@ -340,8 +340,11 @@ def generate_default_clan_banner(clan: Dict[str, Any], member_count: int = 1) ->
     lvl_info = get_level_info(clan.get("exp", 0))
     from utils.constants import JoinModes
     mode_name = JoinModes.NAMES.get(clan.get("join_mode"), "🟡 Cần Duyệt")
+    leader_display = (leader_name or clan.get("leader_name") or "").strip()
+    pill1_label = "👑 CHỦ BĂNG" if leader_display else "🌟 DANH HIỆU BĂNG"
+    pill1_val = leader_display[:18] if leader_display else f"Cấp {clan.get('level', 1)} ({lvl_info['title']})"[:18]
     pills = [
-        ("👑 CHỦ BĂNG", f"<ID: {clan.get('leader_id')}>", (255, 215, 0)),
+        (pill1_label, pill1_val, (255, 215, 0)),
         ("👥 THÀNH VIÊN", f"{member_count}/{lvl_info['max_members']} Người", (100, 220, 255)),
         ("🚪 TUYỂN QUÂN", mode_name, (130, 230, 170)),
         ("🏆 EXP TÍCH LŨY", f"{clan.get('exp', 0):,} EXP", (255, 130, 180))
@@ -638,7 +641,8 @@ def generate_quests_image(
 def generate_clan_profile_image(
     clan: Dict[str, Any],
     member_count: int,
-    level_info: Dict[str, Any]
+    level_info: Dict[str, Any],
+    leader_name: Optional[str] = None
 ) -> io.BytesIO:
     """Vẽ thẻ hồ sơ băng đảng phong cách VIP Pass (920 x 320)"""
     W, H = 920, 320
@@ -670,8 +674,9 @@ def generate_clan_profile_image(
     }
     mode_text = join_mode_names.get(clan.get("join_mode"), "🟡 Cần Duyệt")
 
+    leader_display = (leader_name or clan.get("leader_name") or "Chủ Băng")[:16]
     info_pills = [
-        ("👑 CHỦ BĂNG", f"<ID: {clan.get('leader_id')}>", (255, 204, 0)),
+        ("👑 CHỦ BĂNG", leader_display, (255, 204, 0)),
         ("👥 QUÂN SỐ", f"{member_count}/{level_info['max_members']} Người", (100, 220, 255)),
         ("🚪 TUYỂN QUÂN", mode_text, (130, 230, 170)),
         ("🏆 CẤP BĂNG", f"Cấp {clan['level']} ({level_info['title']})", (255, 130, 170))
@@ -766,7 +771,8 @@ def generate_role_setup_image(
 def generate_clan_wallpaper(
     clan: Dict[str, Any],
     members: List[Dict[str, Any]],
-    milestones: List[Dict[str, Any]]
+    milestones: List[Dict[str, Any]],
+    member_names: Optional[Dict[str, str]] = None
 ) -> io.BytesIO:
     """Vẽ ảnh nền máy tính Full HD 1920x1080 kỷ niệm vẻ vang và dàn thành viên của Băng Đảng"""
     W, H = 1920, 1080
@@ -816,12 +822,13 @@ def generate_clan_wallpaper(
     my = 430
     for idx, m in enumerate(members[:8]):
         badge_rank = rank_icons.get(m.get("rank"), "⚔️ Thành Viên")
-        uid_text = f"<ID: {m.get('user_id')}>"
+        m_name = m.get("display_name") or (member_names.get(str(m.get("user_id"))) if member_names else None)
+        display_text = f"{badge_rank} • {m_name[:18]}" if m_name else f"{badge_rank} #{idx + 1}"
         custom_t = f"【 {m['custom_title']} 】" if m.get("custom_title") else ""
         points = f"{m.get('contribution_points', 0):,} điểm cống hiến"
 
         draw.rounded_rectangle((115, my, 895, my + 54), radius=10, fill=(28, 34, 52, 200), outline=(50, 60, 85), width=1)
-        draw.text((135, my + 14), f"{badge_rank} {uid_text}", fill=(255, 255, 255), font=get_font(16, bold=True))
+        draw.text((135, my + 14), display_text, fill=(255, 255, 255), font=get_font(16, bold=True))
         if custom_t:
             draw.text((500, my + 14), custom_t, fill=(255, 204, 0), font=get_font(15, bold=True))
         draw.text((875, my + 16), points, fill=(160, 180, 210), font=get_font(13, bold=False), anchor="ra")

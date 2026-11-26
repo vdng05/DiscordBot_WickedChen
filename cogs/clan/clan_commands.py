@@ -110,7 +110,7 @@ class ClanHelpView(discord.ui.View):
                 title="🏰 HƯỚNG DẪN DÀNH CHO CHỦ BĂNG & CÁN BỘ",
                 description=(
                     "**1. Thành lập băng:** Gõ `/clan create` -> Điền tên (3-25 ký tự) và Tag viết hoa (2-5 ký tự).\n"
-                    "**2. Cài đặt & Tùy biến:** Gõ `/clan settings` để đổi màu role, đặt Logo, đặt Banner (cần Level 2) hoặc đổi chế độ tuyển quân.\n"
+                    "**2. Cài đặt & Tùy biến:** Gõ `/clan settings` để đổi màu role, đặt Logo, đặt Banner hoặc đổi chế độ tuyển quân.\n"
                     "**3. Mời thành viên:** Gõ `/clan invite [@user]` để gửi lời mời có nút bấm trực tiếp.\n"
                     "**4. Quản lý chức vụ:**\n"
                     "• `/clan promote [@user]`: Thăng chức (Tối đa 4 Cán Bộ, 2 Phó Băng).\n"
@@ -188,7 +188,7 @@ class ClanCommands(commands.Cog):
                 "Chọn mục bạn muốn tùy chỉnh từ danh sách bên dưới:\n\n"
                 "• **Đổi Tên / Tag / Khẩu Hiệu:** Mở hộp thoại nhập thông tin mới (áp dụng cooldown 7 ngày).\n"
                 "• **Đổi Màu Role:** Cập nhật màu sắc hiển thị Role thành viên.\n"
-                "• **Logo & Banner:** Cài link ảnh hiển thị hồ sơ (Banner cần Lv.2+).\n"
+                "• **Logo & Banner:** Tải ảnh trực tiếp hoặc dán link ảnh hiển thị hồ sơ.\n"
                 "• **Chế Độ Tuyển Quân:** Tự Do / Cần Duyệt / Chỉ Nhận Lời Mời."
             ),
             color=discord.Color.blue(),
@@ -238,10 +238,6 @@ class ClanCommands(commands.Cog):
         image_url = anh.url if anh else link
         if not image_url:
             await interaction.followup.send("❌ Bạn phải cung cấp đường link ảnh hoặc đính kèm 1 file ảnh!", ephemeral=True)
-            return
-
-        if loai == "banner" and clan["level"] < 2:
-            await interaction.followup.send("❌ Băng cần đạt **Level 2** trở lên để mở khóa tính năng đặt Banner hồ sơ!", ephemeral=True)
             return
 
         if loai == "logo":
@@ -761,7 +757,9 @@ class ClanCommands(commands.Cog):
 
         from utils.canvas import generate_clan_profile_image, generate_default_clan_logo
         import asyncio
-        buf = await asyncio.to_thread(generate_clan_profile_image, clan, len(members), level_info)
+        leader_mem = interaction.guild.get_member(int(clan["leader_id"])) if clan.get("leader_id") else None
+        leader_name = leader_mem.display_name if leader_mem else None
+        buf = await asyncio.to_thread(generate_clan_profile_image, clan, len(members), level_info, leader_name)
         file = discord.File(fp=buf, filename="clan_profile.png")
         files = [file]
 
@@ -918,7 +916,7 @@ class ClanCommands(commands.Cog):
 
     @clan_group.command(name="upload-image", description="Tải lên trực tiếp ảnh Logo, Banner hoặc Icon riêng cho Role của Băng")
     @app_commands.describe(
-        loai="Loại ảnh muốn cập nhật (logo: Logo Băng, banner: Banner Cấp 2+, role_icon: Icon Role Boost Lv.2)",
+        loai="Loại ảnh muốn cập nhật (logo: Logo Băng, banner: Banner Băng, role_icon: Icon Role Boost Lv.2)",
         file="Tệp ảnh tải lên từ thiết bị của bạn (PNG, JPG, WEBP, GIF)"
     )
     async def clan_upload_image(
@@ -964,17 +962,20 @@ class ClanCommands(commands.Cog):
                 timestamp=datetime.now()
             )
             embed.set_thumbnail(url=file.url)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            files = []
+            if clan.get("banner_url"):
+                embed.set_image(url=clan["banner_url"])
+            else:
+                from utils.canvas import generate_default_clan_banner
+                m_count = await self.bot.db.get_member_count(clan["clan_id"])
+                l_mem = guild.get_member(int(clan["leader_id"])) if clan.get("leader_id") else None
+                l_name = l_mem.display_name if l_mem else None
+                b_buf = await asyncio.to_thread(generate_default_clan_banner, clan, m_count, l_name)
+                files.append(discord.File(fp=b_buf, filename="default_banner.png"))
+                embed.set_image(url="attachment://default_banner.png")
+            await interaction.followup.send(embed=embed, files=files, ephemeral=True)
 
         elif loai == "banner":
-            if clan["level"] < 2:
-                await interaction.followup.send(
-                    f"❌ Băng của bạn hiện tại đạt Cấp **{clan['level']}**!\n"
-                    "👉 Cần đạt từ **Cấp độ 2 (1,000 EXP)** trở lên để mở khóa tính năng Banner hồ sơ.",
-                    ephemeral=True
-                )
-                return
-
             await self.bot.db.update_clan(clan["clan_id"], banner_url=file.url)
             await self.bot.db.add_clan_log(
                 clan_id=clan["clan_id"],
@@ -989,7 +990,15 @@ class ClanCommands(commands.Cog):
                 timestamp=datetime.now()
             )
             embed.set_image(url=file.url)
-            await interaction.followup.send(embed=embed, ephemeral=True)
+            files = []
+            if clan.get("logo_url"):
+                embed.set_thumbnail(url=clan["logo_url"])
+            else:
+                from utils.canvas import generate_default_clan_logo
+                l_buf = await asyncio.to_thread(generate_default_clan_logo, clan)
+                files.append(discord.File(fp=l_buf, filename="default_logo.png"))
+                embed.set_thumbnail(url="attachment://default_logo.png")
+            await interaction.followup.send(embed=embed, files=files, ephemeral=True)
 
         elif loai == "role_icon":
             role_id = clan.get("role_id")

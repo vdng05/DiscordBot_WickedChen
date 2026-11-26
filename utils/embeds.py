@@ -495,15 +495,14 @@ def build_role_setup_embed(clan: Dict[str, Any], role: Optional[discord.Role], a
     return embed
 
 
-def build_image_settings_embed(clan: Dict[str, Any]) -> discord.Embed:
+def build_image_settings_embed(
+    clan: Dict[str, Any],
+    default_logo_filename: Optional[str] = None,
+    default_banner_filename: Optional[str] = None
+) -> discord.Embed:
     """Tạo Embed trung tâm quản lý và tải ảnh trực tiếp cho Logo & Banner Băng"""
     logo_status = f"✅ Đã tải lên ([Xem ảnh gốc]({clan['logo_url']}))" if clan.get("logo_url") else "✨ Đang dùng Logo Bát Giác Hoàng Gia Canvas (Mặc định)"
-    if clan.get("banner_url"):
-        banner_status = f"✅ Đã tải lên ([Xem ảnh gốc]({clan['banner_url']}))"
-    elif clan.get("level", 1) < 2:
-        banner_status = f"🔒 Mở khóa tại Cấp 2 (1,000 EXP) — Hiện tại: Cấp {clan.get('level', 1)}"
-    else:
-        banner_status = "✨ Đang dùng Banner Cyber Gaming Canvas (Mặc định)"
+    banner_status = f"✅ Đã tải lên ([Xem ảnh gốc]({clan['banner_url']}))" if clan.get("banner_url") else "✨ Đang dùng Banner Cyber Gaming Canvas (Mặc định)"
 
     desc = (
         f"🏰 Băng đảng: **[{clan['tag']}] {clan['name']}** (Cấp độ: **{clan.get('level', 1)}**)\n\n"
@@ -524,8 +523,14 @@ def build_image_settings_embed(clan: Dict[str, Any]) -> discord.Embed:
     )
     if clan.get("logo_url"):
         embed.set_thumbnail(url=clan["logo_url"])
+    elif default_logo_filename:
+        embed.set_thumbnail(url=f"attachment://{default_logo_filename}")
+
     if clan.get("banner_url"):
         embed.set_image(url=clan["banner_url"])
+    elif default_banner_filename:
+        embed.set_image(url=f"attachment://{default_banner_filename}")
+
     embed.set_footer(text="Hỗ trợ mọi định dạng: PNG, JPG, JPEG, WEBP, GIF (Dung lượng tối đa 8MB)")
     return embed
 

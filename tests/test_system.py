@@ -295,11 +295,16 @@ async def run_tests():
     # 20. Kiểm tra Bảng Quản Lý & Tải Ảnh Trực Tiếp (ClanImageUploadDashboardView & build_image_settings_embed)
     from utils.embeds import build_image_settings_embed
     from utils.ui_components import ClanImageUploadDashboardView
-    img_embed = build_image_settings_embed(clan)
+    partial_clan = dict(clan)
+    partial_clan["logo_url"] = "https://cdn.discordapp.com/attachments/123/logo.png"
+    partial_clan["banner_url"] = None
+    img_embed = build_image_settings_embed(partial_clan, default_banner_filename="default_banner.png")
     assert img_embed.title == "🖼️ TRUNG TÂM QUẢN LÝ & TẢI ẢNH BĂNG ĐẢNG"
-    img_view = ClanImageUploadDashboardView(clan=clan, bot=bot)
+    assert img_embed.thumbnail.url == "https://cdn.discordapp.com/attachments/123/logo.png"
+    assert img_embed.image.url == "attachment://default_banner.png"
+    img_view = ClanImageUploadDashboardView(clan=partial_clan, bot=bot)
     assert len(img_view.children) == 7
-    print("✅ 20. Bảng điều khiển quản lý & tải ảnh trực tiếp (Logo/Banner Upload Dashboard) hoạt động mượt mà.")
+    print("✅ 20. Bảng điều khiển tải ảnh trực tiếp (hiển thị song song Logo tùy chỉnh & Banner mặc định) hoạt động mượt mà.")
 
     # 21. Kiểm tra LFG Party Kèo Game & Nhắc nhở trước giờ chơi (Party Reminders)
     now_ts = int(time.time())

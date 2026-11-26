@@ -56,7 +56,7 @@ LEVELS = [
         "req_exp": 1000,
         "max_members": 25,
         "title": "Khởi Sắc",
-        "perks": "Mở khóa đặt Banner cho hồ sơ băng, tùy chỉnh khẩu hiệu"
+        "perks": "Tăng sĩ số tối đa lên 25 người, tùy chỉnh khẩu hiệu nâng cao"
     },
     {
         "level": 3,
