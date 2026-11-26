@@ -350,7 +350,16 @@ async def run_tests():
         rf.close()
     delete_local_asset(local_clan["logo_url"])
     assert not fake_logo.exists()
-    print("✅ 22. Hệ thống lưu trữ ảnh bền vững (local://) & fallback đồ họa mặc định hoạt động hoàn hảo 100%.")
+
+    # Kiểm tra Hồ Sơ Băng hiển thị Banner tùy chỉnh khi đã upload banner
+    from utils.ui_components import build_clan_profile_payload
+    custom_banner_clan = dict(clan)
+    custom_banner_clan["banner_url"] = "https://cdn.example.com/my_banner.png"
+    prof_embed, prof_files = await build_clan_profile_payload(custom_banner_clan, members, lvl_info, None)
+    assert prof_embed.image.url == "https://cdn.example.com/my_banner.png"
+    for pf in prof_files:
+        pf.close()
+    print("✅ 22. Hệ thống lưu trữ ảnh bền vững (local://), hiển thị Banner tùy chỉnh trên Hồ Sơ Băng & fallback hoạt động 100%.")
 
     print("=" * 60)
     print("🎉 TẤT CẢ 22 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")

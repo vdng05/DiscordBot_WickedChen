@@ -751,18 +751,8 @@ class ClanCommands(commands.Cog):
         is_member = (viewer_clan is not None and viewer_clan["clan_id"] == clan["clan_id"])
         is_leader = (int(clan["leader_id"]) == interaction.user.id)
 
-        from utils.canvas import generate_clan_profile_image, generate_default_clan_logo
-        import asyncio
-        leader_mem = interaction.guild.get_member(int(clan["leader_id"])) if clan.get("leader_id") else None
-        leader_name = leader_mem.display_name if leader_mem else None
-        buf = await asyncio.to_thread(generate_clan_profile_image, clan, len(members), level_info, leader_name)
-        file = discord.File(fp=buf, filename="clan_profile.png")
-        files = [file]
-
-        from utils.image_storage import resolve_clan_logo
-        logo_filename = await resolve_clan_logo(clan, files, fallback_to_default=True)
-
-        embed = build_clan_info_embed(clan, members, level_info, attachment_filename="clan_profile.png", logo_filename=logo_filename)
+        from utils.ui_components import build_clan_profile_payload
+        embed, files = await build_clan_profile_payload(clan, members, level_info, interaction.guild)
         view = ClanInfoView(clan_id=clan["clan_id"], can_apply=can_apply, is_member=is_member, is_leader=is_leader, bot=self.bot)
         await interaction.followup.send(embed=embed, files=files, view=view)
 
