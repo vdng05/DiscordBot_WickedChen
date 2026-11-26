@@ -119,7 +119,7 @@ class ClanBot(commands.Bot):
 
         # Đặt Rich Presence trực quan
         try:
-            activity = discord.CustomActivity(name="🏰 Hệ Thống Băng Đảng | /clan info")
+            activity = discord.CustomActivity(name="🏰 Hệ Thống Băng Đảng | /clan hub")
             await self.change_presence(status=discord.Status.online, activity=activity)
         except Exception:
             pass

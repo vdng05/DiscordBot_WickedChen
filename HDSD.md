@@ -73,20 +73,35 @@ Chủ Băng có toàn quyền thiết lập Role cho clan:
 - **🔔 Cho Phép Tag (@mention):** 1-click Bật/Tắt cho phép mọi người tag role.
 - **🔗 Liên Kết Role Có Sẵn:** Chọn một Role đã có sẵn trong Server để làm Role Clan (qua menu chọn Role hoặc gõ lệnh `/clan set-role @role`).
 
-### 3. Tải Lên Trực Tiếp Ảnh Logo, Banner & Icon Role: `/clan upload-image`
+### 3. Tải Lên Trực Tiếp Ảnh Logo, Banner & Icon Role
 Không cần phải đi copy link ảnh trên mạng phức tạp, bạn có thể **tải trực tiếp file ảnh từ máy tính hoặc điện thoại**:
-- **🖼️ Logo Băng:** `/clan upload-image loai:logo file:[chọn ảnh]` — Ảnh đại diện hiển thị ở góc hồ sơ băng.
-- **🎨 Banner Băng (Cấp 2+):** `/clan upload-image loai:banner file:[chọn ảnh]` — Ảnh bìa lớn trang trí hồ sơ băng.
-- **🌟 Icon Role Băng:** `/clan upload-image loai:role_icon file:[chọn ảnh]` — Gán Icon hiển thị ngay bên cạnh tên của toàn thể anh em trong server *(Yêu cầu Server Boost Cấp 2)*.
+- **📸 Cách 1 — Trực tiếp qua Giao diện Bảng Điều Khiển:** Vào `/clan settings` (hoặc `/clan hub` ➔ `Cài Đặt Băng`) ➔ chọn **`Cập Nhật Logo & Banner`**:
+  - Bấm **`[📤 Gửi Tệp Logo]`** hoặc **`[🎨 Gửi Tệp Banner]`** ➔ Kéo thả/chọn file ảnh gửi thẳng vào kênh chat trong 60 giây.
+  - Bot sẽ tự động chụp lấy ảnh, **xóa tin nhắn tải ảnh trong kênh để giữ sạch phòng chat** và cập nhật ngay lập tức!
+  - Bấm **`[🔄 Về Mặc Định]`** nếu muốn chuyển lại về đồ họa Bát Giác & Cyber Gaming Canvas hoàng gia cực chất.
+- **⚡ Cách 2 — Bằng Slash Command:**
+  - **🖼️ Logo Băng:** `/clan upload-image loai:logo file:[chọn ảnh]` — Ảnh đại diện hiển thị ở góc hồ sơ băng.
+  - **🎨 Banner Băng (Cấp 2+):** `/clan upload-image loai:banner file:[chọn ảnh]` — Ảnh bìa lớn trang trí hồ sơ băng.
+  - **🌟 Icon Role Băng:** `/clan upload-image loai:role_icon file:[chọn ảnh]` — Gán Icon hiển thị ngay bên cạnh tên của toàn thể anh em trong server *(Yêu cầu Server Boost Cấp 2)*.
 
 ### 4. Bảng Cài Đặt Băng Tổng Thể: `/clan settings`
 Mở bảng điều khiển tương tác (dành cho Chủ Băng & Cán Bộ):
-- **🛡️ Cài Đặt Role Băng:** Mở nhanh giao diện thiết lập role.
-- **🖼️ Cài Logo & Banner:** Cài đặt nhanh qua link URL nếu không muốn upload tệp.
+- **🛡️ Cài Đặt Role Băng:** Mở nhanh giao diện thiết lập role (Màu Gradient, màu đơn, đổi tên, tách nhóm hoist...).
+- **🖼️ Cập Nhật Logo & Banner:** Mở Trung Tâm Tải Ảnh Trực Tiếp (gửi file ảnh, dán link hoặc quay về mặc định).
 - **🚪 Chế Độ Tuyển Quân:**
   - *🟢 Mở Tự Do (OPEN):* Ai xin vào cũng được duyệt ngay lập tức.
   - *🟡 Cần Duyệt (APPROVAL - Mặc định):* Gửi đơn vào kênh chat để cán bộ bấm nút duyệt.
   - *🔒 Chỉ Nhận Lời Mời (INVITE_ONLY):* Khóa nộp đơn ngoài, chỉ cán bộ mời mới vào được.
+
+### 5. Tạo Kèo Chơi Game LFG Nội Bộ: `/clan party`
+- Bất kỳ thành viên nào cũng có thể gõ `/clan party` để mở popup tạo kèo rủ anh em chơi game (Ví dụ: *Leo rank Valorant 5 stack, ARAM vui vẻ, Custom giải đấu...*).
+- Tin nhắn kèo sẽ xuất hiện trong kênh chat riêng của băng với các nút bấm trực quan:
+  - **`[⚔️ Tham Gia]`**: Vào danh sách Đội Hình Chính.
+  - **`[🛡️ Dự Bị]`**: Vào danh sách Dự Bị (dành cho slot sơ cua).
+  - **`[🚪 Rút Lui]`**: Rút lui khỏi kèo nếu bận việc đột xuất.
+  - **`[🔒 Chốt / Đóng Kèo]`**: Dành cho người tạo kèo hoặc Cán Bộ để chốt sổ và bot sẽ tự động tag các thành viên chính chuẩn bị vào trận.
+- **Tự động nhắc nhở:** Trước giờ thi đấu 10 phút, bot sẽ tự động gửi thông báo tag tên toàn thể anh em trong đội hình chính để sẵn sàng vào game!
+- **Thưởng Nhiệm Vụ Tuần:** Mỗi kèo hoàn thành sẽ đóng góp vào tiến độ nhiệm vụ tuần **`PARTY_COMPLETED`** của cả băng!
 
 ### 5. Duyệt Đơn & Chào Đón Thành Viên Mới
 - Khi có thành viên nộp đơn, bot sẽ gửi thẻ thông báo vào kênh chat riêng của băng.

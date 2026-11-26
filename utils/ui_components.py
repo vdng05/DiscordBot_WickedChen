@@ -26,6 +26,7 @@ from utils.embeds import (
     build_logs_embed,
     build_party_embed,
     build_role_setup_embed,
+    build_image_settings_embed,
     get_level_info,
     parse_hex_color,
     send_dm_notification
@@ -511,11 +512,12 @@ class RoleNameModal(ui.Modal, title="✏️ Đổi Tên Hiển Thị Role Băng"
 
 
 
-class ImagesClanModal(ui.Modal, title="🖼️ Cài Đặt Logo & Banner Băng"):
-    def __init__(self, clan: Dict[str, Any], bot):
+class ImagesClanModal(ui.Modal, title="🖼️ Dán Link URL Logo & Banner"):
+    def __init__(self, clan: Dict[str, Any], bot, parent_view: Optional[Any] = None):
         super().__init__()
         self.clan = clan
         self.bot = bot
+        self.parent_view = parent_view
 
         self.logo_url = ui.TextInput(
             label="Link Ảnh Logo (Bắt đầu bằng http/https)",
@@ -531,31 +533,43 @@ class ImagesClanModal(ui.Modal, title="🖼️ Cài Đặt Logo & Banner Băng")
         self.add_item(self.banner_url)
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
         logo = self.logo_url.value.strip() or None
         banner = self.banner_url.value.strip() or None
 
         if logo and not logo.startswith(("http://", "https://")):
-            await interaction.followup.send("❌ Link Logo phải bắt đầu bằng `http://` hoặc `https://`!", ephemeral=True)
+            await auto_dismiss_notice(interaction, content="❌ Link Logo phải bắt đầu bằng `http://` hoặc `https://`!", delay=5)
             return
 
         if banner:
-            if self.clan["level"] < 2:
-                await interaction.followup.send("❌ Băng cần đạt **Level 2** trở lên để mở khóa tính năng đặt Banner hồ sơ!", ephemeral=True)
+            if self.clan.get("level", 1) < 2:
+                await auto_dismiss_notice(interaction, content="❌ Băng cần đạt **Level 2** trở lên để mở khóa tính năng đặt Banner hồ sơ!", delay=5)
                 return
             if not banner.startswith(("http://", "https://")):
-                await interaction.followup.send("❌ Link Banner phải bắt đầu bằng `http://` hoặc `https://`!", ephemeral=True)
+                await auto_dismiss_notice(interaction, content="❌ Link Banner phải bắt đầu bằng `http://` hoặc `https://`!", delay=5)
                 return
 
         await self.bot.db.update_clan(self.clan["clan_id"], logo_url=logo, banner_url=banner)
+        self.clan["logo_url"] = logo
+        self.clan["banner_url"] = banner
+
         await self.bot.db.add_clan_log(
             clan_id=self.clan["clan_id"],
             actor_id=interaction.user.id,
             action="UPDATE_IMAGES",
-            details="Cập nhật Logo hoặc Banner."
+            details="Cập nhật Logo hoặc Banner qua link URL."
         )
 
-        await interaction.followup.send("✅ Đã cập nhật Logo và Banner hồ sơ thành công!", ephemeral=True)
+        if self.parent_view:
+            self.parent_view.clan["logo_url"] = logo
+            self.parent_view.clan["banner_url"] = banner
+            try:
+                new_embed = build_image_settings_embed(self.parent_view.clan)
+                await interaction.response.edit_message(embed=new_embed, view=self.parent_view)
+            except Exception:
+                pass
+            await auto_dismiss_notice(interaction, content="✅ Đã cập nhật Logo và Banner hồ sơ thành công!", delay=5)
+        else:
+            await auto_dismiss_notice(interaction, content="✅ Đã cập nhật Logo và Banner hồ sơ thành công!", delay=5)
 
 
 class GradientColorModal(ui.Modal, title="🌈 Nhập Dải Màu Gradient Tùy Chọn"):
@@ -2891,6 +2905,161 @@ class PartyView(ui.View):
             pass
 
 
+class ClanImageUploadDashboardView(ui.View):
+    """Bảng điều khiển trực quan quản lý và tải ảnh trực tiếp cho Logo & Banner Băng"""
+    def __init__(self, clan: Dict[str, Any], bot):
+        super().__init__(timeout=180)
+        self.clan = clan
+        self.bot = bot
+
+    @ui.button(label="Gửi Tệp Logo", emoji="📤", style=discord.ButtonStyle.primary, row=0)
+    async def upload_logo_btn(self, interaction: discord.Interaction, button: ui.Button):
+        is_leader = int(self.clan["leader_id"]) == interaction.user.id
+        is_officer = is_leader or self.clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
+        if not is_officer and not interaction.user.guild_permissions.administrator:
+            await auto_dismiss_notice(interaction, content="❌ Chỉ Cán Bộ, Phó Băng hoặc Chủ Băng mới có quyền tải ảnh!", delay=5)
+            return
+        await self._start_upload_listener(interaction, "logo")
+
+    @ui.button(label="Gửi Tệp Banner", emoji="🎨", style=discord.ButtonStyle.primary, row=0)
+    async def upload_banner_btn(self, interaction: discord.Interaction, button: ui.Button):
+        is_leader = int(self.clan["leader_id"]) == interaction.user.id
+        is_officer = is_leader or self.clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
+        if not is_officer and not interaction.user.guild_permissions.administrator:
+            await auto_dismiss_notice(interaction, content="❌ Chỉ Cán Bộ, Phó Băng hoặc Chủ Băng mới có quyền tải ảnh!", delay=5)
+            return
+
+        if self.clan.get("level", 1) < 2:
+            await auto_dismiss_notice(
+                interaction,
+                content=f"❌ Băng của bạn đang ở Cấp **{self.clan.get('level', 1)}**!\n👉 Cần đạt từ **Cấp độ 2 (1,000 EXP)** trở lên để mở khóa tính năng Banner hồ sơ.",
+                delay=6
+            )
+            return
+        await self._start_upload_listener(interaction, "banner")
+
+    @ui.button(label="Dán Link URL", emoji="🔗", style=discord.ButtonStyle.secondary, row=0)
+    async def link_modal_btn(self, interaction: discord.Interaction, button: ui.Button):
+        is_leader = int(self.clan["leader_id"]) == interaction.user.id
+        is_officer = is_leader or self.clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
+        if not is_officer and not interaction.user.guild_permissions.administrator:
+            await auto_dismiss_notice(interaction, content="❌ Chỉ Cán Bộ, Phó Băng hoặc Chủ Băng mới có quyền thay đổi link ảnh!", delay=5)
+            return
+        modal = ImagesClanModal(clan=self.clan, bot=self.bot, parent_view=self)
+        await interaction.response.send_modal(modal)
+
+    @ui.button(label="Về Logo Mặc Định", emoji="🔄", style=discord.ButtonStyle.secondary, row=1)
+    async def reset_logo_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        await self.bot.db.update_clan(self.clan["clan_id"], logo_url=None)
+        self.clan["logo_url"] = None
+        await self.bot.db.add_clan_log(
+            clan_id=self.clan["clan_id"],
+            actor_id=interaction.user.id,
+            action="RESET_LOGO",
+            details="Đặt lại Logo về đồ họa Bát Giác Canvas mặc định."
+        )
+        new_embed = build_image_settings_embed(self.clan)
+        await interaction.edit_original_response(embed=new_embed, view=self)
+        await auto_dismiss_notice(interaction, content="✨ Đã chuyển về Logo Bát Giác Hoàng Gia Canvas mặc định!", delay=5)
+
+    @ui.button(label="Về Banner Mặc Định", emoji="🔄", style=discord.ButtonStyle.secondary, row=1)
+    async def reset_banner_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        await self.bot.db.update_clan(self.clan["clan_id"], banner_url=None)
+        self.clan["banner_url"] = None
+        await self.bot.db.add_clan_log(
+            clan_id=self.clan["clan_id"],
+            actor_id=interaction.user.id,
+            action="RESET_BANNER",
+            details="Đặt lại Banner về đồ họa Cyber Gaming Canvas mặc định."
+        )
+        new_embed = build_image_settings_embed(self.clan)
+        await interaction.edit_original_response(embed=new_embed, view=self)
+        await auto_dismiss_notice(interaction, content="✨ Đã chuyển về Banner Cyber Gaming Canvas mặc định!", delay=5)
+
+    @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, row=2)
+    async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, row=2)
+    async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+        try:
+            await interaction.delete_original_response()
+        except Exception:
+            pass
+        if hasattr(self.bot, "dismiss_user_panel"):
+            await self.bot.dismiss_user_panel(interaction.user.id)
+
+    async def _start_upload_listener(self, interaction: discord.Interaction, image_type: str):
+        label = "Logo Bát Giác" if image_type == "logo" else "Banner Băng"
+        await interaction.response.send_message(
+            f"📸 **CHẾ ĐỘ TẢI ẢNH TRỰC TIẾP ({label.upper()}) ĐÃ KÍCH HOẠT (60 GIÂY)**\n"
+            f"👉 Hãy **gửi 1 file ảnh (kéo thả hoặc bấm dấu `+` chọn tệp)** vào kênh chat này ngay bây giờ!\n"
+            f"*(Bot sẽ tự động bắt file ảnh, xóa tin nhắn trong kênh để giữ sạch phòng chat và gán làm {label} của Băng ngay lập tức)*",
+            ephemeral=True
+        )
+
+        def check(m: discord.Message):
+            return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id and len(m.attachments) > 0
+
+        try:
+            msg = await self.bot.wait_for("message", timeout=60.0, check=check)
+        except asyncio.TimeoutError:
+            try:
+                await interaction.followup.send("⏱️ Hết thời gian chờ gửi ảnh (60s). Bạn có thể bấm nút thử lại bất kỳ lúc nào!", ephemeral=True)
+            except Exception:
+                pass
+            return
+
+        att = msg.attachments[0]
+        content_type = att.content_type or ""
+        valid_types = ("image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif")
+        if not any(content_type.startswith(t) for t in valid_types) and not any(att.filename.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif")):
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+            await interaction.followup.send("❌ Tệp bạn vừa gửi không phải là hình ảnh hợp lệ (PNG, JPG, WEBP, GIF)!", ephemeral=True)
+            return
+
+        # Xóa tin nhắn tải ảnh của user trong kênh để giữ sạch phòng chat
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+        # Cập nhật DB
+        if image_type == "logo":
+            await self.bot.db.update_clan(self.clan["clan_id"], logo_url=att.url)
+            self.clan["logo_url"] = att.url
+            action = "UPDATE_LOGO"
+            details = "Tải lên ảnh Logo mới trực tiếp từ thiết bị."
+        else:
+            await self.bot.db.update_clan(self.clan["clan_id"], banner_url=att.url)
+            self.clan["banner_url"] = att.url
+            action = "UPDATE_BANNER"
+            details = "Tải lên ảnh Banner mới trực tiếp từ thiết bị."
+
+        await self.bot.db.add_clan_log(
+            clan_id=self.clan["clan_id"],
+            actor_id=interaction.user.id,
+            action=action,
+            details=details
+        )
+
+        # Cập nhật lại giao diện
+        new_embed = build_image_settings_embed(self.clan)
+        try:
+            await interaction.message.edit(embed=new_embed, view=self)
+        except Exception:
+            pass
+
+        await interaction.followup.send(f"🎉 **Đã tải lên và cập nhật {label} thành công từ file ảnh bạn vừa gửi!**", ephemeral=True)
+
+
 class SettingsDashboardView(ui.View):
     """Bảng điều khiển Ephemeral cài đặt băng"""
     def __init__(self, clan: Dict[str, Any], bot):
@@ -2904,7 +3073,7 @@ class SettingsDashboardView(ui.View):
             discord.SelectOption(label="Quản Lý Thành Viên & Nhân Sự", value="member_mgmt", emoji="👥", description="Mời người mới, thăng chức, giáng chức, trục xuất, chuyển quyền"),
             discord.SelectOption(label="Đổi Tên / Tag / Khẩu Hiệu", value="rename", emoji="✏️", description="Chỉnh sửa thông tin định danh (cooldown 7 ngày)"),
             discord.SelectOption(label="Cài Đặt Role Băng (Màu sắc, Tên, Hoist...)", value="role_setup", emoji="🛡️", description="Đổi màu, đổi tên, bật tách nhóm hoist hoặc chọn role server"),
-            discord.SelectOption(label="Cập Nhật Logo & Banner", value="images", emoji="🖼️", description="Cài link ảnh hiển thị hồ sơ (Banner cần Lv.2+)"),
+            discord.SelectOption(label="Cập Nhật Logo & Banner", value="images", emoji="🖼️", description="Tải ảnh lên trực tiếp từ thiết bị hoặc dán link online"),
             discord.SelectOption(label="Chế Độ Tuyển Quân", value="join_mode", emoji="🚪", description="Mở Tự Do / Cần Duyệt / Chỉ Nhận Lời Mời"),
             discord.SelectOption(label="Giải Tán Băng Đảng", value="disband", emoji="💥", description="Giải tán băng vĩnh viễn (Chỉ Chủ Băng, bảo mật 2 lớp)")
         ]
@@ -2925,8 +3094,10 @@ class SettingsDashboardView(ui.View):
             view = ClanRoleSetupView(clan=self.clan, bot=self.bot)
             await interaction.edit_original_response(content=None, embed=embed, attachments=[], view=view)
         elif val == "images":
-            modal = ImagesClanModal(clan=self.clan, bot=self.bot)
-            await interaction.response.send_modal(modal)
+            await interaction.response.defer()
+            embed = build_image_settings_embed(self.clan)
+            view = ClanImageUploadDashboardView(clan=self.clan, bot=self.bot)
+            await interaction.edit_original_response(content=None, embed=embed, attachments=[], view=view)
         elif val == "join_mode":
             await interaction.response.defer()
             view = JoinModeSelectView(clan_id=self.clan["clan_id"], current_mode=self.clan["join_mode"], bot=self.bot)

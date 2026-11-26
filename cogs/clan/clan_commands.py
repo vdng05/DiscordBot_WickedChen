@@ -45,7 +45,8 @@ from utils.ui_components import (
     LogsPaginationView,
     ClanHubView,
     WelcomeGreetingView,
-    ClanRoleSetupView
+    ClanRoleSetupView,
+    ClanQuickPartyModal
 )
 from utils.time_helper import (
     get_today_vn_string,
@@ -1146,6 +1147,15 @@ class ClanCommands(commands.Cog):
                 await interaction.followup.send(f"❌ Lỗi khi đổi màu role: `{fb_err}`", ephemeral=True)
         except Exception as e:
             await interaction.followup.send(f"❌ Lỗi khi đổi màu role: `{e}`", ephemeral=True)
+
+    @clan_group.command(name="party", description="Tạo kèo rủ rê anh em trong băng chơi game (LFG)")
+    async def clan_party(self, interaction: discord.Interaction):
+        clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
+        if not clan:
+            await interaction.response.send_message("❌ Bạn chưa tham gia bất kỳ băng đảng nào!", ephemeral=True)
+            return
+        modal = ClanQuickPartyModal(clan=clan, bot=self.bot)
+        await interaction.response.send_modal(modal)
 
     @clan_group.command(name="quests", description="Xem danh sách nhiệm vụ tuần hợp tác của băng")
     async def clan_quests(self, interaction: discord.Interaction):

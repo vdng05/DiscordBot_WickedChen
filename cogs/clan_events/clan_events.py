@@ -220,6 +220,26 @@ class ClanEvents(commands.Cog):
         except Exception as e:
             logger.error(f"Lỗi dọn dẹp yêu cầu quá hạn: {e}")
 
+        # 2. Nhắc nhở kèo Party sắp diễn ra (trong vòng 10 phút)
+        try:
+            upcoming_parties = await self.bot.db.get_upcoming_parties_to_remind(now, window_seconds=600)
+            for p in upcoming_parties:
+                channel = self.bot.get_channel(int(p["channel_id"]))
+                if channel:
+                    participants = await self.bot.db.get_party_participants(p["party_id"])
+                    main_users = [int(u["user_id"]) for u in participants if u["slot_type"] == "MAIN"]
+                    pings = " ".join(f"<@{uid}>" for uid in main_users) if main_users else f"<@{p['creator_id']}>"
+                    remind_embed = discord.Embed(
+                        title="⏰ NHẮC NHỞ: KÈO SẮP BẮT ĐẦU!",
+                        description=f"Kèo **{p['title']}** sẽ diễn ra trong vòng 10 phút tới!\nCác đồng đội chuẩn bị: {pings}",
+                        color=discord.Color.gold(),
+                        timestamp=datetime.now()
+                    )
+                    await channel.send(content=pings, embed=remind_embed)
+                await self.bot.db.mark_party_reminded(p["party_id"])
+        except Exception as e:
+            logger.error(f"Lỗi kiểm tra nhắc kèo party: {e}")
+
         # 3. Dọn dẹp cooldown rời băng đã hết hạn
         try:
             await self.bot.db.clean_expired_cooldowns()
@@ -243,12 +263,12 @@ class ClanEvents(commands.Cog):
             vn_now = get_vietnam_now()
             # Thứ Bảy (5) & Chủ Nhật (6)
             if vn_now.weekday() in (5, 6):
-                if vn_now.hour == 20 and vn_now.minute == 0:
+                if vn_now.hour == 20 and vn_now.minute <= 2:
                     alert_key = f"{vn_now.strftime('%Y-%m-%d')}-START"
                     if self._last_bonfire_alert_key != alert_key:
                         self._last_bonfire_alert_key = alert_key
                         await self._broadcast_bonfire_event(is_start=True)
-                elif vn_now.hour == 23 and vn_now.minute == 0:
+                elif vn_now.hour == 23 and vn_now.minute <= 2:
                     alert_key = f"{vn_now.strftime('%Y-%m-%d')}-END"
                     if self._last_bonfire_alert_key != alert_key:
                         self._last_bonfire_alert_key = alert_key

@@ -495,6 +495,41 @@ def build_role_setup_embed(clan: Dict[str, Any], role: Optional[discord.Role], a
     return embed
 
 
+def build_image_settings_embed(clan: Dict[str, Any]) -> discord.Embed:
+    """Tạo Embed trung tâm quản lý và tải ảnh trực tiếp cho Logo & Banner Băng"""
+    logo_status = f"✅ Đã tải lên ([Xem ảnh gốc]({clan['logo_url']}))" if clan.get("logo_url") else "✨ Đang dùng Logo Bát Giác Hoàng Gia Canvas (Mặc định)"
+    if clan.get("banner_url"):
+        banner_status = f"✅ Đã tải lên ([Xem ảnh gốc]({clan['banner_url']}))"
+    elif clan.get("level", 1) < 2:
+        banner_status = f"🔒 Mở khóa tại Cấp 2 (1,000 EXP) — Hiện tại: Cấp {clan.get('level', 1)}"
+    else:
+        banner_status = "✨ Đang dùng Banner Cyber Gaming Canvas (Mặc định)"
+
+    desc = (
+        f"🏰 Băng đảng: **[{clan['tag']}] {clan['name']}** (Cấp độ: **{clan.get('level', 1)}**)\n\n"
+        f"🖼️ **Trạng thái Logo:** {logo_status}\n"
+        f"🎨 **Trạng thái Banner:** {banner_status}\n\n"
+        "**👉 HƯỚNG DẪN TẢI ẢNH LÊN TIỆN LỢI:**\n"
+        "• **Cách 1 (Nhanh nhất):** Bấm nút **`[📤 Gửi Tệp Logo]`** hoặc **`[🎨 Gửi Tệp Banner]`** bên dưới ➔ Kéo thả hoặc chọn file ảnh gửi thẳng vào kênh chat này trong 60 giây *(Bot sẽ tự động bắt file ảnh và xóa tin nhắn để giữ sạch phòng chat)*.\n"
+        "• **Cách 2:** Dùng lệnh Slash Command `/clan upload-image loai:[logo/banner] file:[chọn tệp]`.\n"
+        "• **Cách 3:** Bấm **`[🔗 Dán Link URL]`** nếu bạn đã có sẵn link ảnh online.\n"
+        "• **Khôi phục:** Bấm các nút **`[🔄 Về Mặc Định]`** nếu muốn chuyển lại về đồ họa Canvas tự động của bot."
+    )
+
+    embed = discord.Embed(
+        title="🖼️ TRUNG TÂM QUẢN LÝ & TẢI ẢNH BĂNG ĐẢNG",
+        description=desc,
+        color=parse_hex_color(clan.get("color_hex")),
+        timestamp=datetime.now()
+    )
+    if clan.get("logo_url"):
+        embed.set_thumbnail(url=clan["logo_url"])
+    if clan.get("banner_url"):
+        embed.set_image(url=clan["banner_url"])
+    embed.set_footer(text="Hỗ trợ mọi định dạng: PNG, JPG, JPEG, WEBP, GIF (Dung lượng tối đa 8MB)")
+    return embed
+
+
 async def send_dm_notification(user: Any, embed: discord.Embed) -> bool:
     """Gửi DM thông báo an toàn cho thành viên, bắt mọi lỗi nếu user đóng DM/block bot"""
     if not user:

@@ -292,8 +292,37 @@ async def run_tests():
     assert 12345 not in bot.active_user_panels
     print("✅ 19. Cơ chế Auto-Dismiss và dọn dẹp panel tương tác của người dùng hoạt động hoàn hảo.")
 
+    # 20. Kiểm tra Bảng Quản Lý & Tải Ảnh Trực Tiếp (ClanImageUploadDashboardView & build_image_settings_embed)
+    from utils.embeds import build_image_settings_embed
+    from utils.ui_components import ClanImageUploadDashboardView
+    img_embed = build_image_settings_embed(clan)
+    assert img_embed.title == "🖼️ TRUNG TÂM QUẢN LÝ & TẢI ẢNH BĂNG ĐẢNG"
+    img_view = ClanImageUploadDashboardView(clan=clan, bot=bot)
+    assert len(img_view.children) == 7
+    print("✅ 20. Bảng điều khiển quản lý & tải ảnh trực tiếp (Logo/Banner Upload Dashboard) hoạt động mượt mà.")
+
+    # 21. Kiểm tra LFG Party Kèo Game & Nhắc nhở trước giờ chơi (Party Reminders)
+    now_ts = int(time.time())
+    p_id = await db.create_party(
+        clan_id=clan_id,
+        creator_id=9999,
+        channel_id=2001,
+        message_id=55555,
+        title="Leo Rank Valorant",
+        max_slots=5,
+        scheduled_at=now_ts + 300 # 5 phút nữa
+    )
+    assert p_id > 0
+    upcoming = await db.get_upcoming_parties_to_remind(now_ts, window_seconds=600)
+    assert any(p["party_id"] == p_id for p in upcoming)
+    reminded_count = await db.mark_party_reminded(p_id)
+    assert reminded_count == 1
+    upcoming_after = await db.get_upcoming_parties_to_remind(now_ts, window_seconds=600)
+    assert not any(p["party_id"] == p_id for p in upcoming_after)
+    print("✅ 21. Hệ thống Kèo chơi game LFG & Vòng lặp tự động nhắc nhở trước giờ thi đấu chuẩn xác 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 19 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 21 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db
