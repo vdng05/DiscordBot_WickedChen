@@ -1176,6 +1176,50 @@ class ClanDetailView(ui.View):
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
+class QuickApplyDropdown(ui.Select):
+    """Dropdown chọn nhanh băng để mở Modal nộp đơn trực tiếp"""
+    def __init__(self, clans: List[Dict[str, Any]], bot):
+        self.clans = clans
+        self.bot = bot
+        options = []
+        for c in clans[:25]:
+            mode_str = {
+                JoinModes.OPEN: "Mở Tự Do",
+                JoinModes.APPROVAL: "Cần Duyệt",
+                JoinModes.INVITE_ONLY: "Chỉ Nhận Lời Mời"
+            }.get(c.get("join_mode", "APPROVAL"), "Cần Duyệt")
+            options.append(
+                discord.SelectOption(
+                    label=f"[{c['tag']}] {c['name']} (Lv.{c.get('level', 1)})"[:100],
+                    value=str(c["clan_id"]),
+                    description=f"{c.get('member_count', 1)}/{c.get('max_members', 15)} TV • {mode_str}"[:100],
+                    emoji="📩"
+                )
+            )
+        super().__init__(
+            placeholder="📩 Chọn băng muốn nộp đơn xin gia nhập...",
+            options=options,
+            min_values=1,
+            max_values=1
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        clan_id = int(self.values[0])
+        clan = await self.bot.db.get_clan_by_id(clan_id)
+        if not clan:
+            await interaction.response.send_message("❌ Băng không tồn tại hoặc vừa bị giải tán!", ephemeral=True)
+            return
+        modal = ApplyClanModal(clan=clan, bot=self.bot)
+        await interaction.response.send_modal(modal)
+
+
+class QuickApplySelectView(ui.View):
+    """View phụ chứa Dropdown nộp đơn nhanh"""
+    def __init__(self, clans: List[Dict[str, Any]], bot):
+        super().__init__(timeout=120)
+        self.add_item(QuickApplyDropdown(clans=clans, bot=bot))
+
+
 class ClanListInteractiveView(ui.View):
     """View tương tác cho Bảng danh mục Băng Đảng kèm Dropdown và Nút Lập Băng Mới"""
     def __init__(self, clans: List[Dict[str, Any]], bot):
@@ -1185,6 +1229,27 @@ class ClanListInteractiveView(ui.View):
 
         if clans:
             self.add_item(ClanSelectDropdown(clans=clans, bot=bot))
+
+    @ui.button(label="Nộp Đơn Vào Băng", emoji="📩", style=discord.ButtonStyle.primary, row=1)
+    async def apply_direct_btn(self, interaction: discord.Interaction, button: ui.Button):
+        existing = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
+        if existing:
+            await interaction.response.send_message(f"❌ Bạn đã là thành viên của băng **{existing['name']}** rồi!", ephemeral=True)
+            return
+        if not self.clans:
+            await interaction.response.send_message("❌ Máy chủ hiện chưa có băng nào đang hoạt động!", ephemeral=True)
+            return
+
+        if len(self.clans) == 1:
+            clan = await self.bot.db.get_clan_by_id(self.clans[0]["clan_id"])
+            if not clan:
+                await interaction.response.send_message("❌ Băng không tồn tại hoặc vừa bị giải tán!", ephemeral=True)
+                return
+            modal = ApplyClanModal(clan=clan, bot=self.bot)
+            await interaction.response.send_modal(modal)
+        else:
+            view = QuickApplySelectView(clans=self.clans, bot=self.bot)
+            await interaction.response.send_message("📩 **Hãy chọn băng bạn muốn nộp đơn gia nhập bên dưới:**", view=view, ephemeral=True)
 
     @ui.button(label="Thành Lập Băng Mới", emoji="✨", style=discord.ButtonStyle.success, row=1)
     async def create_btn(self, interaction: discord.Interaction, button: ui.Button):
@@ -1790,6 +1855,7 @@ class ClanHubView(ui.View):
         if clan:
             self.remove_item(self.list_clans_btn)
             self.remove_item(self.create_clan_btn)
+            self.remove_item(self.apply_hub_btn)
             is_leader = int(clan["leader_id"]) == user.id
             is_officer = is_leader or clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
             if not is_officer:
@@ -1972,6 +2038,29 @@ class ClanHubView(ui.View):
         embed = build_logs_embed(self.clan, logs_data["logs"], page=1, total_pages=logs_data["total_pages"])
         view = LogsPaginationView(clan_id=self.clan["clan_id"], current_page=1, total_pages=logs_data["total_pages"], bot=self.bot)
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+    @ui.button(label="Nộp Đơn Vào Băng", emoji="📩", style=discord.ButtonStyle.primary, row=1)
+    async def apply_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        existing = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
+        if existing:
+            await interaction.response.send_message(f"❌ Bạn đã là thành viên của băng **{existing['name']}** rồi!", ephemeral=True)
+            return
+
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        if not clans:
+            await interaction.response.send_message("❌ Máy chủ hiện chưa có băng nào đang hoạt động!", ephemeral=True)
+            return
+
+        if len(clans) == 1:
+            clan = await self.bot.db.get_clan_by_id(clans[0]["clan_id"])
+            if not clan:
+                await interaction.response.send_message("❌ Băng không tồn tại hoặc vừa bị giải tán!", ephemeral=True)
+                return
+            modal = ApplyClanModal(clan=clan, bot=self.bot)
+            await interaction.response.send_modal(modal)
+        else:
+            view = QuickApplySelectView(clans=clans, bot=self.bot)
+            await interaction.response.send_message("📩 **Hãy chọn băng bạn muốn nộp đơn gia nhập bên dưới:**", view=view, ephemeral=True)
 
     @ui.button(label="Quản Lý Thành Viên", emoji="👥", style=discord.ButtonStyle.primary, row=2)
     async def members_mgmt_btn(self, interaction: discord.Interaction, button: ui.Button):

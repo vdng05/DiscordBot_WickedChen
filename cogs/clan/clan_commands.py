@@ -431,17 +431,38 @@ class ClanCommands(commands.Cog):
         await self.bot.db.update_request_message_id(req_id, msg.id)
 
     @clan_group.command(name="apply", description="Nộp đơn xin gia nhập một băng đảng")
-    @app_commands.describe(ten_bang="Tên hoặc Tag của băng muốn xin vào")
+    @app_commands.describe(ten_bang="Tên hoặc Tag của băng muốn xin vào (bỏ trống để chọn danh sách)")
     @app_commands.autocomplete(ten_bang=clan_name_autocomplete)
-    async def clan_apply(self, interaction: discord.Interaction, ten_bang: str):
+    async def clan_apply(self, interaction: discord.Interaction, ten_bang: Optional[str] = None):
         guild = interaction.guild
-        clan = await self.bot.db.get_clan_by_name(guild.id, ten_bang) or await self.bot.db.get_clan_by_tag(guild.id, ten_bang)
-        if not clan:
-            await interaction.response.send_message(f"❌ Không tìm thấy băng nào khớp với: **{ten_bang}**!", ephemeral=True)
+        existing = await self.bot.db.get_clan_by_member(guild.id, interaction.user.id)
+        if existing:
+            await interaction.response.send_message(f"❌ Bạn đã là thành viên của băng **{existing['name']}** rồi!", ephemeral=True)
             return
 
-        modal = ApplyClanModal(clan=clan, bot=self.bot)
-        await interaction.response.send_modal(modal)
+        if ten_bang:
+            clan = await self.bot.db.get_clan_by_name(guild.id, ten_bang) or await self.bot.db.get_clan_by_tag(guild.id, ten_bang)
+            if not clan:
+                await interaction.response.send_message(f"❌ Không tìm thấy băng nào khớp với: **{ten_bang}**!", ephemeral=True)
+                return
+            modal = ApplyClanModal(clan=clan, bot=self.bot)
+            await interaction.response.send_modal(modal)
+        else:
+            clans = await self.bot.db.get_all_clans_in_guild(guild.id)
+            if not clans:
+                await interaction.response.send_message("❌ Máy chủ hiện chưa có băng nào đang hoạt động!", ephemeral=True)
+                return
+            if len(clans) == 1:
+                clan = await self.bot.db.get_clan_by_id(clans[0]["clan_id"])
+                if not clan:
+                    await interaction.response.send_message("❌ Băng không tồn tại!", ephemeral=True)
+                    return
+                modal = ApplyClanModal(clan=clan, bot=self.bot)
+                await interaction.response.send_modal(modal)
+            else:
+                from utils.ui_components import QuickApplySelectView
+                view = QuickApplySelectView(clans=clans, bot=self.bot)
+                await interaction.response.send_message("📩 **Hãy chọn băng bạn muốn nộp đơn gia nhập bên dưới:**", view=view, ephemeral=True)
 
     @clan_group.command(name="promote", description="Thăng cấp bậc cho một thành viên trong băng")
     @app_commands.describe(user="Thành viên muốn thăng chức")

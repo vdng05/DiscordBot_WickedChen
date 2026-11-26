@@ -231,7 +231,7 @@ def build_clan_list_embed(guild_name: str, clans: List[Dict[str, Any]]) -> disco
         title=f"📜 BẢNG DANH MỤC BĂNG ĐẢNG — {guild_name}",
         description=(
             f"Máy chủ hiện đang có **{len(clans)}** băng đảng đang hoạt động.\n"
-            "👉 **Chọn một băng từ Menu bên dưới** để xem thông tin chi tiết và nộp đơn gia nhập chỉ với 1 cú click!"
+            "👉 Bấm nút **[📩 Nộp Đơn Vào Băng]** hoặc chọn từ Menu bên dưới để vào băng ngay bằng Modal tương tác!"
         ),
         color=discord.Color.blurple(),
         timestamp=datetime.now()

@@ -8,7 +8,8 @@
 👉 **Cách nhanh nhất để dùng bot:** Bạn chỉ cần gõ lệnh duy nhất `/clan hub`.
 Mọi tính năng quan trọng đều được **model hóa 100% bằng nút bấm, menu thả xuống và popup (Modal)**:
 - **Nếu chưa có băng:**
-  - Bấm **`[📜 Xem Danh Sách Băng Mở Tuyển]`**: Menu thả xuống danh sách băng để chọn xem hồ sơ và bấm **`[📩 Nộp Đơn / Gia Nhập]`** chỉ với 1 click, không cần gõ lệnh.
+  - Bấm **`[📩 Nộp Đơn Vào Băng]`**: Mở trực tiếp hộp thoại Modal nhập liệu nộp đơn (nếu server có 1 băng thì popup ngay lập tức, nếu nhiều băng sẽ hiện menu chọn băng rồi popup modal).
+  - Bấm **`[📜 Xem Danh Sách Băng Mở Tuyển]`**: Menu thả xuống danh sách băng để chọn xem hồ sơ và bấm **`[📩 Nộp Đơn / Gia Nhập]`** chỉ với 1 click, không cần gõ bất kỳ câu lệnh nào.
   - Bấm **`[✨ Thành Lập Băng Mới]`**: Mở form đăng ký băng mới.
   - Bấm **`[🏆 Bảng Xếp Hạng Server]`**: Xem bảng vàng danh dự và chuyển đổi các tiêu chí (Cấp độ, Tuần, Sĩ số) bằng nút bấm.
 - **Nếu đã có băng:**
@@ -22,8 +23,8 @@ Mọi tính năng quan trọng đều được **model hóa 100% bằng nút b�
 
 ### 1. Cách Tìm Băng & Xin Gia Nhập (1-Click)
 - **Xem danh sách & xin gia nhập ngay:** Bấm nút **`[📜 Xem Danh Sách Băng Mở Tuyển]`** trong `/clan hub` (hoặc gõ `/clan list`).
-  - Chọn băng bạn quan tâm từ Menu thả xuống.
-  - Bot sẽ hiện hồ sơ chi tiết cùng nút **`[📩 Nộp Đơn / Gia Nhập]`** và **`[👥 Xem Thành Viên]`** ngay dưới tin nhắn!
+  - **Nộp đơn siêu tốc:** Bấm nút **`[📩 Nộp Đơn Vào Băng]`** ngay dưới danh sách, Modal điền đơn sẽ hiện ra ngay lập tức!
+  - **Hoặc chọn từ Menu:** Chọn băng bạn quan tâm từ Menu thả xuống để xem hồ sơ chi tiết cùng nút **`[📩 Nộp Đơn / Gia Nhập]`** và **`[👥 Xem Thành Viên]`**!
 - **Nếu được mời vào băng:** Khi Cán Bộ mời bạn, tin nhắn mời sẽ hiện ra kèm nút **`[✅ Chấp Nhận Lời Mời]`** màu xanh — bấm 1 cái là vào ngay!
 
 ### 2. Điểm Danh Nhận Thưởng Hằng Ngày
