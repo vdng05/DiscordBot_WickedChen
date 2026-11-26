@@ -263,6 +263,10 @@ async def run_tests():
 
     test_slug_4 = to_channel_slug("Đại Bàng Lửa & Rồng Vàng")
     assert test_slug_4 == "dai-bang-lua-rong-vang", f"Expected 'dai-bang-lua-rong-vang', got '{test_slug_4}'"
+
+    # Kiểm tra tên kênh text chỉ dùng tên băng không kèm tag
+    channel_name_clean = f"💬・{to_channel_slug('Chó Điên')}"
+    assert channel_name_clean == "💬・cho-dien", f"Expected '💬・cho-dien', got '{channel_name_clean}'"
     print("✅ 18. Chuyển đổi tên kênh tiếng Việt không dấu chuẩn Discord (to_channel_slug) chính xác tuyệt đối.")
 
     # 19. Kiểm tra Cơ chế Auto-Dismiss & Quản lý Panel người dùng (register_user_panel)

@@ -200,7 +200,7 @@ class CreateClanModal(ui.Modal, title="🏰 Thành Lập Băng Đảng Mới"):
 
             from utils.text_helper import to_channel_slug
             clean_channel_slug = to_channel_slug(name)[:30]
-            text_channel_name = f"💬・{tag.lower()}-{clean_channel_slug}"
+            text_channel_name = f"💬・{clean_channel_slug}"
             voice_channel_name = f"🔊・[{tag}] Phòng Sinh Hoạt"
 
             overwrites = {
@@ -384,11 +384,11 @@ class RenameClanModal(ui.Modal):
 
         # Cập nhật Tên Kênh Chat & Voice Không Dấu
         from utils.text_helper import to_channel_slug
-        clean_slug = to_channel_slug(name)[:25]
+        clean_slug = to_channel_slug(name)[:30]
         text_ch = guild.get_channel(int(self.clan["text_channel_id"]))
         if text_ch:
             try:
-                await text_ch.edit(name=f"💬・{tag.lower()}-{clean_slug}", topic=f"Kênh sinh hoạt chính thức của Băng [{tag}] {name} | Khẩu hiệu: {slogan}")
+                await text_ch.edit(name=f"💬・{clean_slug}", topic=f"Kênh sinh hoạt chính thức của Băng [{tag}] {name} | Khẩu hiệu: {slogan}")
             except Exception as e:
                 logger.warn(f"Không thể đổi tên text channel: {e}")
 

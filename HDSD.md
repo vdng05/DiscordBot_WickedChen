@@ -133,7 +133,7 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 3. Đảm bảo vai trò Bot có quyền `Quản lý Vai trò (Manage Roles)` và `Quản lý Kênh (Manage Channels)`.
 
 ### 3. Chuẩn Hóa Tên Kênh Không Dấu & Cứu Hộ 1-Click: `/clan-admin sync`
-- **Tên Kênh Tiếng Việt Không Dấu Chuẩn Discord:** Discord không cho phép dấu tiếng Việt trong tên kênh văn bản (các ký tự có dấu như `ó, đ, ê` trước đây bị Discord cắt thành dấu gạch nối rời rạc `💬・ngu-ch-i-n`). Bot đã tự động chuyển đổi thành slug không dấu chuẩn (`💬・ngu-cho-dien`, `📜・nhat-ky-bang`).
+- **Tên Kênh Tiếng Việt Không Dấu Chuẩn Discord:** Discord không cho phép dấu tiếng Việt trong tên kênh văn bản (các ký tự có dấu như `ó, đ, ê` trước đây bị Discord cắt thành dấu gạch nối rời rạc `💬・ngu-ch-i-n`). Bot đã loại bỏ tag trong tên kênh và chuyển đổi thành slug tên băng không dấu chuẩn gọn gàng (`💬・cho-dien`, `📜・nhat-ky-bang`).
 - **Cứu Hộ & Tự Động Đổi Tên Kênh Cũ:** Khi Admin chạy lệnh `/clan-admin sync`:
   - Bot tự động quét và đổi tên các kênh chat bị lỗi gạch nối trước đây về tên tiếng Việt không dấu chuẩn đẹp.
   - Nếu ai đó lỡ tay xóa nhầm Role hoặc Kênh của một băng, bot sẽ **tự động tạo lại Role/Kênh bị thiếu**, gắn lại quyền chuẩn xác 100%!

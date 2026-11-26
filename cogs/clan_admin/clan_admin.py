@@ -156,8 +156,8 @@ class ClanAdmin(commands.Cog):
 
             # 2. Kiểm tra Kênh Chat & Chuẩn Hóa Tên Kênh Không Dấu
             from utils.text_helper import to_channel_slug
-            clean_slug = to_channel_slug(c["name"])[:25]
-            expected_ch_name = f"💬・{c['tag'].lower()}-{clean_slug}"
+            clean_slug = to_channel_slug(c["name"])[:30]
+            expected_ch_name = f"💬・{clean_slug}"
 
             text_ch = guild.get_channel(int(c["text_channel_id"]))
             if not text_ch and role:
