@@ -31,7 +31,7 @@ Mọi tính năng quan trọng đều được **model hóa 100% bằng nút b�
 - **Xem danh sách & xin gia nhập ngay:** Bấm nút **`[📜 Xem Danh Sách Băng Mở Tuyển]`** trong `/clan hub` (hoặc gõ `/clan list`).
   - **Nộp đơn siêu tốc:** Bấm nút **`[📩 Nộp Đơn Vào Băng]`** ngay dưới danh sách, Modal điền đơn sẽ hiện ra ngay lập tức!
   - **Hoặc chọn từ Menu:** Chọn băng bạn quan tâm từ Menu thả xuống để xem hồ sơ chi tiết cùng nút **`[📩 Nộp Đơn / Gia Nhập]`** và **`[👥 Xem Thành Viên]`**!
-- **Nếu được mời vào băng:** Khi Cán Bộ mời bạn, tin nhắn mời sẽ hiện ra kèm nút **`[✅ Chấp Nhận Lời Mời]`** màu xanh — bấm 1 cái là vào ngay!
+- **Nếu được mời vào băng:** Khi Cán Bộ mời bạn, bot sẽ gửi **tin nhắn riêng (DM)** kèm sẵn nút **`[✅ Chấp Nhận Lời Mời]`** màu xanh — bấm 1 cái là vào ngay! *(Nếu bạn khóa DM, bot sẽ gửi lời mời ra một kênh công khai để bạn bấm).*
 
 ### 2. Điểm Danh Nhận Thưởng Hằng Ngày
 - Bấm nút **`[📅 Điểm Danh Hằng Ngày]`** trong `/clan hub` (hoặc gõ `/clan checkin`).
@@ -76,7 +76,7 @@ Chủ Băng có toàn quyền thiết lập Role cho clan:
 ### 3. Tải Lên Trực Tiếp Ảnh Logo, Banner & Icon Role
 Không cần phải đi copy link ảnh trên mạng phức tạp, bạn có thể **tải trực tiếp file ảnh từ máy tính hoặc điện thoại**:
 - **📸 Cách 1 — Trực tiếp qua Giao diện Bảng Điều Khiển:** Vào `/clan settings` (hoặc `/clan hub` ➔ `Cài Đặt Băng`) ➔ chọn **`Cập Nhật Logo & Banner`**:
-  - Bấm **`[📤 Gửi Tệp Logo]`** hoặc **`[🎨 Gửi Tệp Banner]`** ➔ Kéo thả/chọn file ảnh gửi thẳng vào kênh chat trong 60 giây.
+  - Bấm **`[📤 Gửi Tệp Logo]`** hoặc **`[🎨 Gửi Tệp Banner]`** ➔ Kéo thả/chọn file ảnh gửi thẳng vào kênh chat trong **15 phút**.
   - Bot sẽ tự động chụp lấy ảnh, **xóa tin nhắn tải ảnh trong kênh để giữ sạch phòng chat** và cập nhật ngay lập tức!
   - Bấm **`[🔄 Về Mặc Định]`** nếu muốn chuyển lại về đồ họa Bát Giác & Cyber Gaming Canvas hoàng gia cực chất.
 - **⚡ Cách 2 — Bằng Slash Command:**
@@ -109,7 +109,7 @@ Mở bảng điều khiển tương tác (dành cho Chủ Băng & Cán Bộ):
 
 ### 6. Bổ Nhiệm & Quản Lý Nhân Sự (Nút `[👥 Quản Lý Thành Viên]` Trong `/clan hub`)
 Bạn không cần phải nhớ các câu lệnh slash command phức tạp, chỉ cần bấm **`[👥 Quản Lý Thành Viên]`** trong `/clan hub`:
-- **➕ Mời thành viên mới:** Menu chọn người dùng Discord (User Picker) trực quan, chọn ai là gửi ngay lời mời có nút xác nhận (hạn 15 phút).
+- **➕ Mời thành viên mới:** Menu chọn người dùng Discord (User Picker) trực quan, chọn ai là bot tự động gửi lời mời kèm nút xác nhận thẳng vào **DM** của họ *(hoặc kênh công khai nếu họ khóa DM, hạn 15 phút)*.
 - **⬆️ Thăng chức:** Bấm nút $\rightarrow$ Chọn thành viên từ menu thả xuống để thăng lên Cán Bộ hoặc Phó Băng.
 - **⬇️ Giáng chức:** Bấm nút $\rightarrow$ Chọn cán bộ để hạ bậc chức vụ. *(Tối đa 2 Phó Băng và 4 Cán Bộ)*.
 - **👢 Trục xuất:** Bấm nút $\rightarrow$ Chọn thành viên vi phạm $\rightarrow$ Nhập lý do trong popup để trục xuất (Bot sẽ gửi thông báo riêng qua DM kèm lý do cho thành viên, không phạt cooldown).
@@ -151,10 +151,8 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 3. Đảm bảo vai trò Bot có quyền `Quản lý Vai trò (Manage Roles)` và `Quản lý Kênh (Manage Channels)`.
 
 ### 3. Chuẩn Hóa Tên Kênh Không Dấu & Cứu Hộ 1-Click: `/clan-admin sync`
-- **Tên Kênh Tiếng Việt Không Dấu Chuẩn Discord:** Discord không cho phép dấu tiếng Việt trong tên kênh văn bản (các ký tự có dấu như `ó, đ, ê` trước đây bị Discord cắt thành dấu gạch nối rời rạc `💬・ngu-ch-i-n`). Bot đã loại bỏ tag trong tên kênh và chuyển đổi thành slug tên băng không dấu chuẩn gọn gàng (`💬・cho-dien`, `📜・nhat-ky-bang`).
-- **Cứu Hộ & Tự Động Đổi Tên Kênh Cũ:** Khi Admin chạy lệnh `/clan-admin sync`:
-  - Bot tự động quét và đổi tên các kênh chat bị lỗi gạch nối trước đây về tên tiếng Việt không dấu chuẩn đẹp.
-  - Nếu ai đó lỡ tay xóa nhầm Role hoặc Kênh của một băng, bot sẽ **tự động tạo lại Role/Kênh bị thiếu**, gắn lại quyền chuẩn xác 100%!
+- **Tên Kênh Tiếng Việt Không Dấu Chuẩn Discord:** Khi tạo mới băng, bot chuyển đổi tên băng thành slug không dấu gọn gàng (`💬・cho-dien`, `📜・nhat-ky-...`) thay vì để dấu gạch nối rời rạc.
+- **Cứu Hộ An Toàn:** Khi Admin chạy lệnh `/clan-admin sync`, bot **tuyệt đối không tự ý sửa tên hay xóa các kênh đang tồn tại**; nếu ai đó lỡ tay xóa nhầm Role hoặc Kênh của một băng, bot sẽ **tự động tạo lại Role/Kênh bị thiếu** và đồng bộ lại thành viên chuẩn xác 100%!
 
 ### 4. Xóa Bắt Buộc Khi Băng Vi Phạm: `/clan-admin force-delete`
 - Gõ `/clan-admin force-delete [tên_băng] [lý_do]`: Bot sẽ hiện nút xác nhận 2 lớp, sau đó xóa sạch Role, Kênh và dữ liệu của băng vi phạm, đồng thời lưu nhật ký xử lý vào kênh Log server.

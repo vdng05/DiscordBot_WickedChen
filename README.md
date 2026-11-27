@@ -38,10 +38,11 @@
 **WickedChen Clan Bot** là hệ thống quản lý hội nhóm / băng đảng Discord vận hành theo triết lý **hòa bình, gắn kết cộng đồng**, tập trung vào rủ nhau chơi game (Party LFG), điểm danh nhận thưởng, thi đua lành mạnh và nâng cấp không gian sinh hoạt chung.
 
 Mỗi băng đảng trong server được ánh xạ trực tiếp thành:
-- **1 Discord Role** riêng biệt (định dạng `[TAG] Tên Băng`, bật `hoist` để phân tách trên cột thành viên).
-- **1 Kênh Chat Text riêng** bảo mật tuyệt đối.
-- **1 Kênh Voice riêng** (và tự động mở khóa thêm **Kênh Voice thứ 2** khi băng đạt Cấp độ 3).
-- Toàn bộ kênh được gom gọn gàng trong **1 Category** do Quản Trị Viên chỉ định.
+- **1 Discord Role** riêng biệt (định dạng `[TAG] Tên Băng`, hỗ trợ màu đơn sắc, **Gradient 2 màu**, **Icon Role**, tách nhóm `hoist`).
+- **1 Kênh Chat Text riêng** *(Riêng tư — chỉ thành viên băng nhìn thấy)*.
+- **1 Kênh Nhật Ký Băng riêng (`📜・nhat-ky-...`)** *(Riêng tư — chỉ thành viên băng nhìn thấy để theo dõi lịch sử hoạt động)*.
+- **1 Kênh Voice** *(Công khai/Public để mọi người giao lưu; tự động mở khóa thêm **Kênh Voice thứ 2** khi băng đạt Cấp độ 3)*.
+- Toàn bộ kênh được gom gọn gàng trong **1 Category duy nhất** do Quản Trị Viên chỉ định. Bot **không tự ý chỉnh sửa hay xóa bất kỳ kênh, role hoặc tin nhắn nào** ngoài lệnh trực tiếp từ người dùng/quản trị viên.
 
 ---
 
@@ -49,8 +50,9 @@ Mỗi băng đảng trong server được ánh xạ trực tiếp thành:
 
 ### 📌 Quy Tắc Cốt Lõi
 1. **Độc nhất:** Mỗi thành viên chỉ được tham gia tối đa 1 băng đảng duy nhất trong cùng 1 server Discord.
-2. **Chống nhảy băng (Cooldown):** Sau khi tự rời băng hoặc bị trục xuất, thành viên phải chờ **24 giờ** (Admin có thể tùy chỉnh) mới được phép lập băng hoặc xin vào băng mới.
-3. **Quyền riêng tư tuyệt đối:** Kênh riêng của băng tự động khóa `@everyone` (ẩn hoàn toàn) và chỉ cấp quyền truy cập cho Role của băng đó cùng Quản Trị Viên server.
+2. **Tự do chuyển băng (Không Cooldown mặc định):** Thành viên rời băng hoặc bị trục xuất có thể tạo hoặc xin vào băng mới ngay lập tức *(Admin vẫn có thể bật cooldown tùy chọn trong `/clan-admin setup`)*.
+3. **Quyền riêng tư & An toàn:** Kênh chat và kênh nhật ký của băng tự động khóa `@everyone` (ẩn hoàn toàn) và chỉ cấp quyền truy cập cho Role của băng đó cùng Quản Trị Viên server; kênh Voice để công khai cho cộng đồng giao lưu.
+4. **Phân quyền sử dụng Bot (`/bot-access`):** Chủ Bot có thể chọn Role được phép sử dụng bot trên từng server (`Bật Tất Cả` mặc định, `Chọn Role Cụ Thể`, hoặc `Tắt Tất Cả`).
 
 ### 🛡️ Ma Trận Phân Quyền (RBAC)
 | Chức năng / Quyền hạn | Admin Server | Chủ Băng (LEADER) | Phó Băng (CO_LEADER) | Cán Bộ (OFFICER) | Thành Viên (MEMBER) |
@@ -78,73 +80,80 @@ PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 ```
 
-### 8 Bảng Dữ Liệu Chính:
+### 11 Bảng Dữ Liệu Chính:
 1. `guild_configs`: Cấu hình Category, kênh Log, Role yêu cầu và thời gian cooldown của từng Server.
-2. `clans`: Lưu trữ tên, tag, khẩu hiệu, role_id, text_channel_id, voice_channel_id, cấp độ, EXP, màu role, logo, banner.
-3. `clan_members`: Lưu danh sách thành viên, cấp bậc (LEADER -> MEMBER), điểm cống hiến, chuỗi ngày điểm danh (Streak).
-4. `member_cooldowns`: Theo dõi timestamp hết hạn thời gian chờ sau khi rời băng.
-5. `clan_requests`: Quản lý lời mời (`INVITE`) và đơn xin vào (`APPLY`), đi kèm `status` (PENDING, ACCEPTED, REJECTED, EXPIRED).
-6. `clan_parties`: Lưu trữ các kèo chơi game LFG, người tạo, slot tối đa, giờ hẹn, trạng thái OPEN/CLOSED.
+2. `clans`: Lưu trữ tên, tag, khẩu hiệu, role_id, text_channel_id, log_channel_id, voice_channel_id, voice_channel_2_id, cấp độ, EXP, màu role, logo, banner.
+3. `clan_members`: Lưu danh sách thành viên, cấp bậc (LEADER -> MEMBER), danh hiệu nội bộ (`custom_title`), điểm cống hiến, chuỗi ngày điểm danh (Streak).
+4. `member_cooldowns`: Theo dõi timestamp hết hạn thời gian chờ sau khi rời băng (nếu server bật cooldown).
+5. `clan_requests`: Quản lý lời mời (`INVITE`) và đơn xin vào (`APPLY`), đi kèm `status` (`PENDING`, `ACCEPTED`, `REJECTED`, `EXPIRED`, `CANCELLED`).
+6. `clan_parties`: Lưu trữ các kèo chơi game LFG, người tạo, slot tối đa, giờ hẹn, trạng thái `OPEN`/`CLOSED`.
 7. `clan_party_participants`: Danh sách người tham gia kèo phân tách giữa `MAIN` (đội hình chính) và `RESERVE` (dự bị).
-8. `clan_weekly_quests`: 3 nhiệm vụ hợp tác tuần của từng băng (CHECKIN_COUNT, VOICE_MINUTES, PARTY_COMPLETED).
-9. `clan_logs`: Lịch sử hoạt động nội bộ (thăng/giáng chức, mời, rời, kick, thăng cấp).
+8. `clan_weekly_quests`: 3 nhiệm vụ hợp tác tuần của từng băng (`CHECKIN_COUNT`, `VOICE_MINUTES`, `CHAT_MESSAGES`).
+9. `clan_logs`: Lịch sử hoạt động nội bộ (thăng/giáng chức, mời, rời, kick, thăng cấp, danh hiệu).
+10. `clan_milestones`: Các cột mốc lịch sử trọng đại của băng (ngày thành lập, các mốc thăng cấp).
+11. `bot_access_configs`: Cấu hình phân quyền Role được phép sử dụng bot theo từng server (`ALL`, `ROLES`, `NONE`).
 
 ---
 
 ## 4. Danh Mục Bộ Lệnh Slash Commands Đầy Đủ
 
-### 4.1. Nhóm A: Quản Trị Server (/clan-admin)
-- `/clan-admin setup`: Chỉ định Category chứa kênh các băng, kênh Log sự kiện, bật/tắt cho mem tự tạo, role điều kiện và số giờ cooldown rời băng.
+### 4.1. Nhóm A: Quản Trị Server & Chủ Bot (`/clan-admin`, `/bot-access`)
+- `/clan-admin setup`: Chỉ định Category chứa kênh các băng, kênh Log sự kiện, bật/tắt cho mem tự tạo, role điều kiện và số giờ cooldown rời băng (mặc định `0`).
 - `/clan-admin force-delete [tên_băng] [lý_do]`: Buộc xóa băng vi phạm quy định server (đi kèm nút xác nhận 2 lớp an toàn).
-- `/clan-admin sync`: Quét toàn bộ server, tự động khôi phục lại Role/Kênh nếu lỡ bị Admin xóa tay, đồng thời đồng bộ lại danh sách thành viên giữa Discord và Database.
+- `/clan-admin sync`: Quét toàn bộ server, tự động khôi phục lại Role/Kênh bị thiếu nếu lỡ bị xóa tay và đồng bộ thành viên (không tự ý sửa tên hay xóa kênh đang tồn tại).
+- `/bot-access` *(Dành riêng cho Chủ Bot trong `OWNER_IDS`)*: Chọn Role được phép dùng bot (`Bật Tất Cả`, `Chọn Role Cụ Thể`, hoặc `Tắt Tất Cả`), hỗ trợ phân trang danh sách Role cho server đông role.
 
-### 4.2. Nhóm B: Khởi Tạo & Tùy Biến Băng
-- `/clan create`: Mở **Discord Modal** nhập Tên băng (3-25 ký tự), Tag ngắn (2-5 ký tự viết hoa), Khẩu hiệu (tối đa 100 ký tự). Bot tự tạo Role hoisted và cụm kênh Chat/Voice riêng.
-- `/clan settings`: Mở bảng điều khiển **Ephemeral** dành riêng cho Chủ Băng:
+### 4.2. Nhóm B: Trung Tâm Điều Khiển, Khởi Tạo & Tùy Biến Băng
+- `/clan hub`: **Trung tâm điều khiển 1-Click** tương tác toàn diện (Hồ sơ, Điểm danh, Nhiệm vụ tuần, Cột mốc lịch sử, Ảnh nền Full HD, Nhật ký băng, Quản lý nhân sự, Trao danh hiệu, Cài đặt băng & Role, Thách đấu/Tạo kèo) với cơ chế điều hướng tại chỗ & tự động dọn bảng cũ.
+- `/clan create`: Mở **Discord Modal** nhập Tên băng (3-25 ký tự), Tag ngắn (2-5 ký tự viết hoa), Khẩu hiệu (tối đa 100 ký tự). Bot tự tạo Role và cụm 3 kênh (Chat riêng, Nhật ký riêng, Voice công khai).
+- `/clan settings`: Mở bảng điều khiển dành riêng cho Chủ Băng / Cán Bộ:
   - *Đổi Tên / Tag / Khẩu Hiệu:* Hộp thoại Modal nhập mới (khóa cooldown 7 ngày để chống Rate Limit Discord).
-  - *Đổi Màu Role:* Nhập mã màu Hex tùy ý (ví dụ `#FF5733`).
-  - *Logo & Banner:* Cài đặt link ảnh Logo hiển thị hoặc Banner hồ sơ (Banner mở khóa khi đạt Level 2).
-  - *Chế Độ Tuyển Quân:* Chọn giữa Mở Tự Do (vào thẳng), Cần Duyệt (mặc định), hoặc Chỉ Nhận Lời Mời.
+  - *Cài Đặt Role (`/clan setup-role`, `/clan set-role`, `/clan set-gradient`):* Đổi tên Role, màu đơn sắc hoặc **Gradient 2 màu**, tách nhóm (`hoist`), cho phép tag (`mentionable`), hoặc liên kết Role có sẵn.
+  - *Logo, Banner & Icon Role (`/clan upload-image`, `/clan set-image`):* Tải ảnh trực tiếp từ máy tính/điện thoại (thời gian chờ **15 phút**), dán link URL, hoặc dùng **Logo Bát Giác & Banner Cyber Gaming Canvas mặc định** (không yêu cầu Level 2 cho Banner; Icon Role yêu cầu server đạt Boost Lv.2).
+  - *Chế Độ Tuyển Quân:* Chọn giữa Mở Tự Do (`OPEN`), Cần Duyệt (`APPROVAL` - mặc định), hoặc Chỉ Nhận Lời Mời (`INVITE_ONLY`).
 - `/clan disband`: Mở Modal bắt buộc nhập chính xác tên băng để xác nhận giải tán.
-- `/clan set-image [loại: logo / banner] [link / đính kèm ảnh]`: Cập nhật nhanh ảnh cho băng.
+- `/clan help`: Xem hướng dẫn sử dụng chi tiết trực quan ngay trong Discord.
 
 ### 4.3. Nhóm C: Nhân Sự & Tuyển Quân
-- `/clan invite [@user]`: Gửi thẻ lời mời vào kênh chat kèm nút **Chấp Nhận** (xanh) và **Từ Chối** (đỏ). Hết hạn sau 15 phút.
-- `/clan apply [tên_băng]`: Nộp đơn xin gia nhập băng kèm lời nhắn giới thiệu. Đẩy đơn vào kênh chat riêng để Cán Bộ duyệt.
+- `/clan invite [@user]`: Ưu tiên gửi thẻ lời mời kèm nút **Chấp Nhận** / **Từ Chối** thẳng qua **DM** của người được mời (nếu khóa DM mới gửi ra kênh công khai, tuyệt đối không gửi vào kênh riêng của băng). Hết hạn sau 15 phút.
+- `/clan apply [tên_băng]`: Nộp đơn xin gia nhập băng kèm lời nhắn giới thiệu. Đẩy đơn vào kênh chat riêng để Cán Bộ duyệt (hoặc duyệt ngay nếu băng ở chế độ Mở Tự Do).
 - `/clan promote [@user]` & `/clan demote [@user]`: Thăng hoặc giáng chức theo nấc `MEMBER ↔ OFFICER ↔ CO_LEADER` (khống chế tối đa 2 Phó Băng và 4 Cán Bộ).
 - `/clan transfer [@user]`: Chuyển quyền Chủ Băng cho thành viên khác (Chủ Băng cũ tự động chuyển thành Phó Băng).
-- `/clan kick [@user] [lý_do]`: Trục xuất thành viên cấp thấp hơn khỏi băng và gắn cooldown 24 giờ.
-- `/clan leave`: Tự nguyện rời băng (Chủ Băng bị khóa lệnh này, bắt buộc phải nhượng quyền hoặc giải tán).
+- `/clan kick [@user] [lý_do]`: Trục xuất thành viên cấp thấp hơn khỏi băng và gửi thông báo DM kèm lý do.
+- `/clan leave`: Tự nguyện rời băng (có xác nhận 2 lớp; Chủ Băng bắt buộc phải nhượng quyền hoặc giải tán).
 
 ### 4.4. Nhóm D: Hồ Sơ, Thành Viên & Bảng Xếp Hạng
-- `/clan info [tên_băng]`: Xem hồ sơ băng đảng màu trùng màu Role, kèm ảnh Logo, Banner, Sĩ số, Cấp độ, Thanh tiến trình EXP ASCII và 2 nút bấm tương tác nhanh: **Xem Thành Viên** và **Xin Gia Nhập**.
-- `/clan members [tên_băng]`: Danh sách thành viên phân trang (10 người/trang), sắp xếp theo chức vụ và điểm cống hiến, kèm **Menu Dropdown lọc theo chức vụ**.
+- `/clan info [tên_băng]`: Xem hồ sơ băng đảng màu trùng màu Role, kèm Logo, Banner (tùy chỉnh hoặc Canvas mặc định), Sĩ số, Cấp độ, Thanh tiến trình EXP và các nút tương tác nhanh (**Xem Thành Viên**, **Xem Banner Băng**, **Xin Gia Nhập**).
+- `/clan members [tên_băng]`: Danh sách thành viên phân trang (10 người/trang), hiển thị chức vụ, **danh hiệu nội bộ**, điểm cống hiến, kèm **Menu Dropdown lọc theo chức vụ**.
 - `/clan list`: Danh sách toàn bộ các băng trong server kèm trạng thái tuyển quân.
 - `/clan leaderboard [tiêu_chí]`: Bảng vinh danh top băng đảng theo Cấp độ & EXP, Năng động tuần, hoặc Đông thành viên nhất.
 - `/clan logs [trang]`: Nhật ký hoạt động nội bộ gần đây kèm mốc thời gian tương đối của Discord (`<t:timestamp:R>`).
 
-### 4.5. Nhóm E: Hoạt Động Gắn Kết
+### 4.5. Nhóm E: Hoạt Động Gắn Kết & Thách Đấu
 - `/clan checkin`: Điểm danh mỗi ngày (reset lúc 00:00 giờ Việt Nam). Thưởng **+30 EXP băng**, **+10 Điểm cống hiến**. Đạt chuỗi 7 ngày liên tiếp thưởng thêm **+50 EXP**.
-- `/clan party [tiêu_đề] [số_người] [thời_gian]`: Tạo thẻ kèo rủ chơi game (LFG) trong kênh chat riêng của băng. Gồm các nút: **Tham Gia (Đội hình chính)**, **Dự Bị**, **Rút Lui** và **Chốt / Đóng Kèo**. Bot tự động ping nhắc nhở 10 phút trước giờ hẹn.
-- `/clan quests`: Bảng theo dõi 3 nhiệm vụ tuần đồng đội (Điểm danh, Ngồi Voice co-op, Tổ chức kèo Party). Hoàn thành thưởng từ +300 đến +500 EXP.
+- `/clan party`: Mở trung tâm **Thách Đấu & Lập Kèo**:
+  - **Gửi Thư Thách Đấu:** Chọn 1 băng đối thủ (hoặc tất cả các băng trong server), nhập Tựa Game, Thể Thức, Thời Gian và Nội Dung qua Modal; băng nhận có nút **Chấp Nhận Thách Đấu** / **Từ Chối Lịch Sự**.
+  - **Lập Kèo Nội Bộ (LFG):** Rủ anh em cùng băng lập team chơi game kèm nút **Tham Gia**, **Dự Bị**, **Rút Lui**, **Chốt / Đóng Kèo** và tự động nhắc trước 10 phút.
+- `/clan quests`: Bảng theo dõi 3 nhiệm vụ tuần đồng đội (**Điểm danh**, **Voice Co-op**, **Sôi nổi kênh chat**). Hoàn thành thưởng từ **+300 đến +500 EXP**.
 
 ---
 
 ## 5. Cơ Chế Cấp Độ, Năng Động & Mở Khóa Đặc Quyền
 
 ### Nguồn Cộng EXP Băng:
-- **Chat tương tác:** +5 EXP băng & +1 Điểm cống hiến (tin nhắn tối thiểu 5 ký tự, cooldown 60 giây chống spam).
-- **Ngồi Voice Co-op:** Cứ mỗi 5 phút có từ 2 thành viên cùng băng ngồi chung trong kênh Voice bất kỳ (không tính người tự tắt loa `self_deaf` hoặc kênh AFK), băng nhận **+15 EXP** và mỗi người nhận **+3 Điểm cống hiến**.
+- **Chat tương tác:** +5 EXP băng & +1 Điểm cống hiến (tin nhắn tối thiểu 5 ký tự trong kênh chat băng, cooldown 60 giây chống spam).
+- **Ngồi Voice Co-op:** Cứ mỗi 5 phút có từ 2 thành viên cùng băng ngồi chung trong kênh Voice (không tính kênh AFK; vẫn tính khi mute/deafen), băng nhận **+15 EXP** và mỗi người nhận **+3 Điểm cống hiến**.
+- **Đêm Lửa Trại Cuối Tuần (x2 EXP):** Diễn ra vào **20:00 – 23:00 Thứ Bảy & Chủ Nhật** (giờ Việt Nam), nhân đôi toàn bộ EXP nhận được từ Chat và Voice Co-op.
 - **Điểm danh & Nhiệm vụ tuần:** Cộng thưởng theo quy tắc ở Nhóm E.
 
 ### Bảng Mốc Cấp Độ:
-| Cấp độ | EXP yêu cầu | Sĩ số tối đa | Đặc quyền mở khóa |
+| Cấp độ | EXP yêu cầu | Sĩ số tối đa | Đặc quyền nổi bật |
 | :---: | :---: | :---: | :--- |
-| **Level 1** | 0 EXP | 15 người | 1 Kênh Text + 1 Kênh Voice riêng, đổi màu Role cơ bản |
-| **Level 2** | 1.000 EXP | 25 người | Mở khóa đặt Banner hồ sơ băng, tùy chỉnh khẩu hiệu |
+| **Level 1** | 0 EXP | 15 người | 1 Kênh Chat riêng + 1 Kênh Nhật Ký + 1 Kênh Voice public, đổi màu Role đơn sắc/Gradient, upload Logo & Banner |
+| **Level 2** | 1.000 EXP | 25 người | Tăng sĩ số tối đa, tùy chỉnh khẩu hiệu nâng cao |
 | **Level 3** | 3.500 EXP | 40 người | **Mở khóa kênh Voice thứ 2** (tự động tạo kênh Voice 2 tách nhóm chơi game) |
-| **Level 4** | 8.000 EXP | 60 người | Mở khóa Icon Role VIP, huy hiệu trên Bảng Xếp Hạng |
-| **Level 5** | 15.000 EXP | 100 người | Không giới hạn kèo Party song song, đổi định dạng tên kênh tự do |
+| **Level 4** | 8.000 EXP | 60 người | Tăng sĩ số tối đa, mở khóa Icon Role VIP (yêu cầu server Boost Lv.2) |
+| **Level 5** | 15.000 EXP | 100 người | Đỉnh cao danh vọng, tối đa quyền hạn hội nhóm |
 
 ---
 
@@ -163,17 +172,21 @@ WickedChen/
 │       ├── __init__.py
 │       └── clan_events.py     # Xử lý chat EXP, voice ticker 5p, party reminder, reset tuần
 ├── utils/
+│   ├── canvas.py              # Vẽ Logo Bát Giác, Banner Cyber Gaming & Wallpaper Full HD 1920x1080
 │   ├── constants.py           # Bảng mốc Level, chức vụ, EXP, nhiệm vụ tuần
 │   ├── database.py            # SQLite bất đồng bộ (aiosqlite WAL Mode)
 │   ├── embeds.py              # Xây dựng Discord Embeds trực quan & thanh tiến trình
 │   ├── error_handler.py       # Bộ bắt và xử lý lỗi tập trung cho Slash Commands
+│   ├── image_storage.py       # Lưu trữ bền vững ảnh Logo/Banner tải lên (local://)
 │   ├── logger.py              # Định dạng log màu và timestamp
+│   ├── text_helper.py         # Chuyển đổi tên kênh tiếng Việt không dấu chuẩn Discord
 │   ├── time_helper.py         # Xử lý giờ Việt Nam (Asia/Ho_Chi_Minh) & chu kỳ tuần ISO
 │   └── ui_components.py       # Discord Views, Buttons, Select Menus và Modals
 ├── data/
 │   └── clan_bot.db            # File SQLite cơ sở dữ liệu duy nhất
 ├── tests/
-│   └── test_system.py         # Bộ kiểm thử tích hợp 10 bài test tự động
+│   └── test_system.py         # Bộ kiểm thử tích hợp 24 bài test tự động
+├── HDSD.md                    # Cẩm nang hướng dẫn sử dụng chi tiết cho người dùng & Admin
 ├── config.py                  # Quản lý tập trung mọi biến môi trường
 ├── Dockerfile                 # Đóng gói container Docker siêu nhẹ
 ├── docker-compose.yml         # Triển khai 1-click trên VPS
