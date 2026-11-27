@@ -18,8 +18,61 @@ from utils.constants import PET_ANCHORS, PET_SPECIES, get_pet_level_info
 from utils.time_helper import get_vietnam_now
 
 PET_CACHE_DIR = Config.DATA_DIR / "pet_cache"
-RENDER_VERSION = "v3"
+PET_ASSETS_DIR = Config.BASE_DIR / "assets" / "pet"
+RENDER_VERSION = "v4"
 SS = 2  # Supersampling 2x: canvas nội bộ 1200x1200 -> 600x600
+
+
+def _load_pet_sprite(species: str, stage: int) -> Tuple[Optional[Image.Image], int]:
+    """Tải Sprite Game Art trong assets/pet/{species}/stage_{n}.png (tự fallback về stage cao nhất hiện có)."""
+    sp_dir = PET_ASSETS_DIR / species
+    if not sp_dir.exists():
+        return None, stage
+    for s in range(stage, 0, -1):
+        cand = sp_dir / f"stage_{s}.png"
+        if cand.exists():
+            try:
+                return Image.open(cand).convert("RGBA"), s
+            except Exception:
+                pass
+    return None, stage
+
+
+def _draw_sprite_layer(img: Image.Image, species: str, stage: int, expression: str, c1: Tuple[int, int, int]) -> bool:
+    """Dán Sprite Game Art làm Layer 2 (trả về True nếu dùng sprite thành công)."""
+    sprite, loaded_stage = _load_pet_sprite(species, stage)
+    if sprite is None:
+        return False
+
+    target_size = {1: 580, 2: 600, 3: 660, 4: 700, 5: 730}.get(stage, 660)
+    if stage >= 4 and loaded_stage < stage:
+        target_size = min(750, target_size + 25)
+    resized = sprite.resize((target_size, target_size), Image.Resampling.LANCZOS)
+
+    # Thêm ánh sáng viền mềm (Rim Glow) theo màu băng cho Stage 4-5
+    if stage >= 4:
+        alpha = resized.getchannel("A")
+        glow_layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        tinted = Image.new("RGBA", resized.size, (*_lighten(c1, 0.25), 140))
+        tinted.putalpha(alpha)
+        px = (img.width - resized.width) // 2
+        py = 595 - resized.height // 2
+        glow_layer.paste(tinted, (px, py), alpha)
+        img.alpha_composite(glow_layer.filter(ImageFilter.GaussianBlur(18)))
+
+    px = (img.width - resized.width) // 2
+    py = 595 - resized.height // 2
+    img.alpha_composite(resized, (px, py))
+
+    # Huy hiệu biểu cảm nhỏ gọn ở góc đầu nếu đang buồn ngủ hoặc đói
+    if expression == "sleepy":
+        draw = ImageDraw.Draw(img, "RGBA")
+        draw.text((790, 270), "Zzz", font=get_font(46, bold=True), fill=(210, 228, 255, 240))
+    elif expression == "hungry":
+        draw = ImageDraw.Draw(img, "RGBA")
+        draw.rounded_rectangle([770, 265, 920, 325], radius=18, fill=(220, 55, 70, 225))
+        draw.text((845, 295), "Đói!", font=get_font(30, bold=True), fill=(255, 255, 255, 255), anchor="mm")
+    return True
 
 
 def compute_pet_expression(hunger: int, mood: int, hour: Optional[int] = None) -> str:
@@ -764,8 +817,9 @@ def render_pet_sprite_only(pet: Dict[str, Any], clan_color: str = "#5865F2", sec
 
     canvas = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 0))
     _draw_aura_and_back(canvas, species, stage, equipped, c1, c2)
-    _draw_body(canvas, species, stage, lvl_info["level"], c1, c2)
-    _draw_face(canvas, species, stage, expr, c1)
+    if not _draw_sprite_layer(canvas, species, stage, expr, c1):
+        _draw_body(canvas, species, stage, lvl_info["level"], c1, c2)
+        _draw_face(canvas, species, stage, expr, c1)
     _draw_outfit(canvas, species, stage, equipped, c1)
     _draw_headwear(canvas, species, stage, equipped)
     _draw_face_and_held(canvas, species, stage, equipped)
@@ -821,8 +875,9 @@ def generate_clan_pet_image(pet: Dict[str, Any], clan: Dict[str, Any]) -> io.Byt
     hi_res = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 255))
     _draw_background(hi_res, equipped.get("background"), c1, c2, stage=stage)
     _draw_aura_and_back(hi_res, species, stage, equipped, c1, c2)
-    _draw_body(hi_res, species, stage, level, c1, c2)
-    _draw_face(hi_res, species, stage, expr, c1)
+    if not _draw_sprite_layer(hi_res, species, stage, expr, c1):
+        _draw_body(hi_res, species, stage, level, c1, c2)
+        _draw_face(hi_res, species, stage, expr, c1)
     _draw_outfit(hi_res, species, stage, equipped, c1)
     _draw_headwear(hi_res, species, stage, equipped)
     _draw_face_and_held(hi_res, species, stage, equipped)
@@ -862,8 +917,9 @@ def generate_clan_pet_preview_image(pet: Dict[str, Any], clan: Dict[str, Any], p
     hi_res = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 255))
     _draw_background(hi_res, equipped.get("background"), c1, c2, stage=preview_stage)
     _draw_aura_and_back(hi_res, species, preview_stage, equipped, c1, c2)
-    _draw_body(hi_res, species, preview_stage, max(level, 3 if preview_stage == 1 else level), c1, c2)
-    _draw_face(hi_res, species, preview_stage, expr, c1)
+    if not _draw_sprite_layer(hi_res, species, preview_stage, expr, c1):
+        _draw_body(hi_res, species, preview_stage, max(level, 3 if preview_stage == 1 else level), c1, c2)
+        _draw_face(hi_res, species, preview_stage, expr, c1)
     _draw_outfit(hi_res, species, preview_stage, equipped, c1)
     _draw_headwear(hi_res, species, preview_stage, equipped)
     _draw_face_and_held(hi_res, species, preview_stage, equipped)
