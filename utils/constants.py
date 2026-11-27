@@ -323,18 +323,28 @@ PET_CATALOG = [
     {"item_id": "face_thug_life", "name": "Kính Pixel Thug Life", "style": "casual", "slot": "face", "min_stage": 3, "price": 110},
     # Outfits (Stage 3+)
     {"item_id": "outfit_hoodie", "name": "Áo Hoodie Streetwear", "style": "streetwear", "slot": "outfit", "min_stage": 3, "price": 120},
+    {"item_id": "outfit_bomber", "name": "Áo Khoác Bomber Băng", "style": "streetwear", "slot": "outfit", "min_stage": 3, "price": 135},
     {"item_id": "outfit_cyber_armor", "name": "Áo Giáp Công Nghệ", "style": "cyber", "slot": "outfit", "min_stage": 3, "price": 150},
-    {"item_id": "outfit_royal_vest", "name": "Áo Choàng Nhung Quý Tộc", "style": "royal", "slot": "outfit", "min_stage": 3, "price": 150},
-    {"item_id": "outfit_cloud_robe", "name": "Áo Choàng Họa Tiết Mây", "style": "ninja", "slot": "outfit", "min_stage": 3, "price": 140},
+    {"item_id": "outfit_royal_vest", "name": "Vest Hoàng Gia Quý Tộc", "style": "royal", "slot": "outfit", "min_stage": 3, "price": 150},
+    {"item_id": "outfit_cloud_robe", "name": "Kimono Họa Tiết Mây", "style": "ninja", "slot": "outfit", "min_stage": 3, "price": 140},
+    {"item_id": "outfit_samurai", "name": "Giáp Chiến Binh Samurai", "style": "ninja", "slot": "outfit", "min_stage": 4, "price": 190},
     {"item_id": "outfit_tanktop", "name": "Áo Ba Lỗ Mùa Hè", "style": "casual", "slot": "outfit", "min_stage": 3, "price": 90},
+    # Headwear extras
+    {"item_id": "hat_wizard", "name": "Mũ Pháp Sư Huyền Bí", "style": "royal", "slot": "headwear", "min_stage": 2, "price": 110},
+    {"item_id": "hat_oni_horns", "name": "Mặt Nạ Sừng Oni", "style": "ninja", "slot": "headwear", "min_stage": 3, "price": 130},
+    # Face extras
+    {"item_id": "face_monocle", "name": "Kính Một Mắt Quý Tộc", "style": "royal", "slot": "face", "min_stage": 3, "price": 115},
     # Back / Wings (Stage 4+)
     {"item_id": "back_angel_wings", "name": "Cánh Thiên Thần", "style": "royal", "slot": "back", "min_stage": 4, "price": 220},
+    {"item_id": "back_royal_cape", "name": "Áo Choàng Đỏ Đế Vương", "style": "royal", "slot": "back", "min_stage": 4, "price": 210},
     {"item_id": "back_cyber_wings", "name": "Cánh Phản Lực Neon", "style": "cyber", "slot": "back", "min_stage": 4, "price": 240},
-    {"item_id": "back_katana", "name": "Katana Đeo Lưng", "style": "ninja", "slot": "back", "min_stage": 4, "price": 200},
+    {"item_id": "back_katana", "name": "Song Kiếm Katana Đeo Lưng", "style": "ninja", "min_stage": 4, "price": 200},
     # Held Items (Stage 4+)
     {"item_id": "held_gamepad", "name": "Tay Cầm Console", "style": "cyber", "slot": "held", "min_stage": 4, "price": 160},
     {"item_id": "held_boba", "name": "Cốc Trà Sữa Trân Châu", "style": "casual", "slot": "held", "min_stage": 4, "price": 140},
     {"item_id": "held_scepter", "name": "Quyền Trượng Ánh Sáng", "style": "royal", "slot": "held", "min_stage": 4, "price": 210},
+    {"item_id": "held_sword", "name": "Thanh Kiếm Năng Lượng", "style": "cyber", "slot": "held", "min_stage": 4, "price": 220},
+    {"item_id": "held_mic", "name": "Micro Idol Phát Sáng", "style": "streetwear", "slot": "held", "min_stage": 4, "price": 170},
     # Aura (Stage 5)
     {"item_id": "aura_gradient_halo", "name": "Hào Quang Năng Lượng Băng", "style": "cyber", "slot": "aura", "min_stage": 5, "price": 320},
     {"item_id": "aura_dragon_flame", "name": "Hào Quang Hỏa Long Tối Thượng", "style": "royal", "slot": "aura", "min_stage": 5, "price": 350},
@@ -345,10 +355,10 @@ PET_CATALOG_MAP = {item["item_id"]: item for item in PET_CATALOG}
 # Hệ tọa độ neo (Anchor Points): (center_x, center_y, scale) trên khung chuẩn 600x600 RGBA
 _STAGE_ANCHORS = {
     1: {"headwear": (300, 175, 0.72), "face": (300, 275, 0.72), "outfit": (300, 355, 0.75), "back": (300, 315, 0.75), "held": (395, 360, 0.75), "aura": (300, 310, 0.85)},
-    2: {"headwear": (300, 178, 0.82), "face": (300, 260, 0.82), "outfit": (300, 368, 0.78), "back": (300, 330, 0.82), "held": (398, 365, 0.82), "aura": (300, 305, 0.90)},
-    3: {"headwear": (300, 162, 0.92), "face": (300, 240, 0.92), "outfit": (300, 358, 0.92), "back": (300, 325, 0.94), "held": (408, 358, 0.92), "aura": (300, 300, 0.96)},
-    4: {"headwear": (300, 148, 1.00), "face": (300, 224, 1.00), "outfit": (300, 350, 1.00), "back": (300, 315, 1.04), "held": (420, 352, 1.00), "aura": (300, 295, 1.05)},
-    5: {"headwear": (300, 142, 1.05), "face": (300, 218, 1.05), "outfit": (300, 348, 1.04), "back": (300, 310, 1.12), "held": (426, 350, 1.05), "aura": (300, 290, 1.15)},
+    2: {"headwear": (300, 198, 0.86), "face": (300, 274, 0.86), "outfit": (300, 382, 0.76), "back": (300, 336, 0.84), "held": (395, 376, 0.82), "aura": (300, 315, 0.90)},
+    3: {"headwear": (300, 166, 0.92), "face": (300, 236, 0.92), "outfit": (300, 356, 0.92), "back": (300, 332, 0.96), "held": (406, 356, 0.92), "aura": (300, 305, 0.98)},
+    4: {"headwear": (300, 146, 0.98), "face": (300, 212, 0.98), "outfit": (300, 342, 1.04), "back": (300, 318, 1.10), "held": (418, 348, 1.02), "aura": (300, 295, 1.08)},
+    5: {"headwear": (300, 138, 1.02), "face": (300, 204, 1.02), "outfit": (300, 340, 1.12), "back": (300, 314, 1.20), "held": (428, 344, 1.08), "aura": (300, 290, 1.18)},
 }
 
 PET_ANCHORS = {sp: _STAGE_ANCHORS for sp in PET_SPECIES}

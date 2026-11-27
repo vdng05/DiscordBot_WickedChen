@@ -5342,11 +5342,12 @@ def build_pet_status_embed(pet: Dict[str, Any], clan: Dict[str, Any], attachment
         buff_status = f"🥚 Trứng đang ấp ({info['cur_exp']}/200 Pet EXP để nở)"
 
     unlocked_txt = ", ".join(PET_SLOT_NAMES.get(s, s) for s in info["unlocked_slots"])
+    exp_display = f"MAX • {info['cur_exp']:,}" if info["level"] >= 99 else f"{info['cur_exp']:,}/{info['next_level_exp']:,}"
     embed = discord.Embed(
         title=f"{sp['emoji']} LINH THÚ BĂNG: {pet['name']} — [{clan['tag']}] {clan['name']}",
         description=(
             f"• **Chủng loài:** {sp['name']} • **Giai đoạn:** {info['stage_name']} (Stage {info['stage']}/5)\n"
-            f"• **Cấp độ Pet:** Level **{info['level']}** (`{info['cur_exp']}/{info['next_level_exp']}` Pet EXP)\n"
+            f"• **Cấp độ Pet:** Level **{info['level']}** (`{exp_display}` Pet EXP)\n"
             f"• **Quỹ Xu Linh Thú:** **{pet.get('pet_coins', 0):,}** Xu 🪙\n"
             f"• **Hiệu ứng thụ động:** {buff_status}\n"
             f"• **Slot đồ đã mở:** {unlocked_txt}"
