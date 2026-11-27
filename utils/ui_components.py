@@ -36,7 +36,12 @@ from utils.embeds import (
 )
 from utils.logger import setup_logging
 from utils.time_helper import get_current_week_key, get_today_vn_string, get_yesterday_vn_string
-from utils.text_helper import to_channel_slug, auto_dismiss_notice, get_available_clan_category
+from utils.text_helper import (
+    to_channel_slug,
+    auto_dismiss_notice,
+    get_available_clan_category,
+    get_or_create_recruit_channel
+)
 from utils.image_storage import (
     save_clan_attachment,
     delete_local_asset,
@@ -2576,6 +2581,16 @@ class ClanMemberManagementView(SafeView):
         view = KickSelectView(clan=self.clan, eligible_members=eligible, guild=interaction.guild, bot=self.bot)
         await interaction.response.send_message("👢 **Chọn thành viên muốn trục xuất khỏi băng:**", view=view, ephemeral=True)
 
+    @ui.button(label="Đăng Tin Tuyển", emoji="📢", style=discord.ButtonStyle.primary, row=1)
+    async def recruit_btn(self, interaction: discord.Interaction, button: ui.Button):
+        cur_clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
+        cnt = await self.bot.db.get_member_count(cur_clan["clan_id"]) if cur_clan else 0
+        err = validate_recruit_publisher(cur_clan, interaction.user, cnt)
+        if err:
+            await auto_dismiss_notice(interaction, content=err, delay=6)
+            return
+        await interaction.response.send_modal(RecruitPostModal(clan=cur_clan, bot=self.bot))
+
     @ui.button(label="Chuyển Quyền Chủ Băng", emoji="👑", style=discord.ButtonStyle.primary, row=2)
     async def transfer_btn(self, interaction: discord.Interaction, button: ui.Button):
         if int(self.clan["leader_id"]) != interaction.user.id and not interaction.user.guild_permissions.administrator:
@@ -2750,6 +2765,7 @@ class ClanHubView(SafeView):
             is_officer = is_leader or clan.get("rank") in (Ranks.CO_LEADER, Ranks.OFFICER)
             if not is_officer:
                 self.remove_item(self.members_mgmt_btn)
+                self.remove_item(self.recruit_hub_btn)
                 self.remove_item(self.manage_btn)
                 self.remove_item(self.role_btn)
                 self.remove_item(self.titles_btn)
@@ -2768,6 +2784,7 @@ class ClanHubView(SafeView):
             self.remove_item(self.titles_btn)
             self.remove_item(self.logs_btn)
             self.remove_item(self.members_mgmt_btn)
+            self.remove_item(self.recruit_hub_btn)
             self.remove_item(self.party_hub_btn)
 
     @ui.button(label="Điểm Danh Hằng Ngày", emoji="📅", style=discord.ButtonStyle.success, row=0)
@@ -2974,6 +2991,16 @@ class ClanHubView(SafeView):
             return
         view = ClanCustomTitleMemberSelectView(clan=self.clan, members=members, guild=interaction.guild, bot=self.bot)
         await interaction.response.send_message("🎖️ **Chọn thành viên để trao hoặc chỉnh sửa danh hiệu nội bộ:**", view=view, ephemeral=True)
+
+    @ui.button(label="Đăng Tin Tuyển", emoji="📢", style=discord.ButtonStyle.success, row=2)
+    async def recruit_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
+        cur_clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
+        cnt = await self.bot.db.get_member_count(cur_clan["clan_id"]) if cur_clan else 0
+        err = validate_recruit_publisher(cur_clan, interaction.user, cnt)
+        if err:
+            await auto_dismiss_notice(interaction, content=err, delay=6)
+            return
+        await interaction.response.send_modal(RecruitPostModal(clan=cur_clan, bot=self.bot))
 
     @ui.button(label="Cài Đặt Băng", emoji="⚙️", style=discord.ButtonStyle.secondary, row=2)
     async def manage_btn(self, interaction: discord.Interaction, button: ui.Button):
@@ -4599,3 +4626,286 @@ class BotAccessControlView(SafeView):
             pass
         if hasattr(self.bot, "dismiss_user_panel"):
             await self.bot.dismiss_user_panel(interaction.user.id)
+
+
+# =============================================================================
+# TUYỂN THÀNH VIÊN CÔNG KHAI (CATEGORY BOT CLAN -> #tuyen-thanh-vien)
+# =============================================================================
+
+_RECRUIT_COOLDOWNS: Dict[int, float] = {}
+RECRUIT_COOLDOWN_SECONDS = 600
+
+
+def validate_recruit_publisher(clan: Optional[Dict[str, Any]], user: discord.Member, member_count: int) -> Optional[str]:
+    """Kiểm tra toàn bộ điều kiện & ngoại lệ trước khi cho phép đăng tin tuyển thành viên."""
+    if not clan:
+        return "❌ Bạn chưa tham gia băng đảng nào nên không thể đăng tin tuyển thành viên! Hãy tạo băng (`/clan create`) hoặc gia nhập một băng trước."
+
+    is_leader = int(clan["leader_id"]) == user.id
+    rank = clan.get("rank")
+    if not is_leader and rank not in (Ranks.CO_LEADER, Ranks.OFFICER) and not user.guild_permissions.administrator:
+        return "❌ Chỉ **Chủ Băng**, **Phó Băng** hoặc **Cán Bộ** mới có quyền đăng tin tuyển thành viên!"
+
+    max_members = int(clan.get("max_members", 15))
+    if member_count >= max_members:
+        return f"❌ Băng **[{clan['tag']}] {clan['name']}** đã đạt sĩ số tối đa (**{member_count}/{max_members}**)! Hãy nâng cấp Level băng hoặc dọn slot trước khi đăng tin tuyển."
+
+    if clan.get("join_mode") == JoinModes.INVITE_ONLY:
+        return (
+            "🔒 Băng của bạn đang bật chế độ **Chỉ Nhận Lời Mời (`INVITE_ONLY`)**!\n"
+            "👉 Hãy vào `/clan settings` ➔ **Chế Độ Tuyển Quân** chuyển sang **Mở Tự Do** hoặc **Cần Duyệt** trước khi đăng tin tuyển công khai."
+        )
+
+    now = time.time()
+    last_ts = _RECRUIT_COOLDOWNS.get(int(clan["clan_id"]), 0.0)
+    rem = int(RECRUIT_COOLDOWN_SECONDS - (now - last_ts))
+    if rem > 0:
+        mins = max(1, (rem + 59) // 60)
+        return f"⏳ Băng bạn vừa đăng tin tuyển thành viên gần đây! Vui lòng đợi khoảng **{mins} phút** nữa để tránh spam kênh tuyển quân."
+
+    return None
+
+
+class RecruitApplyButton(ui.DynamicItem[ui.Button], template=r"clan_recruit:apply:(?P<clan_id>[0-9]+)"):
+    """Nút Xin Gia Nhập Băng bền vững (hoạt động cả sau khi bot khởi động lại)."""
+    def __init__(self, clan_id: int):
+        super().__init__(
+            ui.Button(
+                label="Xin Gia Nhập Băng",
+                emoji="📩",
+                style=discord.ButtonStyle.success,
+                custom_id=f"clan_recruit:apply:{clan_id}"
+            )
+        )
+        self.clan_id = clan_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: ui.Button, match: re.Match[str]):
+        return cls(int(match.group("clan_id")))
+
+    async def callback(self, interaction: discord.Interaction):
+        bot = interaction.client
+        if hasattr(bot, "check_user_bot_access") and not await bot.check_user_bot_access(interaction):
+            return
+
+        guild = interaction.guild
+        if not guild:
+            await auto_dismiss_notice(interaction, content="❌ Thao tác này chỉ thực hiện được trong máy chủ Discord!", delay=5)
+            return
+
+        clan = await bot.db.get_clan_by_id(self.clan_id)
+        if not clan:
+            await auto_dismiss_notice(interaction, content="❌ Băng đảng này đã giải tán hoặc không còn tồn tại!", delay=5)
+            return
+
+        existing = await bot.db.get_clan_by_member(guild.id, interaction.user.id)
+        if existing:
+            if existing["clan_id"] == clan["clan_id"]:
+                await auto_dismiss_notice(interaction, content="ℹ️ Bạn đã là thành viên của băng này rồi!", delay=5)
+            else:
+                await auto_dismiss_notice(
+                    interaction,
+                    content=f"❌ Bạn đang là thành viên của băng **[{existing['tag']}] {existing['name']}**. Hãy rời băng cũ trước khi xin vào băng mới!",
+                    delay=6
+                )
+            return
+
+        cur_count = await bot.db.get_member_count(clan["clan_id"])
+        if cur_count >= clan["max_members"]:
+            await auto_dismiss_notice(
+                interaction,
+                content=f"❌ Rất tiếc, băng **{clan['name']}** hiện đã đủ sĩ số (**{cur_count}/{clan['max_members']}**)!",
+                delay=6
+            )
+            return
+
+        if clan.get("join_mode") == JoinModes.INVITE_ONLY:
+            await auto_dismiss_notice(
+                interaction,
+                content=f"🔒 Băng **{clan['name']}** hiện đã chuyển sang chế độ **Chỉ Nhận Lời Mời**!",
+                delay=6
+            )
+            return
+
+        if await bot.db.has_pending_request(clan["clan_id"], interaction.user.id):
+            await auto_dismiss_notice(
+                interaction,
+                content=f"⏳ Bạn đã có một đơn/lời mời đang chờ xử lý với băng **{clan['name']}** rồi!",
+                delay=6
+            )
+            return
+
+        if clan.get("join_mode") == JoinModes.OPEN:
+            await interaction.response.defer(ephemeral=True)
+            role = guild.get_role(int(clan["role_id"])) if clan.get("role_id") else None
+            if role:
+                try:
+                    await interaction.user.add_roles(role, reason="Gia nhập băng (Open mode từ bảng tuyển thành viên)")
+                except Exception:
+                    pass
+            await bot.db.add_member(guild.id, interaction.user.id, clan["clan_id"], Ranks.MEMBER)
+            await bot.db.add_clan_log(
+                clan_id=clan["clan_id"],
+                actor_id=interaction.user.id,
+                target_id=interaction.user.id,
+                action="JOIN",
+                details=f"{interaction.user.display_name} gia nhập băng từ bảng tuyển thành viên (Mở Tự Do)."
+            )
+            text_ch = guild.get_channel(int(clan["text_channel_id"])) if clan.get("text_channel_id") else None
+            if text_ch:
+                try:
+                    welcome_embed = discord.Embed(
+                        title="👋 THÀNH VIÊN MỚI GIA NHẬP!",
+                        description=f"Nhiệt liệt chào mừng {interaction.user.mention} đã gia nhập băng **{clan['name']}** từ bảng tuyển thành viên!",
+                        color=discord.Color.green(),
+                        timestamp=datetime.now()
+                    )
+                    await text_ch.send(content=interaction.user.mention, embed=welcome_embed, view=WelcomeGreetingView(interaction.user.id))
+                except Exception:
+                    pass
+            await interaction.followup.send(f"🎉 Chúc mừng bạn đã gia nhập băng **[{clan['tag']}] {clan['name']}** thành công!", ephemeral=True)
+            return
+
+        await interaction.response.send_modal(ApplyClanModal(clan=clan, bot=bot))
+
+
+class RecruitMembersButton(ui.DynamicItem[ui.Button], template=r"clan_recruit:members:(?P<clan_id>[0-9]+)"):
+    """Nút Xem Thành Viên bền vững trên bài đăng tuyển thành viên."""
+    def __init__(self, clan_id: int):
+        super().__init__(
+            ui.Button(
+                label="Xem Thành Viên",
+                emoji="👥",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"clan_recruit:members:{clan_id}"
+            )
+        )
+        self.clan_id = clan_id
+
+    @classmethod
+    async def from_custom_id(cls, interaction: discord.Interaction, item: ui.Button, match: re.Match[str]):
+        return cls(int(match.group("clan_id")))
+
+    async def callback(self, interaction: discord.Interaction):
+        bot = interaction.client
+        if hasattr(bot, "check_user_bot_access") and not await bot.check_user_bot_access(interaction):
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        clan = await bot.db.get_clan_by_id(self.clan_id)
+        if not clan:
+            await interaction.followup.send("❌ Băng đảng này đã giải tán hoặc không còn tồn tại!", ephemeral=True)
+            return
+
+        members = await bot.db.get_clan_members(self.clan_id)
+        embed = build_members_embed(clan, members, page=1, total_pages=max(1, (len(members) + 9) // 10), guild=interaction.guild)
+        view = MembersPaginationView(clan_id=self.clan_id, page=1, total_pages=max(1, (len(members) + 9) // 10), bot=bot)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+
+class RecruitPublicView(SafeView):
+    """View công khai gắn dưới bài đăng tuyển thành viên trong #tuyen-thanh-vien."""
+    def __init__(self, clan_id: int):
+        super().__init__(timeout=None)
+        self.add_item(RecruitApplyButton(clan_id))
+        self.add_item(RecruitMembersButton(clan_id))
+
+
+class RecruitPostModal(SafeModal, title="📢 Đăng Tin Tuyển Thành Viên"):
+    """Modal nhập nội dung tuyển thành viên của Chủ Băng / Cán Bộ."""
+    def __init__(self, clan: Dict[str, Any], bot):
+        super().__init__()
+        self.clan = clan
+        self.bot = bot
+
+    game_focus = ui.TextInput(
+        label="Tựa Game / Hoạt Động Chính",
+        placeholder="VD: Valorant, Liên Quân, CS2, Giao lưu nói chuyện...",
+        default="Đa dạng tựa game & Giao lưu cộng đồng",
+        max_length=80,
+        required=False
+    )
+    requirements = ui.TextInput(
+        label="Yêu Cầu Gia Nhập (Nếu Có)",
+        placeholder="VD: Hòa đồng, có mic, online tối từ 20h...",
+        max_length=120,
+        required=False
+    )
+    recruit_content = ui.TextInput(
+        label="Nội Dung Chiêu Mộ Thành Viên",
+        style=discord.TextStyle.paragraph,
+        placeholder="Giới thiệu điểm nổi bật của băng, quyền lợi và lời mời gọi anh em...",
+        min_length=10,
+        max_length=600,
+        required=True
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        clan = await self.bot.db.get_clan_by_member(guild.id, interaction.user.id)
+        cur_count = await self.bot.db.get_member_count(clan["clan_id"]) if clan else 0
+        err = validate_recruit_publisher(clan, interaction.user, cur_count)
+        if err:
+            await interaction.followup.send(err, ephemeral=True)
+            return
+
+        recruit_ch, ch_err = await get_or_create_recruit_channel(guild)
+        if ch_err or not recruit_ch:
+            await interaction.followup.send(ch_err or "❌ Không thể truy cập kênh `#tuyen-thanh-vien`!", ephemeral=True)
+            return
+
+        join_mode_labels = {
+            JoinModes.OPEN: "🟢 Mở Tự Do (Vào Thẳng)",
+            JoinModes.APPROVAL: "🟡 Cần Duyệt Đơn",
+            JoinModes.INVITE_ONLY: "🔒 Chỉ Nhận Lời Mời"
+        }
+        game_txt = self.game_focus.value.strip() or "Đa dạng tựa game & Giao lưu cộng đồng"
+        req_txt = self.requirements.value.strip() or "Hòa đồng, vui vẻ, tôn trọng mọi người"
+        body_txt = self.recruit_content.value.strip()
+
+        files: List[discord.File] = []
+        logo_ref = await resolve_clan_logo(clan, files, fallback_to_default=True)
+        leader_mem = guild.get_member(int(clan["leader_id"])) if clan.get("leader_id") else None
+        leader_name = leader_mem.display_name if leader_mem else None
+        banner_ref = await resolve_clan_banner(clan, files, member_count=cur_count, leader_name=leader_name, fallback_to_default=True)
+
+        embed = discord.Embed(
+            title=f"📢 CHIÊU MỘ THÀNH VIÊN — [{clan['tag']}] {clan['name']}",
+            description=f"📜 **Khẩu hiệu:** *{clan.get('description') or 'Chưa cập nhật khẩu hiệu.'}*\n\n💬 **Lời Ngỏ Tuyển Quân:**\n{body_txt}",
+            color=parse_hex_color(clan.get("color_hex")),
+            timestamp=datetime.now()
+        )
+        embed.add_field(name="👑 Chủ Băng", value=f"<@{clan['leader_id']}>", inline=True)
+        embed.add_field(name="📈 Cấp Độ", value=f"Level **{clan.get('level', 1)}** ({clan.get('exp', 0):,} EXP)", inline=True)
+        embed.add_field(name="👥 Sĩ Số", value=f"**{cur_count}/{clan.get('max_members', 15)}** thành viên", inline=True)
+        embed.add_field(name="🎮 Hoạt Động Chính", value=game_txt, inline=True)
+        embed.add_field(name="🚪 Chế Độ Tuyển", value=join_mode_labels.get(clan.get("join_mode"), "🟡 Cần Duyệt"), inline=True)
+        embed.add_field(name="📋 Yêu Cầu", value=req_txt, inline=False)
+        if logo_ref:
+            embed.set_thumbnail(url=logo_ref)
+        if banner_ref:
+            embed.set_image(url=banner_ref)
+        embed.set_footer(
+            text=f"Đăng bởi {interaction.user.display_name} • Bấm nút bên dưới để Xin Gia Nhập hoặc Xem Thành Viên",
+            icon_url=interaction.user.display_avatar.url if interaction.user.display_avatar else None
+        )
+
+        view = RecruitPublicView(clan_id=clan["clan_id"])
+        try:
+            post_msg = await recruit_ch.send(embed=embed, files=files, view=view)
+        except Exception as send_err:
+            await interaction.followup.send(f"❌ Không thể đăng tin vào {recruit_ch.mention}: `{send_err}`", ephemeral=True)
+            return
+
+        _RECRUIT_COOLDOWNS[int(clan["clan_id"])] = time.time()
+        await self.bot.db.add_clan_log(
+            clan_id=clan["clan_id"],
+            actor_id=interaction.user.id,
+            action="RECRUIT_POST",
+            details=f"Đăng tin tuyển thành viên công khai tại #{recruit_ch.name}."
+        )
+        await interaction.followup.send(
+            f"✅ **Đã đăng tin tuyển thành viên cho băng [{clan['tag']}] {clan['name']} thành công!**\n👉 Xem bài đăng tại: {post_msg.jump_url}",
+            ephemeral=True
+        )

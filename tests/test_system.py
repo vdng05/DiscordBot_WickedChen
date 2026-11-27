@@ -511,8 +511,56 @@ async def run_tests():
     assert await db.update_request_status(req_tmp, "EXPIRED") == 1
     print("✅ 27. Cooldown Thư Thách Đấu toàn server (12h) & xử lý trạng thái EXPIRED hoạt động 100%.")
 
+    # 28. Kiểm tra tự động dispatch log ra kênh nhật ký từng băng
+    dispatched = []
+    async def _fake_dispatcher(c_id, a_id, act, det, t_id, ts):
+        dispatched.append((c_id, a_id, act, det, t_id))
+
+    db.set_log_dispatcher(_fake_dispatcher)
+    await db.add_clan_log(clan_id, 111111, "RECRUIT_POST", "Test auto dispatch", target_id=222222)
+    await asyncio.sleep(0.05)
+    assert len(dispatched) == 1 and dispatched[0][0] == clan_id and dispatched[0][2] == "RECRUIT_POST"
+    db.set_log_dispatcher(None)
+    print("✅ 28. Tự động đẩy nhật ký băng (log dispatcher) theo từng clan hoạt động 100%.")
+
+    # 29. Kiểm tra chức năng Tuyển Thành Viên (validate_recruit_publisher, RecruitPostModal, RecruitPublicView & has_pending_request)
+    from utils.ui_components import validate_recruit_publisher, RecruitPostModal, RecruitPublicView
+    no_clan_user = SimpleNamespace(id=999, guild_permissions=SimpleNamespace(administrator=False))
+    assert validate_recruit_publisher(None, no_clan_user, 0) is not None
+    member_only_clan = dict(clan1_obj, rank="MEMBER", leader_id="111111")
+    assert validate_recruit_publisher(member_only_clan, no_clan_user, 1) is not None
+    invite_only_clan = dict(clan1_obj, rank="OFFICER", leader_id="111111", join_mode="INVITE_ONLY")
+    assert validate_recruit_publisher(invite_only_clan, no_clan_user, 1) is not None
+    full_clan = dict(clan1_obj, rank="OFFICER", leader_id="111111", join_mode="APPROVAL", max_members=15)
+    assert validate_recruit_publisher(full_clan, no_clan_user, 15) is not None
+    valid_pub_clan = dict(clan1_obj, rank="OFFICER", leader_id="111111", join_mode="APPROVAL", max_members=15)
+    assert validate_recruit_publisher(valid_pub_clan, no_clan_user, 3) is None
+
+    rec_modal = RecruitPostModal(clan=valid_pub_clan, bot=bot)
+    assert len(rec_modal.title) <= 45
+    for item in rec_modal.children:
+        if hasattr(item, "label"):
+            assert len(item.label) <= 45
+    rec_view = RecruitPublicView(clan_id=clan_id)
+    assert len(rec_view.children) == 2
+
+    req_pend = await db.create_request(clan_id, 123456789, 555777, 555777, "APPLY")
+    assert await db.has_pending_request(clan_id, 555777) is True
+    await db.update_request_status(req_pend, "REJECTED")
+    assert await db.has_pending_request(clan_id, 555777) is False
+    print("✅ 29. Tuyển thành viên (kiểm tra ngoại lệ, Modal, DynamicItem View & chống nộp trùng đơn) hoạt động 100%.")
+
+    # 30. Kiểm tra ClanHelpView mới (có mục Cơ Chế EXP/Unlock & Lưu Ý Quan Trọng, bỏ Khắc Phục Sự Cố)
+    from cogs.clan.clan_commands import ClanHelpView
+    help_view = ClanHelpView()
+    help_select = help_view.children[0]
+    help_vals = [opt.value for opt in help_select.options]
+    assert "mechanics" in help_vals and "notes" in help_vals
+    assert all("khắc phục" not in opt.label.lower() for opt in help_select.options)
+    print("✅ 30. Giao diện /clan help mới (tường minh cơ chế EXP/Unlock & Lưu ý quan trọng) hoạt động 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 27 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 30 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db

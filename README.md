@@ -116,6 +116,7 @@ PRAGMA synchronous = NORMAL;
 
 ### 4.3. Nhóm C: Nhân Sự & Tuyển Quân
 - `/clan invite [@user]`: Ưu tiên gửi thẻ lời mời kèm nút **Chấp Nhận** / **Từ Chối** thẳng qua **DM** của người được mời (nếu khóa DM mới gửi ra kênh công khai, tuyệt đối không gửi vào kênh riêng của băng). Hết hạn sau 15 phút.
+- `/clan-recruit`: *(Cán Bộ trở lên)* Mở Modal nhập thông tin tuyển thành viên và tự động đăng bài chiêu mộ công khai (kèm Logo, Banner, khẩu hiệu và nút `[Xin Gia Nhập Băng]`, `[Xem Thành Viên]`) vào kênh `#tuyen-thanh-vien` thuộc Category `BOT CLAN`.
 - `/clan apply [tên_băng]`: Nộp đơn xin gia nhập băng kèm lời nhắn giới thiệu. Đẩy đơn vào kênh chat riêng để Cán Bộ duyệt (hoặc duyệt ngay nếu băng ở chế độ Mở Tự Do).
 - `/clan promote [@user]` & `/clan demote [@user]`: Thăng hoặc giáng chức theo nấc `MEMBER ↔ OFFICER ↔ CO_LEADER` (khống chế tối đa 2 Phó Băng và 4 Cán Bộ).
 - `/clan transfer [@user]`: Chuyển quyền Chủ Băng cho thành viên khác (Chủ Băng cũ tự động chuyển thành Phó Băng).
@@ -185,7 +186,7 @@ WickedChen/
 ├── data/
 │   └── clan_bot.db            # File SQLite cơ sở dữ liệu duy nhất
 ├── tests/
-│   └── test_system.py         # Bộ kiểm thử tích hợp 27 bài test tự động
+│   └── test_system.py         # Bộ kiểm thử tích hợp 30 bài test tự động
 ├── HDSD.md                    # Cẩm nang hướng dẫn sử dụng chi tiết cho người dùng & Admin
 ├── config.py                  # Quản lý tập trung mọi biến môi trường
 ├── Dockerfile                 # Đóng gói container Docker siêu nhẹ

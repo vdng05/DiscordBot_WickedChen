@@ -47,6 +47,8 @@ from utils.ui_components import (
     WelcomeGreetingView,
     ClanRoleSetupView,
     ClanQuickPartyModal,
+    RecruitPostModal,
+    validate_recruit_publisher,
     validate_linkable_role,
     link_role_to_clan,
     perform_daily_checkin
@@ -79,74 +81,100 @@ async def clan_name_autocomplete(interaction: discord.Interaction, current: str)
 
 
 class ClanHelpView(discord.ui.View):
-    """View hướng dẫn sử dụng tương tác đa tầng cho người dùng không rành dev"""
+    """View hướng dẫn sử dụng tường minh, đầy đủ cơ chế & lưu ý quan trọng"""
     def __init__(self):
-        super().__init__(timeout=180)
+        super().__init__(timeout=300)
 
     @discord.ui.select(
-        placeholder="📖 Chọn mục bạn muốn xem hướng dẫn...",
+        placeholder="📖 Chọn mục bạn muốn xem hướng dẫn chi tiết...",
         options=[
-            discord.SelectOption(label="👑 Dành Cho Quản Trị Viên (Admin)", value="admin", emoji="👑", description="Cách thiết lập server, quản lý và đồng bộ băng"),
-            discord.SelectOption(label="🏰 Dành Cho Chủ Băng & Cán Bộ", value="officer", emoji="🏰", description="Cách tạo băng, tuyển quân, quản lý và thăng chức"),
-            discord.SelectOption(label="👤 Dành Cho Thành Viên & Người Mới", value="member", emoji="👤", description="Cách xin vào băng, điểm danh, tạo kèo chơi chung"),
-            discord.SelectOption(label="❓ Khắc Phục Sự Cố & Lưu Ý Quan Trọng", value="faq", emoji="❓", description="Lỗi quyền, lỗi role, thời gian cooldown")
+            discord.SelectOption(label="📖 Cơ Chế Hệ Thống & Bảng Cấp Độ", value="mechanics", emoji="📖", description="Cách cày EXP, mốc Level 1-5, mở khóa đặc quyền & chế độ băng"),
+            discord.SelectOption(label="🏰 Dành Cho Chủ Băng & Cán Bộ", value="officer", emoji="🏰", description="Tạo băng, tuyển thành viên, mời DM, tùy chỉnh & thách đấu"),
+            discord.SelectOption(label="👤 Dành Cho Thành Viên & Người Mới", value="member", emoji="👤", description="Tìm băng, xin vào, điểm danh, nhiệm vụ tuần & lập kèo"),
+            discord.SelectOption(label="👑 Dành Cho Admin Server & Chủ Bot", value="admin", emoji="👑", description="Thiết lập Category, đồng bộ cứu hộ & phân quyền dùng bot"),
+            discord.SelectOption(label="📌 Lưu Ý Quan Trọng", value="notes", emoji="📌", description="Thứ bậc Role, bảo mật, an toàn dữ liệu & Server Boost")
         ]
     )
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         chosen = select.values[0]
-        if chosen == "admin":
+        if chosen == "mechanics":
             embed = discord.Embed(
-                title="👑 HƯỚNG DẪN DÀNH CHO ADMIN SERVER",
+                title="📖 CƠ CHẾ HỆ THỐNG & BẢNG CẤP ĐỘ (EXP / UNLOCK)",
                 description=(
-                    "**1. Thiết lập Category & Kênh Log:**\n"
-                    "• Dùng `/clan-admin setup` để chỉ định Category chứa kênh các băng và kênh ghi nhật ký.\n"
-                    "• *Mẹo:* Nếu không cấu hình trước, khi Admin gõ `/clan create`, bot sẽ **tự động tạo** Category `🏰 BĂNG ĐẢNG` và kênh Log cho bạn!\n\n"
-                    "**2. Thứ bậc Role (Rất quan trọng):**\n"
-                    "• Vào *Server Settings -> Roles*, **kéo Role của Bot lên trên cùng** (hoặc cao hơn các Role Băng) để bot có quyền tạo và cấp role.\n\n"
-                    "**3. Khôi phục tự động khi có lỗi:**\n"
-                    "• Nếu ai đó lỡ xóa tay Role hoặc Kênh của băng, chỉ cần gõ `/clan-admin sync` là bot tự phục hồi 100%!"
+                    "**1. Cách Kiếm EXP & Điểm Cống Hiến:**\n"
+                    "• **Điểm danh hằng ngày (`/clan checkin`):** +30 EXP băng & +10 Điểm cống hiến. Chuỗi 7 ngày liên tiếp thưởng thêm **+50 EXP** *(reset 00:00 giờ VN, tối đa 1 lần/ngày/người)*.\n"
+                    "• **Chat kênh riêng băng:** +5 EXP băng & +1 Cống hiến (tin nhắn từ 5 ký tự, cooldown 60 giây).\n"
+                    "• **Ngồi Voice Co-op:** Từ 2 thành viên cùng băng ngồi chung Voice (trừ kênh AFK) mỗi 5 phút nhận **+15 EXP** & **+3 Cống hiến**.\n"
+                    "• **Nhiệm vụ tuần (`/clan quests`):** Hoàn thành 3 nhiệm vụ (Điểm danh, Voice Co-op, Sôi nổi chat) nhận **+300 đến +500 EXP** mỗi nhiệm vụ.\n"
+                    "• **🔥 Đêm Lửa Trại Cuối Tuần (T7 & CN, 20:00–23:00):** Toàn bộ EXP Chat & Voice được **nhân đôi (x2)**!\n\n"
+                    "**2. Bảng Mốc Cấp Độ & Mở Khóa Đặc Quyền:**\n"
+                    "• **Level 1 (0 EXP):** Tối đa **15** thành viên • Mở 1 Kênh Chat riêng + 1 Kênh Nhật Ký tự động + 1 Kênh Voice public, đổi màu Role đơn sắc/Gradient, up Logo & Banner.\n"
+                    "• **Level 2 (1.000 EXP):** Tối đa **25** thành viên • Mở rộng quy mô băng.\n"
+                    "• **Level 3 (3.500 EXP):** Tối đa **40** thành viên • 🔥 **Tự động mở khóa Kênh Voice thứ 2**.\n"
+                    "• **Level 4 (8.000 EXP):** Tối đa **60** thành viên.\n"
+                    "• **Level 5 (15.000 EXP):** Tối đa **100** thành viên • Đỉnh cao danh vọng server.\n\n"
+                    "**3. Chế Độ Tuyển Quân & Kênh Tự Động:**\n"
+                    "• `OPEN` (Mở Tự Do): Nộp đơn là vào thẳng • `APPROVAL` (Cần Duyệt): Cán bộ bấm duyệt • `INVITE_ONLY` (Chỉ Mời).\n"
+                    "• Mọi thao tác nội bộ đều được bot **tự động ghi vào kênh Nhật Ký riêng** của từng băng."
                 ),
-                color=discord.Color.gold()
+                color=discord.Color.purple()
             )
         elif chosen == "officer":
             embed = discord.Embed(
                 title="🏰 HƯỚNG DẪN DÀNH CHO CHỦ BĂNG & CÁN BỘ",
                 description=(
-                    "**1. Thành lập băng:** Gõ `/clan create` -> Điền tên (3-25 ký tự) và Tag viết hoa (2-5 ký tự).\n"
-                    "**2. Cài đặt & Tùy biến:** Gõ `/clan settings` để đổi màu role, đặt Logo, đặt Banner hoặc đổi chế độ tuyển quân.\n"
-                    "**3. Mời thành viên:** Gõ `/clan invite [@user]` để gửi lời mời có nút bấm trực tiếp.\n"
-                    "**4. Quản lý chức vụ:**\n"
-                    "• `/clan promote [@user]`: Thăng chức (Tối đa 4 Cán Bộ, 2 Phó Băng).\n"
-                    "• `/clan demote [@user]`: Giáng chức.\n"
-                    "• `/clan transfer [@user]`: Chuyển quyền Chủ Băng cho người khác."
+                    "**1. Trung tâm 1-Click (`/clan hub`):** Bấm nút thao tác trực quan, không cần nhớ lệnh.\n"
+                    "**2. Thành lập băng (`/clan create`):** Điền Tên (3–25 ký tự), Tag (2–5 ký tự), Khẩu hiệu → Bot tự tạo Role + 3 kênh (Chat riêng, Nhật ký riêng, Voice public).\n"
+                    "**3. Đăng tin tuyển thành viên (`/clan-recruit` hoặc nút trong Hub):**\n"
+                    "• Nhập Tựa Game, Yêu Cầu & Nội Dung chiêu mộ → Bot tự đăng bài kèm Logo, Banner và nút `[Xin Gia Nhập]` / `[Xem Thành Viên]` vào kênh `#tuyen-thanh-vien` (thuộc Category `BOT CLAN`).\n"
+                    "**4. Mời thành viên (`/clan invite` hoặc trong Quản lý nhân sự):**\n"
+                    "• Bot ưu tiên gửi thẻ mời kèm nút bấm thẳng vào **tin nhắn riêng (DM)** của người được mời *(hạn 15 phút)*.\n"
+                    "**5. Tùy biến & Nhân sự:**\n"
+                    "• `/clan settings` / `/clan setup-role`: Đổi tên/tag (cooldown 7 ngày), đổi màu đơn/Gradient, upload Logo/Banner (chờ 15 phút), chỉnh chế độ tuyển quân.\n"
+                    "• Thăng/giáng chức (tối đa 2 Phó Băng, 4 Cán Bộ), trục xuất, trao danh hiệu, xuất Wallpaper 1920x1080.\n"
+                    "**6. Thách đấu (`/clan party`):** Gửi Thư Thách Đấu tới 1 băng hoặc toàn server *(Chủ/Phó Băng, cooldown 12h)*."
                 ),
                 color=discord.Color.blue()
             )
         elif chosen == "member":
             embed = discord.Embed(
-                title="👤 HƯỚNG DẪN DÀNH CHO THÀNH VIÊN",
+                title="👤 HƯỚNG DẪN DÀNH CHO THÀNH VIÊN & NGƯỜI MỚI",
                 description=(
-                    "**1. Xem & Gia nhập băng:**\n"
-                    "• `/clan list`: Xem danh sách các băng đang mở tuyển.\n"
-                    "• `/clan apply [tên_băng]`: Nộp đơn xin gia nhập (kèm lời nhắn).\n"
-                    "• `/clan info [tên_băng]`: Xem thông tin, sĩ số và cấp độ của băng.\n\n"
-                    "**2. Hoạt động nhận EXP:**\n"
-                    "• `/clan checkin`: Điểm danh mỗi ngày (+30 EXP băng, duy trì chuỗi 7 ngày thưởng thêm +50 EXP).\n"
-                    "• **Voice chung:** Cứ 2 thành viên cùng băng ngồi Voice 5 phút được cộng +15 EXP băng.\n"
-                    "• **Kênh Chat riêng:** Nhắn tin trò chuyện trong kênh chat băng nhận EXP và cày nhiệm vụ tuần!"
+                    "**1. Tìm & Gia nhập băng:**\n"
+                    "• Xem các bài đăng chiêu mộ tại kênh `#tuyen-thanh-vien` (Category `BOT CLAN`) và bấm **`[📩 Xin Gia Nhập Băng]`**.\n"
+                    "• Hoặc gõ `/clan hub` → `Xem Danh Sách Băng` / `Nộp Đơn Vào Băng` (hoặc `/clan apply`).\n"
+                    "• Nếu được Cán Bộ mời, bấm nút **`[✅ Chấp Nhận Lời Mời]`** ngay trong tin nhắn riêng (DM).\n\n"
+                    "**2. Hoạt động hằng ngày:**\n"
+                    "• Gõ `/clan hub` → bấm **`[📅 Điểm Danh Hằng Ngày]`**, theo dõi **`[🎯 Nhiệm Vụ Tuần]`**, hoặc rủ anh em lập team bằng **`[⚔️ Thách Đấu / Tạo Kèo]`**.\n\n"
+                    "**3. Rời băng tự do:**\n"
+                    "• Bấm **`[🚪 Rời Băng]`** (hoặc `/clan leave`), có xác nhận 2 lớp. Không bị phạt cooldown khi chuyển băng."
                 ),
                 color=discord.Color.green()
             )
+        elif chosen == "admin":
+            embed = discord.Embed(
+                title="👑 HƯỚNG DẪN DÀNH CHO ADMIN SERVER & CHỦ BOT",
+                description=(
+                    "**1. Thiết lập hệ thống (`/clan-admin setup`):**\n"
+                    "• Chọn Category chứa kênh các băng (mặc định tự tạo `🏰 BĂNG ĐẢNG`, tự mở `🏰 BĂNG ĐẢNG 2` khi gần chạm trần 50 kênh), kênh Log server, quyền tự tạo băng và cooldown rời băng (mặc định `0`).\n\n"
+                    "**2. Đồng bộ cứu hộ (`/clan-admin sync`):**\n"
+                    "• Tự động tạo lại Role hoặc Kênh bị thiếu của các băng và đồng bộ thành viên.\n"
+                    "• Bot **không tự ý sửa tên hay xóa kênh đang tồn tại**.\n\n"
+                    "**3. Xóa băng vi phạm (`/clan-admin force-delete`):** Có xác nhận 2 lớp an toàn.\n\n"
+                    "**4. Phân quyền Role dùng bot (`/bot-access` — Chỉ Chủ Bot):**\n"
+                    "• Chọn `Bật Tất Cả`, `Chọn Role Cụ Thể` (hỗ trợ phân trang nhiều role), hoặc `Tắt Tất Cả`."
+                ),
+                color=discord.Color.gold()
+            )
         else:
             embed = discord.Embed(
-                title="❓ CÂU HỎI THƯỜNG GẶP & KHẮC PHỤC SỰ CỐ",
+                title="📌 LƯU Ý QUAN TRỌNG KHI SỬ DỤNG",
                 description=(
-                    "**Q: Tôi vừa rời băng, bao giờ mới được vào băng mới?**\n"
-                    "• A: Mặc định là **24 giờ** sau khi rời hoặc bị trục xuất để chống nhảy băng spam.\n\n"
-                    "**Q: Tại sao bot báo 'Bot bị chặn quyền thao tác Role'?**\n"
-                    "• A: Do Role của Bot đang nằm thấp hơn Role Băng trong Server Settings. Hãy kéo Role của Bot lên cao hơn.\n\n"
-                    "**Q: Làm sao để mở khóa Kênh Voice thứ 2 cho băng?**\n"
-                    "• A: Khi băng đạt **Level 3 (3.500 EXP)**, bot sẽ **tự động tạo thêm** kênh Voice 2 vào Category của băng!"
+                    "• **Thứ bậc Role của Bot:** Role của Bot trong *Server Settings -> Roles* cần nằm **cao hơn** toàn bộ Role Băng Đảng để bot có thể tạo, đổi màu và cấp/gỡ Role.\n"
+                    "• **An toàn dữ liệu Discord:** Bot không tự ý sửa tên, chỉnh sửa hay xóa kênh/role/tin nhắn trò chuyện thông thường của người dùng.\n"
+                    "• **Bảo mật liên kết Role (`/clan set-role`):** Hệ thống chặn gắn Role có quyền quản trị/nhạy cảm, Role của băng khác, và chỉ Admin Server mới gắn được Role đang có người ngoài băng sở hữu.\n"
+                    "• **Chống farm Điểm danh:** Mỗi thành viên chỉ điểm danh được **1 lần/ngày** trên toàn server (kể cả khi đổi băng trong ngày).\n"
+                    "• **Tính năng theo Server Boost:** Màu **Gradient 2 màu** và **Icon Role** phụ thuộc cấp độ Boost của máy chủ Discord (Icon Role yêu cầu Server Boost Cấp 2; nếu chưa đủ Boost, bot tự fallback sang màu đơn sắc)."
                 ),
                 color=discord.Color.orange()
             )
@@ -1161,24 +1189,37 @@ class ClanCommands(commands.Cog):
         view = ClanHubView(user=interaction.user, clan=clan, bot=self.bot)
         await interaction.followup.send(embed=embed, file=file, view=view, ephemeral=True)
 
-    @clan_group.command(name="help", description="Xem hướng dẫn sử dụng chi tiết & mẹo dùng bot trực quan")
+    @app_commands.command(name="clan-recruit", description="Đăng tin tuyển thành viên vào kênh #tuyen-thanh-vien (Cán Bộ trở lên)")
+    @app_commands.guild_only()
+    async def clan_recruit(self, interaction: discord.Interaction):
+        clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
+        cnt = await self.bot.db.get_member_count(clan["clan_id"]) if clan else 0
+        err = validate_recruit_publisher(clan, interaction.user, cnt)
+        if err:
+            await interaction.response.send_message(err, ephemeral=True)
+            return
+        await interaction.response.send_modal(RecruitPostModal(clan=clan, bot=self.bot))
+
+    @clan_group.command(name="help", description="Xem hướng dẫn sử dụng chi tiết, cơ chế EXP/Unlock & lưu ý quan trọng")
     async def clan_help(self, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="🏰 HƯỚNG DẪN SỬ DỤNG HỆ THỐNG BĂNG ĐẢNG",
+            title="🏰 HƯỚNG DẪN & CƠ CHẾ HỆ THỐNG BĂNG ĐẢNG",
             description=(
-                "Chào mừng bạn đến với hệ thống Hội Nhóm & Băng Đảng cộng đồng!\n\n"
-                "👉 Hãy **chọn mục bạn cần tìm hiểu** trong menu bên dưới để xem hướng dẫn chi tiết từng bước."
+                "Chào mừng bạn đến với hệ thống Hội Nhóm & Băng Đảng cộng đồng!\n"
+                "Mọi thao tác đều có thể dùng 1-Click qua **`/clan hub`**.\n\n"
+                "👉 Hãy **chọn mục bạn muốn tìm hiểu** trong menu bên dưới để xem hướng dẫn chi tiết, bảng EXP/Unlock cấp độ và các lưu ý quan trọng."
             ),
             color=discord.Color.blurple(),
             timestamp=datetime.now()
         )
         embed.add_field(
-            name="🚀 Các Lệnh Phổ Biến Nhất",
+            name="🚀 Các Lệnh Chính Thường Dùng",
             value=(
-                "• `/clan info`: Xem hồ sơ băng của bản thân\n"
-                "• `/clan checkin`: Điểm danh nhận EXP mỗi ngày\n"
-                "• `/clan hub`: Mở trung tâm điều khiển 1-click\n"
-                "• `/clan create`: Thành lập một băng mới"
+                "• `/clan hub`: Mở trung tâm điều khiển 1-Click\n"
+                "• `/clan create`: Thành lập một băng đảng mới\n"
+                "• `/clan-recruit`: Đăng tin tuyển thành viên vào `#tuyen-thanh-vien`\n"
+                "• `/clan checkin`: Điểm danh hằng ngày nhận EXP & cống hiến\n"
+                "• `/clan info`: Xem hồ sơ, cấp độ & sĩ số băng"
             ),
             inline=False
         )

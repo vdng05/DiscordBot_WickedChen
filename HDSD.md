@@ -110,6 +110,7 @@ Mở bảng điều khiển tương tác (dành cho **Chủ Băng** hoặc **Qu�
 ### 7. Bổ Nhiệm & Quản Lý Nhân Sự (Nút `[👥 Quản Lý Thành Viên]` Trong `/clan hub`)
 Bạn không cần phải nhớ các câu lệnh slash command phức tạp, chỉ cần bấm **`[👥 Quản Lý Thành Viên]`** trong `/clan hub`:
 - **➕ Mời thành viên mới:** Menu chọn người dùng Discord (User Picker) trực quan, chọn ai là bot tự động gửi lời mời kèm nút xác nhận thẳng vào **DM** của họ *(hoặc kênh công khai nếu họ khóa DM, hạn 15 phút)*.
+- **📢 Đăng Tin Tuyển Thành Viên (`/clan-recruit` hoặc nút trong Hub / Quản lý thành viên):** Chủ Băng hoặc Cán Bộ nhập tựa game, yêu cầu & nội dung chiêu mộ qua Modal → Bot tự tạo Category `BOT CLAN` + kênh `#tuyen-thanh-vien` (nếu chưa có) và đăng bài tuyển kèm Logo, Banner, Khẩu hiệu cùng nút **`[📩 Xin Gia Nhập Băng]`** & **`[👥 Xem Thành Viên]`**.
 - **⬆️ Thăng chức:** Bấm nút $\rightarrow$ Chọn thành viên từ menu thả xuống để thăng lên Cán Bộ hoặc Phó Băng.
 - **⬇️ Giáng chức:** Bấm nút $\rightarrow$ Chọn cán bộ để hạ bậc chức vụ. *(Tối đa 2 Phó Băng và 4 Cán Bộ)*.
 - **👢 Trục xuất:** Bấm nút $\rightarrow$ Chọn thành viên vi phạm $\rightarrow$ Nhập lý do trong popup để trục xuất (Bot sẽ gửi thông báo riêng qua DM kèm lý do cho thành viên, không phạt cooldown).
@@ -139,7 +140,7 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 ### 1. Cơ Chế Tổ Chức Kênh & An Toàn Dữ Liệu Discord
 - **Category `🏰 BĂNG ĐẢNG` (tự động mở rộng nếu server cực lớn):** Toàn bộ các băng được gom gọn trong 1 Category duy nhất *(khi server phát triển vượt 46 kênh gần chạm trần 50 kênh của Discord, bot tự động tạo Category nối tiếp `🏰 BĂNG ĐẢNG 2` mà không ảnh hưởng dữ liệu cũ)*. Mỗi băng sở hữu 3 kênh:
   1. **💬 Kênh Chat Riêng của băng** *(Riêng tư — chỉ thành viên băng mới nhìn thấy & nhắn tin, không sợ rối sidebar)*.
-  2. **📜 Kênh Nhật Ký của băng (`📜・nhat-ky-...`)** *(Riêng tư — chỉ thành viên băng mới nhìn thấy để theo dõi lịch sử hoạt động)*.
+  2. **📜 Kênh Nhật Ký của băng (`📜・nhat-ky-...`)** *(Riêng tư — chỉ thành viên băng mới nhìn thấy; bot **tự động ghi nhận mọi hoạt động** của băng vào kênh này)*.
   3. **🔊 Kênh Voice của băng** *(Công khai/Public — mọi thành viên server đều có thể nhìn thấy và vào giao lưu)*.
 - **Không tự tiện sửa/xóa kênh & tin nhắn:** Bot **tuyệt đối không tự ý sửa tên, thay đổi hay xóa bất kỳ kênh, role hoặc tin nhắn trò chuyện thông thường nào** của người dùng trên Discord *(chỉ tự động dọn tin nhắn gửi tệp ảnh trong luồng upload ảnh và các bảng điều khiển của bot để giữ sạch chat)*.
 - **Tùy chỉnh thủ công (nếu muốn):** Dùng `/clan-admin setup` để chỉ định Category hoặc kênh Log server riêng theo ý bạn.

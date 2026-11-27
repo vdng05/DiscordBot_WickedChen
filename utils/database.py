@@ -2,6 +2,7 @@
 Async SQLite Database Manager using aiosqlite with WAL mode
 """
 
+import asyncio
 import aiosqlite
 from contextlib import asynccontextmanager
 import json
@@ -27,6 +28,11 @@ class DatabaseManager:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._connection: Optional[aiosqlite.Connection] = None
+        self._log_dispatcher = None
+
+    def set_log_dispatcher(self, dispatcher):
+        """Đăng ký callback tự động gửi nhật ký ra kênh Discord riêng của từng băng."""
+        self._log_dispatcher = dispatcher
 
     async def initialize(self):
         """Khởi tạo file cơ sở dữ liệu, kích hoạt WAL mode và chạy migrations"""
@@ -771,6 +777,14 @@ class DatabaseManager:
                 rows = await cursor.fetchall()
                 return [dict(r) for r in rows]
 
+    async def has_pending_request(self, clan_id: int, user_id: int) -> bool:
+        """Kiểm tra người dùng đã có đơn/lời mời đang chờ xử lý với băng này chưa."""
+        now = int(time.time())
+        sql = "SELECT 1 FROM clan_requests WHERE clan_id = ? AND user_id = ? AND status = 'PENDING' AND expires_at > ? LIMIT 1"
+        async with self.connect() as db:
+            async with db.execute(sql, (clan_id, str(user_id), now)) as cursor:
+                return (await cursor.fetchone()) is not None
+
     async def mark_expired_requests(self) -> int:
         now = int(time.time())
         sql = "UPDATE clan_requests SET status = 'EXPIRED' WHERE status = 'PENDING' AND expires_at <= ?"
@@ -792,6 +806,11 @@ class DatabaseManager:
         async with self.connect() as db:
             await db.execute(sql, (clan_id, str(actor_id), str(target_id) if target_id else None, action, details, now))
             await db.commit()
+        if self._log_dispatcher is not None:
+            try:
+                asyncio.create_task(self._log_dispatcher(clan_id, actor_id, action, details, target_id, now))
+            except Exception as disp_err:
+                logger.debug(f"Không thể lên lịch dispatch log kênh băng {clan_id}: {disp_err}")
 
     async def get_clan_logs(self, clan_id: int, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
         offset = (page - 1) * page_size

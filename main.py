@@ -5,10 +5,12 @@ Tích hợp SQLite bất đồng bộ (aiosqlite WAL Mode) & Discord.py v2.x
 """
 
 import asyncio
+from datetime import datetime
 import os
 import signal
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Đảm bảo mã hóa UTF-8 trên Windows console (tránh lỗi charmap cp1258 / UnicodeEncodeError)
 if sys.platform == "win32":
@@ -131,10 +133,71 @@ class ClanBot(commands.Bot):
             except Exception:
                 pass
 
+    async def dispatch_clan_log(
+        self,
+        clan_id: int,
+        actor_id: int,
+        action: str,
+        details: Optional[str],
+        target_id: Optional[int],
+        created_at: int,
+    ) -> None:
+        """Tự động gửi thông báo nhật ký hoạt động vào kênh log riêng của từng băng."""
+        ACTION_META = {
+            "CREATE": ("🏰 Thành Lập Băng", discord.Color.gold()),
+            "JOIN": ("👋 Thành Viên Gia Nhập", discord.Color.green()),
+            "LEAVE": ("🚪 Thành Viên Rời Băng", discord.Color.orange()),
+            "KICK": ("👢 Trục Xuất Thành Viên", discord.Color.red()),
+            "PROMOTE": ("⬆️ Thăng Chức Nhân Sự", discord.Color.blue()),
+            "DEMOTE": ("⬇️ Giáng Chức Nhân Sự", discord.Color.dark_orange()),
+            "TRANSFER": ("👑 Chuyển Quyền Chủ Băng", discord.Color.gold()),
+            "LEVEL_UP": ("🎉 Băng Thăng Cấp", discord.Color.purple()),
+            "UPDATE_INFO": ("✏️ Cập Nhật Thông Tin", discord.Color.blurple()),
+            "UPDATE_COLOR": ("🎨 Đổi Màu Role", discord.Color.blurple()),
+            "LINK_ROLE": ("🔗 Liên Kết Role Mới", discord.Color.blurple()),
+            "UPDATE_LOGO": ("🖼️ Cập Nhật Logo", discord.Color.teal()),
+            "UPDATE_BANNER": ("🎨 Cập Nhật Banner", discord.Color.teal()),
+            "UPDATE_ROLE_ICON": ("🌟 Cập Nhật Icon Role", discord.Color.gold()),
+            "CUSTOM_TITLE": ("🎖️ Trao Danh Hiệu Nội Bộ", discord.Color.gold()),
+            "SEND_CHALLENGE": ("⚔️ Gửi Thư Thách Đấu", discord.Color.red()),
+            "CREATE_PARTY": ("🎮 Lập Kèo Chơi Game", discord.Color.blue()),
+            "RECRUIT_POST": ("📢 Đăng Tin Tuyển Thành Viên", discord.Color.green()),
+        }
+        try:
+            clan = await self.db.get_clan_by_id(clan_id)
+            if not clan or not clan.get("log_channel_id"):
+                return
+            ch_id = int(clan["log_channel_id"])
+            ch = self.get_channel(ch_id)
+            if ch is None:
+                try:
+                    ch = await self.fetch_channel(ch_id)
+                except Exception:
+                    return
+            title, color = ACTION_META.get(action, (f"📜 {action}", discord.Color.light_grey()))
+            embed = discord.Embed(
+                title=title,
+                description=details or "Hoạt động nội bộ băng đảng.",
+                color=color,
+                timestamp=datetime.fromtimestamp(created_at),
+            )
+            embed.add_field(name="👤 Người Thực Hiện", value=f"<@{actor_id}>", inline=True)
+            if target_id:
+                embed.add_field(name="🎯 Đối Tượng", value=f"<@{target_id}>", inline=True)
+            embed.add_field(name="⏰ Thời Gian", value=f"<t:{created_at}:R>", inline=True)
+            embed.set_footer(text=f"[{clan['tag']}] {clan['name']} • Nhật Ký Tự Động")
+            await ch.send(embed=embed)
+        except Exception as err:
+            logger.debug(f"Không thể gửi log tự động tới kênh nhật ký băng {clan_id}: {err}")
+
     async def setup_hook(self):
         """Khởi động cơ sở dữ liệu SQLite, gắn error handler và tự động nạp toàn bộ cogs"""
-        # 1. Khởi tạo cơ sở dữ liệu SQLite WAL mode
+        # 1. Khởi tạo cơ sở dữ liệu SQLite WAL mode & gắn auto-dispatch log vào kênh nhật ký băng
         await self.db.initialize()
+        self.db.set_log_dispatcher(self.dispatch_clan_log)
+
+        from utils.ui_components import RecruitApplyButton, RecruitMembersButton
+        self.add_dynamic_items(RecruitApplyButton, RecruitMembersButton)
 
         # 2. Gắn bộ xử lý lỗi tập trung và kiểm tra phân quyền Chủ Bot cho toàn bộ Slash Commands
         self.tree.on_error = global_app_command_error

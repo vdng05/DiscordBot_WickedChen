@@ -104,3 +104,65 @@ async def get_available_clan_category(guild: discord.Guild, db: Any, config: Opt
         except Exception:
             return base_cat
     return base_cat
+
+
+async def get_or_create_recruit_channel(guild: discord.Guild) -> tuple[Optional[discord.TextChannel], Optional[str]]:
+    """Tìm hoặc tạo Category 'BOT CLAN' và kênh '#tuyen-thanh-vien' để đăng tin tuyển thành viên."""
+    me = guild.me
+    if not me.guild_permissions.manage_channels:
+        return None, "❌ Bot thiếu quyền `Manage Channels` để tạo Category **BOT CLAN** và kênh `#tuyen-thanh-vien`!"
+
+    category = None
+    for cat in guild.categories:
+        if cat.name.strip().upper() == "BOT CLAN":
+            category = cat
+            break
+
+    if not category:
+        try:
+            category = await guild.create_category(
+                "BOT CLAN",
+                reason="Tạo Category BOT CLAN chứa kênh tuyển thành viên"
+            )
+        except Exception as e:
+            return None, f"❌ Không thể tạo Category **BOT CLAN**: `{e}`"
+
+    recruit_ch = None
+    for ch in category.text_channels:
+        if ch.name.lower() == "tuyen-thanh-vien":
+            recruit_ch = ch
+            break
+
+    if not recruit_ch:
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=False,
+                read_message_history=True,
+                add_reactions=True
+            ),
+            me: discord.PermissionOverwrite(
+                view_channel=True,
+                send_messages=True,
+                embed_links=True,
+                attach_files=True,
+                read_message_history=True,
+                manage_messages=True
+            )
+        }
+        try:
+            recruit_ch = await guild.create_text_channel(
+                name="tuyen-thanh-vien",
+                category=category,
+                topic="📢 Bảng tin tuyển thành viên chính thức của các Băng Đảng — Bấm nút dưới mỗi bài để Xin Gia Nhập hoặc Xem Thành Viên!",
+                overwrites=overwrites,
+                reason="Tạo kênh tuyển thành viên hệ thống Băng Đảng"
+            )
+        except Exception as e:
+            return None, f"❌ Không thể tạo kênh `#tuyen-thanh-vien`: `{e}`"
+
+    perms = recruit_ch.permissions_for(me)
+    if not perms.view_channel or not perms.send_messages or not perms.embed_links:
+        return None, f"❌ Bot thiếu quyền gửi tin nhắn / nhúng Embed trong kênh {recruit_ch.mention}!"
+
+    return recruit_ch, None
