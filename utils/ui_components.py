@@ -5469,7 +5469,7 @@ class ClanPetRenameModal(SafeModal, title="✏️ Đổi Tên Linh Thú Băng"):
 
 
 class ClanPetShopView(SafeView):
-    """Cửa hàng thời trang & phông nền Linh Thú — Hỗ trợ XEM TRƯỚC vật phẩm trên Pet trước khi mua."""
+    """Cửa hàng thời trang & phông nền Linh Thú — Phân chia danh mục + phong cách + xem trước."""
     def __init__(
         self,
         clan: Dict[str, Any],
@@ -5478,24 +5478,38 @@ class ClanPetShopView(SafeView):
         style_filter: str,
         bot: Any,
         selected_item_id: Optional[str] = None,
+        slot_filter: str = "ALL",
     ):
         super().__init__(timeout=300)
         self.clan = clan
         self.pet = pet
         self.owned_ids = set(owned_ids)
         self.style_filter = style_filter
+        self.slot_filter = slot_filter
         self.bot = bot
         self.selected_item_id = selected_item_id
 
+        slot_opts = [
+            discord.SelectOption(label="📂 Tất cả danh mục", value="ALL", default=(slot_filter == "ALL"))
+        ] + [
+            discord.SelectOption(label=label, value=key, default=(slot_filter == key))
+            for key, label in PET_SLOT_NAMES.items()
+        ]
+        self.slot_select.options = slot_opts
+
         style_opts = [
-            discord.SelectOption(label="Tất cả phong cách", value="ALL", emoji="🌟", default=(style_filter == "ALL"))
+            discord.SelectOption(label="🌟 Tất cả phong cách", value="ALL", default=(style_filter == "ALL"))
         ] + [
             discord.SelectOption(label=label, value=key, default=(style_filter == key))
             for key, label in PET_STYLE_NAMES.items()
         ]
         self.style_select.options = style_opts
 
-        items = [it for it in PET_CATALOG if style_filter == "ALL" or it["style"] == style_filter][:25]
+        items = [
+            it for it in PET_CATALOG
+            if (slot_filter == "ALL" or it["slot"] == slot_filter)
+            and (style_filter == "ALL" or it["style"] == style_filter)
+        ][:25]
         item_opts = []
         for it in items:
             owned_tag = "✅ Đã có" if it["item_id"] in self.owned_ids else f"🪙 {it['price']} Xu"
@@ -5504,11 +5518,11 @@ class ClanPetShopView(SafeView):
                     label=f"{it['name']} ({owned_tag})"[:100],
                     value=it["item_id"],
                     default=(it["item_id"] == selected_item_id),
-                    description=f"{PET_SLOT_NAMES.get(it['slot'], it['slot'])} • Yêu cầu Stage {it['min_stage']}"[:100]
+                    description=f"{PET_SLOT_NAMES.get(it['slot'], it['slot'])} • Stage {it['min_stage']}+"[:100]
                 )
             )
         if not item_opts:
-            item_opts.append(discord.SelectOption(label="Chưa có vật phẩm", value="NONE"))
+            item_opts.append(discord.SelectOption(label="Không có vật phẩm ở mục lọc này", value="NONE"))
             self.buy_select.disabled = True
         self.buy_select.options = item_opts
 
@@ -5525,12 +5539,25 @@ class ClanPetShopView(SafeView):
                 self.confirm_buy_btn.style = discord.ButtonStyle.success
                 self.confirm_buy_btn.disabled = int(pet.get("pet_coins", 0)) < sel_item["price"]
 
-    @ui.select(placeholder="🎨 Lọc theo phong cách thời trang...", row=0)
+    @ui.select(placeholder="📂 Chọn Danh Mục vật phẩm (Mũ / Áo / Cánh / Nền...)", row=0)
+    async def slot_select(self, interaction: discord.Interaction, select: ui.Select):
+        await interaction.response.defer()
+        pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
+        inv = await self.bot.db.get_pet_inventory(self.clan["clan_id"])
+        view = ClanPetShopView(self.clan, pet, inv, self.style_filter, self.bot, slot_filter=select.values[0])
+        embed = discord.Embed(
+            title=f"🛒 CỬA HÀNG LINH THÚ — Quỹ Băng: {pet['pet_coins']:,} Xu 🪙",
+            description="Chọn danh mục / phong cách rồi chọn vật phẩm bên dưới để **xem trước trực tiếp trên Linh Thú**!",
+            color=discord.Color.gold()
+        )
+        await interaction.edit_original_response(embed=embed, attachments=[], view=view)
+
+    @ui.select(placeholder="🎨 Lọc theo phong cách thời trang...", row=1)
     async def style_select(self, interaction: discord.Interaction, select: ui.Select):
         await interaction.response.defer()
         pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
         inv = await self.bot.db.get_pet_inventory(self.clan["clan_id"])
-        view = ClanPetShopView(self.clan, pet, inv, select.values[0], self.bot)
+        view = ClanPetShopView(self.clan, pet, inv, select.values[0], self.bot, slot_filter=self.slot_filter)
         embed = discord.Embed(
             title=f"🛒 CỬA HÀNG LINH THÚ — Quỹ Băng: {pet['pet_coins']:,} Xu 🪙",
             description="Chọn vật phẩm ở menu dưới để **xem trước trực tiếp trên Linh Thú** trước khi bấm mua!",
@@ -5538,7 +5565,7 @@ class ClanPetShopView(SafeView):
         )
         await interaction.edit_original_response(embed=embed, attachments=[], view=view)
 
-    @ui.select(placeholder="👁️ Chọn vật phẩm để XEM TRƯỚC trên Linh Thú...", row=1)
+    @ui.select(placeholder="👁️ Chọn vật phẩm để XEM TRƯỚC trên Linh Thú...", row=2)
     async def buy_select(self, interaction: discord.Interaction, select: ui.Select):
         item_id = select.values[0]
         if item_id == "NONE":
@@ -5569,10 +5596,10 @@ class ClanPetShopView(SafeView):
             color=discord.Color.gold()
         )
         embed.set_image(url="attachment://pet_preview.png")
-        view = ClanPetShopView(self.clan, pet, inv, self.style_filter, self.bot, selected_item_id=item_id)
+        view = ClanPetShopView(self.clan, pet, inv, self.style_filter, self.bot, selected_item_id=item_id, slot_filter=self.slot_filter)
         await interaction.edit_original_response(embed=embed, attachments=[file], view=view)
 
-    @ui.button(label="Mua Vật Phẩm Này", emoji="🛒", style=discord.ButtonStyle.success, row=2)
+    @ui.button(label="Mua Vật Phẩm Này", emoji="🛒", style=discord.ButtonStyle.success, row=3)
     async def confirm_buy_btn(self, interaction: discord.Interaction, button: ui.Button):
         if not self.selected_item_id or self.selected_item_id not in PET_CATALOG_MAP:
             return
@@ -5584,7 +5611,7 @@ class ClanPetShopView(SafeView):
         await interaction.response.defer()
         pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
         inv = await self.bot.db.get_pet_inventory(self.clan["clan_id"])
-        view = ClanPetShopView(self.clan, pet, inv, self.style_filter, self.bot, selected_item_id=self.selected_item_id)
+        view = ClanPetShopView(self.clan, pet, inv, self.style_filter, self.bot, selected_item_id=self.selected_item_id, slot_filter=self.slot_filter)
         embed = discord.Embed(
             title=f"🛒 CỬA HÀNG LINH THÚ — Quỹ: {pet['pet_coins']:,} Xu 🪙",
             description=f"✅ Đã mua **{item['name']}** vào Tủ Đồ Chung của băng! Hãy vào **Tủ Đồ & Phối Style** để mặc cho Pet.",
@@ -5592,45 +5619,69 @@ class ClanPetShopView(SafeView):
         )
         await interaction.edit_original_response(embed=embed, attachments=[], view=view)
 
-    @ui.button(label="Quay Lại Linh Thú", emoji="🐾", style=discord.ButtonStyle.secondary, row=2)
+    @ui.button(label="Quay Lại Linh Thú", emoji="🐾", style=discord.ButtonStyle.secondary, row=3)
     async def back_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         await open_clan_pet_screen(interaction, self.clan, self.bot, edit_original=True)
 
 
 class ClanPetWardrobeView(SafeView):
-    """Tủ đồ & Phối Style cho Linh Thú theo Slot đã mở khóa."""
-    def __init__(self, clan: Dict[str, Any], pet: Dict[str, Any], owned_ids: List[str], bot: Any):
+    """Tủ đồ & Phối Style cho Linh Thú phân theo Danh mục & Slot đã mở khóa."""
+    def __init__(self, clan: Dict[str, Any], pet: Dict[str, Any], owned_ids: List[str], bot: Any, slot_filter: str = "ALL"):
         super().__init__(timeout=300)
         self.clan = clan
         self.pet = pet
         self.owned_ids = owned_ids
+        self.slot_filter = slot_filter
         self.bot = bot
+
+        slot_opts = [
+            discord.SelectOption(label="📂 Tất cả danh mục đang có", value="ALL", default=(slot_filter == "ALL"))
+        ] + [
+            discord.SelectOption(label=label, value=key, default=(slot_filter == key))
+            for key, label in PET_SLOT_NAMES.items()
+        ]
+        self.slot_select.options = slot_opts
 
         info = get_pet_level_info(int(pet.get("exp", 0)))
         unlocked = set(info["unlocked_slots"])
         equipped = pet.get("equipped") or {}
 
         opts = []
-        for iid in owned_ids[:24]:
+        for iid in owned_ids:
             it = PET_CATALOG_MAP.get(iid)
             if not it:
                 continue
-            is_eq = equipped.get(it["slot"]) == iid
-            locked_note = "" if it["slot"] in unlocked else f" [Khóa - Cần Stage {it['min_stage']}]"
+            item_slot = it.get("slot", "outfit")
+            if slot_filter != "ALL" and item_slot != slot_filter:
+                continue
+            is_eq = equipped.get(item_slot) == iid
+            min_st = it.get("min_stage", 1)
+            locked_note = "" if (item_slot in unlocked and info["stage"] >= min_st) else f" [Khóa - Cần Stage {min_st}]"
             opts.append(
                 discord.SelectOption(
                     label=f"{'✅ ' if is_eq else ''}{it['name']}{locked_note}"[:100],
                     value=iid,
-                    description=PET_SLOT_NAMES.get(it["slot"], it["slot"])[:100]
+                    description=PET_SLOT_NAMES.get(item_slot, item_slot)[:100]
                 )
             )
+            if len(opts) >= 25:
+                break
         if not opts:
-            opts.append(discord.SelectOption(label="Tủ đồ đang trống (Hãy ghé Cửa Hàng!)", value="EMPTY"))
+            empty_msg = "Không có món đồ nào trong danh mục này" if owned_ids else "Tủ đồ đang trống (Hãy ghé Cửa Hàng!)"
+            opts.append(discord.SelectOption(label=empty_msg, value="EMPTY"))
             self.equip_select.disabled = True
         self.equip_select.options = opts
 
-    @ui.select(placeholder="👗 Chọn món đồ trong Tủ Đồ để Mặc / Tháo...", row=0)
+    @ui.select(placeholder="📂 Lọc Tủ Đồ theo Danh Mục...", row=0)
+    async def slot_select(self, interaction: discord.Interaction, select: ui.Select):
+        await interaction.response.defer()
+        pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
+        inv = await self.bot.db.get_pet_inventory(self.clan["clan_id"])
+        view = ClanPetWardrobeView(self.clan, pet, inv, self.bot, slot_filter=select.values[0])
+        await interaction.edit_original_response(view=view)
+
+    @ui.select(placeholder="👗 Chọn món đồ trong Tủ Đồ để Mặc / Tháo...", row=1)
     async def equip_select(self, interaction: discord.Interaction, select: ui.Select):
         iid = select.values[0]
         if iid == "EMPTY":
@@ -5640,20 +5691,22 @@ class ClanPetWardrobeView(SafeView):
             return
         pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
         info = get_pet_level_info(int(pet.get("exp", 0)))
-        if item["slot"] not in info["unlocked_slots"]:
+        item_slot = item.get("slot", "outfit")
+        min_st = item.get("min_stage", 1)
+        if item_slot not in info["unlocked_slots"] or info["stage"] < min_st:
             await auto_dismiss_notice(
                 interaction,
-                content=f"🔒 Ô **{PET_SLOT_NAMES.get(item['slot'])}** mở khóa ở **Stage {item['min_stage']}**! Hãy nuôi Pet lên cấp nhé.",
+                content=f"🔒 Món **{item['name']}** ({PET_SLOT_NAMES.get(item_slot, item_slot)}) yêu cầu **Stage {min_st}**! Hãy nuôi Pet lên cấp nhé.",
                 delay=5
             )
             return
 
         equipped = dict(pet.get("equipped") or {})
-        if equipped.get(item["slot"]) == iid:
-            equipped.pop(item["slot"], None)
+        if equipped.get(item_slot) == iid:
+            equipped.pop(item_slot, None)
             msg_txt = f"👕 Đã tháo **{item['name']}** khỏi Linh Thú."
         else:
-            equipped[item["slot"]] = iid
+            equipped[item_slot] = iid
             msg_txt = f"✨ Đã mặc **{item['name']}** cho Linh Thú!"
 
         await self.bot.db.update_clan_pet(self.clan["clan_id"], equipped=equipped)
@@ -5661,13 +5714,13 @@ class ClanPetWardrobeView(SafeView):
         await open_clan_pet_screen(interaction, self.clan, self.bot, edit_original=True)
         await auto_dismiss_notice(interaction, content=msg_txt, delay=4)
 
-    @ui.button(label="Tháo Tất Cả Đồ", emoji="🧹", style=discord.ButtonStyle.danger, row=1)
+    @ui.button(label="Tháo Tất Cả Đồ", emoji="🧹", style=discord.ButtonStyle.danger, row=2)
     async def unequip_all_btn(self, interaction: discord.Interaction, button: ui.Button):
         await self.bot.db.update_clan_pet(self.clan["clan_id"], equipped={})
         await interaction.response.defer()
         await open_clan_pet_screen(interaction, self.clan, self.bot, edit_original=True)
 
-    @ui.button(label="Quay Lại Linh Thú", emoji="🐾", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(label="Quay Lại Linh Thú", emoji="🐾", style=discord.ButtonStyle.secondary, row=2)
     async def back_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         await open_clan_pet_screen(interaction, self.clan, self.bot, edit_original=True)

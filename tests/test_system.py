@@ -627,8 +627,13 @@ async def run_tests():
     from utils.embeds import build_quests_embed
     from utils.time_helper import get_current_week_key
     from utils.pet_canvas import generate_clan_pet_preview_image
-    from utils.constants import PET_CATALOG_MAP
-    from utils.ui_components import ClanPetShopView, BotOwnerSystemPanelView
+    from utils.constants import PET_CATALOG, PET_CATALOG_MAP
+    from utils.ui_components import ClanPetShopView, ClanPetWardrobeView, BotOwnerSystemPanelView
+
+    # Đảm bảo toàn bộ vật phẩm trong PET_CATALOG đều đủ trường (item_id, name, style, slot, min_stage, price)
+    for it in PET_CATALOG:
+        for req_k in ("item_id", "name", "style", "slot", "min_stage", "price"):
+            assert req_k in it, f"Thiếu {req_k} ở {it}"
 
     w_quests = await db.ensure_weekly_quests(clan_id, get_current_week_key())
     q_embed = build_quests_embed(clan1_obj, w_quests, get_current_week_key(), attachment_filename="quests.png")
@@ -637,8 +642,10 @@ async def run_tests():
     prev_item = PET_CATALOG_MAP["back_cyber_wings"]
     prev_buf = generate_clan_pet_preview_image(p_obj, clan1_obj, prev_item)
     assert prev_buf.getbuffer().nbytes > 5000
-    shop_view = ClanPetShopView(clan1_obj, p_obj, [], "ALL", bot, selected_item_id="back_cyber_wings")
+    shop_view = ClanPetShopView(clan1_obj, p_obj, [], "ALL", bot, selected_item_id="back_cyber_wings", slot_filter="back")
     assert any(getattr(c, "label", "").startswith("Mua Ngay") for c in shop_view.children)
+    wardrobe_view = ClanPetWardrobeView(clan1_obj, p_obj, ["back_katana", "outfit_tuxedo"], bot, slot_filter="ALL")
+    assert len(wardrobe_view.equip_select.options) == 2
 
     buffed_clan = await db.owner_buff_clan_exp(clan_id, 4000)
     assert buffed_clan["level"] >= 3

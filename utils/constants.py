@@ -303,51 +303,60 @@ PET_STYLE_NAMES = {
     "casual": "🧋 Đời Thường / Giải Trí",
 }
 
-# Bộ sưu tập đồ & phụ kiện vẽ bằng Pillow Vector + Anchor System
+# Bộ sưu tập đồ & phụ kiện vẽ bằng Pillow Vector + Anchor System (45 món, 7 danh mục, 5 phong cách)
 PET_CATALOG = [
-    # Backgrounds (Stage 1+)
+    # 1. Phông Nền (Stage 1+)
     {"item_id": "bg_cyber_grid", "name": "Lưới Cyber Neon", "style": "cyber", "slot": "background", "min_stage": 1, "price": 50},
     {"item_id": "bg_royal_hall", "name": "Sảnh Hoàng Gia", "style": "royal", "slot": "background", "min_stage": 1, "price": 60},
     {"item_id": "bg_sakura_night", "name": "Đêm Hoa Anh Đào", "style": "ninja", "slot": "background", "min_stage": 1, "price": 60},
     {"item_id": "bg_sunny_beach", "name": "Bãi Biển Nắng Vàng", "style": "casual", "slot": "background", "min_stage": 1, "price": 50},
-    # Headwear (Stage 2+)
+    {"item_id": "bg_galaxy_nebula", "name": "Tinh Vân Vũ Trụ", "style": "royal", "slot": "background", "min_stage": 1, "price": 75},
+    {"item_id": "bg_neon_dojo", "name": "Phố Đêm Streetwear", "style": "streetwear", "slot": "background", "min_stage": 1, "price": 70},
+    # 2. Mũ / Đội Đầu (Stage 2+)
     {"item_id": "hat_cap_back", "name": "Mũ Lưỡi Trai Ngược", "style": "streetwear", "slot": "headwear", "min_stage": 2, "price": 80},
     {"item_id": "hat_gaming_headset", "name": "Tai Nghe Gaming LED", "style": "cyber", "slot": "headwear", "min_stage": 2, "price": 100},
     {"item_id": "hat_gold_crown", "name": "Vương Miện Mạ Vàng", "style": "royal", "slot": "headwear", "min_stage": 2, "price": 120},
     {"item_id": "hat_ninja_band", "name": "Băng Trán Kim Loại", "style": "ninja", "slot": "headwear", "min_stage": 2, "price": 90},
     {"item_id": "hat_duck", "name": "Mũ Vịt Vàng Đáng Yêu", "style": "casual", "slot": "headwear", "min_stage": 2, "price": 80},
-    # Face Accessories (Stage 3+)
+    {"item_id": "hat_wizard", "name": "Mũ Pháp Sư Huyền Bí", "style": "royal", "slot": "headwear", "min_stage": 2, "price": 110},
+    {"item_id": "hat_oni_horns", "name": "Mặt Nạ Sừng Oni", "style": "ninja", "slot": "headwear", "min_stage": 3, "price": 130},
+    {"item_id": "hat_cat_ears_rgb", "name": "Băng Đô Tai Mèo RGB", "style": "cyber", "slot": "headwear", "min_stage": 2, "price": 115},
+    {"item_id": "hat_halo_angel", "name": "Vòng Hào Quang Thiên Thần", "style": "royal", "slot": "headwear", "min_stage": 2, "price": 125},
+    # 3. Kính / Phụ Kiện Mặt (Stage 3+)
     {"item_id": "face_sunglasses", "name": "Kính Mát Hiphop", "style": "streetwear", "slot": "face", "min_stage": 3, "price": 90},
     {"item_id": "face_vr_visor", "name": "Kính VR Neon", "style": "cyber", "slot": "face", "min_stage": 3, "price": 130},
     {"item_id": "face_ninja_mask", "name": "Khăn Bịt Mặt Ninja", "style": "ninja", "slot": "face", "min_stage": 3, "price": 100},
     {"item_id": "face_thug_life", "name": "Kính Pixel Thug Life", "style": "casual", "slot": "face", "min_stage": 3, "price": 110},
-    # Outfits (Stage 3+)
+    {"item_id": "face_monocle", "name": "Kính Một Mắt Quý Tộc", "style": "royal", "slot": "face", "min_stage": 3, "price": 115},
+    {"item_id": "face_star_blush", "name": "Sticker Ngôi Sao Đáng Yêu", "style": "casual", "slot": "face", "min_stage": 3, "price": 85},
+    # 4. Trang Phục (Stage 3+)
     {"item_id": "outfit_hoodie", "name": "Áo Hoodie Streetwear", "style": "streetwear", "slot": "outfit", "min_stage": 3, "price": 120},
     {"item_id": "outfit_bomber", "name": "Áo Khoác Bomber Băng", "style": "streetwear", "slot": "outfit", "min_stage": 3, "price": 135},
     {"item_id": "outfit_cyber_armor", "name": "Áo Giáp Công Nghệ", "style": "cyber", "slot": "outfit", "min_stage": 3, "price": 150},
     {"item_id": "outfit_royal_vest", "name": "Vest Hoàng Gia Quý Tộc", "style": "royal", "slot": "outfit", "min_stage": 3, "price": 150},
+    {"item_id": "outfit_tuxedo", "name": "Comple Điệp Viên Đen", "style": "streetwear", "slot": "outfit", "min_stage": 3, "price": 160},
+    {"item_id": "outfit_mage_robe", "name": "Áo Choàng Pháp Sư", "style": "royal", "slot": "outfit", "min_stage": 3, "price": 155},
     {"item_id": "outfit_cloud_robe", "name": "Kimono Họa Tiết Mây", "style": "ninja", "slot": "outfit", "min_stage": 3, "price": 140},
     {"item_id": "outfit_samurai", "name": "Giáp Chiến Binh Samurai", "style": "ninja", "slot": "outfit", "min_stage": 4, "price": 190},
     {"item_id": "outfit_tanktop", "name": "Áo Ba Lỗ Mùa Hè", "style": "casual", "slot": "outfit", "min_stage": 3, "price": 90},
-    # Headwear extras
-    {"item_id": "hat_wizard", "name": "Mũ Pháp Sư Huyền Bí", "style": "royal", "slot": "headwear", "min_stage": 2, "price": 110},
-    {"item_id": "hat_oni_horns", "name": "Mặt Nạ Sừng Oni", "style": "ninja", "slot": "headwear", "min_stage": 3, "price": 130},
-    # Face extras
-    {"item_id": "face_monocle", "name": "Kính Một Mắt Quý Tộc", "style": "royal", "slot": "face", "min_stage": 3, "price": 115},
-    # Back / Wings (Stage 4+)
+    # 5. Cánh / Áo Choàng / Lưng (Stage 4+)
     {"item_id": "back_angel_wings", "name": "Cánh Thiên Thần", "style": "royal", "slot": "back", "min_stage": 4, "price": 220},
+    {"item_id": "back_demon_wings", "name": "Cánh Ác Quỷ Bóng Đêm", "style": "ninja", "slot": "back", "min_stage": 4, "price": 230},
     {"item_id": "back_royal_cape", "name": "Áo Choàng Đỏ Đế Vương", "style": "royal", "slot": "back", "min_stage": 4, "price": 210},
     {"item_id": "back_cyber_wings", "name": "Cánh Phản Lực Neon", "style": "cyber", "slot": "back", "min_stage": 4, "price": 240},
-    {"item_id": "back_katana", "name": "Song Kiếm Katana Đeo Lưng", "style": "ninja", "min_stage": 4, "price": 200},
-    # Held Items (Stage 4+)
+    {"item_id": "back_katana", "name": "Song Kiếm Katana Đeo Lưng", "style": "ninja", "slot": "back", "min_stage": 4, "price": 200},
+    # 6. Vật Cầm Tay (Stage 4+)
     {"item_id": "held_gamepad", "name": "Tay Cầm Console", "style": "cyber", "slot": "held", "min_stage": 4, "price": 160},
     {"item_id": "held_boba", "name": "Cốc Trà Sữa Trân Châu", "style": "casual", "slot": "held", "min_stage": 4, "price": 140},
     {"item_id": "held_scepter", "name": "Quyền Trượng Ánh Sáng", "style": "royal", "slot": "held", "min_stage": 4, "price": 210},
     {"item_id": "held_sword", "name": "Thanh Kiếm Năng Lượng", "style": "cyber", "slot": "held", "min_stage": 4, "price": 220},
     {"item_id": "held_mic", "name": "Micro Idol Phát Sáng", "style": "streetwear", "slot": "held", "min_stage": 4, "price": 170},
-    # Aura (Stage 5)
+    {"item_id": "held_lantern", "name": "Đèn Lồng Hoa Đăng", "style": "ninja", "slot": "held", "min_stage": 4, "price": 165},
+    # 7. Hào Quang Tối Thượng (Stage 5)
     {"item_id": "aura_gradient_halo", "name": "Hào Quang Năng Lượng Băng", "style": "cyber", "slot": "aura", "min_stage": 5, "price": 320},
     {"item_id": "aura_dragon_flame", "name": "Hào Quang Hỏa Long Tối Thượng", "style": "royal", "slot": "aura", "min_stage": 5, "price": 350},
+    {"item_id": "aura_sakura_storm", "name": "Vòng Xoáy Hoa Anh Đào", "style": "ninja", "slot": "aura", "min_stage": 5, "price": 330},
+    {"item_id": "aura_void_lightning", "name": "Lôi Điện Hắc Ám", "style": "streetwear", "slot": "aura", "min_stage": 5, "price": 340},
 ]
 
 PET_CATALOG_MAP = {item["item_id"]: item for item in PET_CATALOG}

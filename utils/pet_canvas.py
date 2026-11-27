@@ -55,6 +55,10 @@ def _draw_background(img: Image.Image, bg_id: Optional[str], c1: Tuple[int, int,
         top, bot = (34, 16, 48), (92, 54, 24)
     elif bg_id == "bg_cyber_grid":
         top, bot = (10, 14, 30), (20, 40, 74)
+    elif bg_id == "bg_galaxy_nebula":
+        top, bot = (14, 8, 36), (56, 22, 86)
+    elif bg_id == "bg_neon_dojo":
+        top, bot = (18, 12, 26), (58, 18, 44)
     else:
         top = _blend((16, 18, 32), c1, 0.28)
         bot = _blend((24, 28, 48), c2, 0.25)
@@ -69,6 +73,17 @@ def _draw_background(img: Image.Image, bg_id: Optional[str], c1: Tuple[int, int,
             draw.line([(x, 0), (x, h)], fill=grid_col, width=1)
         for y in range(0, h, 40):
             draw.line([(0, y), (w, y)], fill=grid_col, width=1)
+    elif bg_id == "bg_galaxy_nebula":
+        draw.ellipse([70, 80, 320, 310], fill=(135, 65, 225, 45))
+        draw.ellipse([260, 150, 530, 400], fill=(0, 195, 255, 38))
+        for i in range(40):
+            sx, sy = (i * 83 + 19) % w, (i * 59 + 29) % (h - 90)
+            r = 2 if i % 3 else 3
+            draw.ellipse([sx - r, sy - r, sx + r, sy + r], fill=(255, 255, 255, 190))
+    elif bg_id == "bg_neon_dojo":
+        draw.rectangle([40, 180, 110, 440], fill=(24, 20, 38, 220), outline=(255, 60, 145, 175), width=2)
+        draw.rectangle([490, 150, 560, 440], fill=(24, 20, 38, 220), outline=(0, 225, 255, 175), width=2)
+        draw.rectangle([0, 415, w, h], fill=(32, 24, 44, 235))
     elif bg_id == "bg_sakura_night":
         for i in range(28):
             px = (i * 97 + 31) % w
@@ -106,8 +121,16 @@ def _draw_aura_and_back(img: Image.Image, species: str, stage: int, equipped: di
         ax, ay, ascale = anchors["aura"]
         aura_layer = Image.new("RGBA", (440, 440), (0, 0, 0, 0))
         ad = ImageDraw.Draw(aura_layer, "RGBA")
-        col_a = (255, 110, 40) if aura_id == "aura_dragon_flame" else c1
-        col_b = (255, 215, 70) if aura_id == "aura_dragon_flame" else c2
+        col_a = (255, 110, 40) if aura_id == "aura_dragon_flame" else (
+            (255, 130, 185) if aura_id == "aura_sakura_storm" else (
+                (145, 60, 255) if aura_id == "aura_void_lightning" else c1
+            )
+        )
+        col_b = (255, 215, 70) if aura_id == "aura_dragon_flame" else (
+            (255, 215, 235) if aura_id == "aura_sakura_storm" else (
+                (0, 235, 255) if aura_id == "aura_void_lightning" else c2
+            )
+        )
         for r, alpha in ((195, 28), (155, 46), (118, 65)):
             ad.ellipse([220 - r, 220 - r, 220 + r, 220 + r], fill=(*col_a, alpha), outline=(*col_b, alpha + 55), width=3)
         for i in range(16):
@@ -127,6 +150,9 @@ def _draw_aura_and_back(img: Image.Image, species: str, stage: int, equipped: di
             bd.polygon([(255, 130), (402, 22), (372, 152), (280, 178)], fill=(252, 252, 255, 240), outline=(180, 205, 240, 255), width=3)
             bd.polygon([(155, 145), (52, 95), (72, 185), (145, 185)], fill=(235, 244, 255, 225))
             bd.polygon([(265, 145), (368, 95), (348, 185), (275, 185)], fill=(235, 244, 255, 225))
+        elif back_id == "back_demon_wings":
+            bd.polygon([(165, 130), (16, 28), (52, 160), (140, 172)], fill=(48, 22, 68, 240), outline=(195, 65, 255, 255), width=4)
+            bd.polygon([(255, 130), (404, 28), (368, 160), (280, 172)], fill=(48, 22, 68, 240), outline=(195, 65, 255, 255), width=4)
         elif back_id == "back_royal_cape":
             bd.polygon([(140, 50), (280, 50), (355, 255), (65, 255)], fill=(155, 22, 46, 240), outline=(245, 200, 75, 255), width=4)
             bd.polygon([(155, 60), (265, 60), (325, 240), (95, 240)], fill=(185, 28, 56, 230))
@@ -373,6 +399,8 @@ def _draw_outfit(img: Image.Image, species: str, stage: int, equipped: dict, c1:
             "outfit_bomber": (185, 48, 65, 235),
             "outfit_cyber_armor": (22, 34, 62, 235),
             "outfit_royal_vest": (135, 24, 48, 235),
+            "outfit_tuxedo": (24, 26, 36, 235),
+            "outfit_mage_robe": (72, 44, 136, 235),
             "outfit_cloud_robe": (28, 30, 44, 235),
             "outfit_samurai": (165, 32, 42, 235),
             "outfit_tanktop": (65, 165, 245, 235),
@@ -416,6 +444,14 @@ def _draw_outfit(img: Image.Image, species: str, stage: int, equipped: dict, c1:
         for by in (98, 122, 144):
             od.ellipse([106, by - 4, 114, by + 4], fill=(245, 200, 75, 255))
             od.ellipse([126, by - 4, 134, by + 4], fill=(245, 200, 75, 255))
+    elif outfit_id == "outfit_tuxedo":
+        od.polygon(shirt_poly, fill=(24, 26, 36, 252), outline=(215, 220, 235, 220), width=3)
+        od.polygon([(94, 24), (146, 24), (120, 84)], fill=(250, 250, 255, 255), outline=outline, width=2)
+        od.polygon([(104, 34), (120, 44), (136, 34), (136, 48), (120, 42), (104, 48)], fill=(220, 42, 65, 255))
+    elif outfit_id == "outfit_mage_robe":
+        od.polygon(shirt_poly, fill=(68, 42, 132, 250), outline=(245, 200, 75, 255), width=4)
+        od.line([(120, 28), (120, 156)], fill=(245, 200, 75, 255), width=5)
+        od.ellipse([106, 64, 134, 92], fill=(90, 220, 255, 240), outline=(245, 200, 75, 255), width=2)
     elif outfit_id == "outfit_cloud_robe":
         od.polygon(shirt_poly, fill=(28, 30, 46, 250), outline=(225, 65, 85, 255), width=4)
         # Vạt áo chéo Kimono + đai Obi đỏ
@@ -470,6 +506,12 @@ def _draw_headwear(img: Image.Image, species: str, stage: int, equipped: dict):
         hd.polygon([(46, 98), (34, 38), (74, 82)], fill=(225, 45, 65, 255), outline=outline, width=4)
         hd.polygon([(154, 98), (166, 38), (126, 82)], fill=(225, 45, 65, 255), outline=outline, width=4)
         hd.ellipse([86, 68, 114, 96], fill=(245, 200, 75, 255), outline=outline, width=3)
+    elif hat_id == "hat_cat_ears_rgb":
+        hd.arc([44, 46, 156, 120], start=185, end=355, fill=(32, 36, 52, 255), width=8)
+        hd.polygon([(46, 74), (36, 22), (80, 56)], fill=(32, 36, 52, 255), outline=(0, 235, 255, 255), width=4)
+        hd.polygon([(154, 74), (164, 22), (120, 56)], fill=(32, 36, 52, 255), outline=(255, 65, 195, 255), width=4)
+    elif hat_id == "hat_halo_angel":
+        hd.ellipse([48, 22, 152, 56], fill=(0, 0, 0, 0), outline=(255, 228, 110, 255), width=7)
     _paste_anchored(img, h_layer, PET_ANCHORS[species][stage]["headwear"])
 
 
@@ -497,6 +539,10 @@ def _draw_face_and_held(img: Image.Image, species: str, stage: int, equipped: di
         elif face_id == "face_monocle":
             fd.ellipse([96, 16, 142, 62], fill=(165, 225, 255, 75), outline=(245, 200, 75, 255), width=4)
             fd.line([(142, 42), (148, 76)], fill=(245, 200, 75, 255), width=3)
+        elif face_id == "face_star_blush":
+            fd.ellipse([18, 36, 46, 58], fill=(255, 120, 165, 220))
+            fd.ellipse([124, 36, 152, 58], fill=(255, 120, 165, 220))
+            fd.polygon([(32, 34), (36, 44), (46, 44), (38, 50), (40, 60), (32, 54), (24, 60), (26, 50), (18, 44), (28, 44)], fill=(255, 225, 90, 245))
         _paste_anchored(img, f_layer, PET_ANCHORS[species][stage]["face"])
 
     held_id = equipped.get("held")
@@ -523,6 +569,10 @@ def _draw_face_and_held(img: Image.Image, species: str, stage: int, equipped: di
         elif held_id == "held_mic":
             hd.line([(60, 104), (60, 50)], fill=(38, 42, 56, 255), width=8)
             hd.ellipse([44, 22, 76, 54], fill=(215, 220, 235, 255), outline=(255, 70, 180, 255), width=3)
+        elif held_id == "held_lantern":
+            hd.line([(60, 12), (60, 32)], fill=(245, 200, 75, 255), width=4)
+            hd.ellipse([36, 30, 84, 88], fill=(235, 65, 75, 245), outline=(245, 200, 75, 255), width=3)
+            hd.ellipse([50, 48, 70, 70], fill=(255, 235, 140, 230))
         _paste_anchored(img, hl_layer, PET_ANCHORS[species][stage]["held"])
 
 
