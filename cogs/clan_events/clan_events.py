@@ -13,12 +13,14 @@ from typing import Dict, Tuple
 from utils.constants import (
     Ranks,
     EXP_REWARDS,
-    LEVELS
+    LEVELS,
+    DailyQuestTypes,
 )
 from utils.embeds import get_level_info
 from utils.time_helper import (
     get_vietnam_now,
-    get_current_week_key
+    get_current_week_key,
+    get_today_vn_string,
 )
 from utils.logger import setup_logging
 
@@ -93,20 +95,27 @@ class ClanEvents(commands.Cog):
         await self.bot.db.add_clan_exp(clan["clan_id"], exp_to_add, exp_to_add)
         await self.bot.db.add_contribution_points(message.guild.id, message.author.id, EXP_REWARDS.CHAT_CONTRIBUTION)
 
-        # Cập nhật tiến độ nhiệm vụ tuần CHAT_MESSAGES
+        # Cập nhật tiến độ nhiệm vụ tuần CHAT_MESSAGES & nhiệm vụ ngày DAILY_CHAT
         week_key = get_current_week_key()
         quest_res = await self.bot.db.increment_quest_progress(clan["clan_id"], week_key, "CHAT_MESSAGES", 1)
         if quest_res["completed_now"]:
             await self.bot.db.add_clan_exp(clan["clan_id"], quest_res["reward_exp"], quest_res["reward_exp"])
+            await self.bot.db.add_pet_coins(clan["clan_id"], 100)
             text_ch = message.guild.get_channel(int(clan["text_channel_id"]))
             if text_ch:
                 embed = discord.Embed(
                     title="🎯 HOÀN THÀNH NHIỆM VỤ TUẦN!",
-                    description=f"Chúc mừng anh em băng **{clan['name']}** đã hoàn thành nhiệm vụ **💬 Sôi Nổi Kênh Chat** (+{quest_res['reward_exp']} EXP)!",
+                    description=f"Chúc mừng anh em băng **{clan['name']}** đã hoàn thành nhiệm vụ **💬 Sôi Nổi Kênh Chat** (+{quest_res['reward_exp']} EXP & +100 Xu Linh Thú)!",
                     color=discord.Color.gold(),
                     timestamp=datetime.now()
                 )
                 await text_ch.send(embed=embed)
+
+        today_key = get_today_vn_string()
+        daily_res = await self.bot.db.increment_daily_quest_progress(clan["clan_id"], today_key, DailyQuestTypes.DAILY_CHAT, 1)
+        if daily_res["completed_now"]:
+            await self.bot.db.add_clan_exp(clan["clan_id"], daily_res["reward_exp"], daily_res["reward_exp"])
+            await self.bot.db.add_pet_coins(clan["clan_id"], daily_res["reward_coins"])
 
         # Kiểm tra thăng cấp
         await self._check_level_up(message.guild, clan["clan_id"], clan["level"])
@@ -162,13 +171,23 @@ class ClanEvents(commands.Cog):
                             for uid in user_ids:
                                 await self.bot.db.add_contribution_points(guild.id, uid, EXP_REWARDS.VOICE_CONTRIBUTION)
 
-                            # Tiến độ nhiệm vụ tuần VOICE_MINUTES
+                            # Tiến độ nhiệm vụ tuần VOICE_MINUTES & nhiệm vụ ngày DAILY_VOICE + Xu Linh Thú
+                            await self.bot.db.add_pet_coins(clan_id, 10)
                             week_key = get_current_week_key()
                             quest_res = await self.bot.db.increment_quest_progress(
                                 clan_id, week_key, "VOICE_MINUTES", EXP_REWARDS.VOICE_INTERVAL_MINUTES
                             )
                             if quest_res["completed_now"]:
                                 await self.bot.db.add_clan_exp(clan_id, quest_res["reward_exp"], quest_res["reward_exp"])
+                                await self.bot.db.add_pet_coins(clan_id, 100)
+
+                            today_key = get_today_vn_string()
+                            daily_v = await self.bot.db.increment_daily_quest_progress(
+                                clan_id, today_key, DailyQuestTypes.DAILY_VOICE, EXP_REWARDS.VOICE_INTERVAL_MINUTES
+                            )
+                            if daily_v["completed_now"]:
+                                await self.bot.db.add_clan_exp(clan_id, daily_v["reward_exp"], daily_v["reward_exp"])
+                                await self.bot.db.add_pet_coins(clan_id, daily_v["reward_coins"])
 
                             await self._check_level_up(guild, clan_id, clan["level"])
                             logger.info(f"Cộng +{exp_to_add} EXP voice co-op cho băng {clan['name']} ({len(user_ids)} người)")

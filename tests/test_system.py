@@ -566,8 +566,65 @@ async def run_tests():
     assert all("khắc phục" not in opt.label.lower() for opt in help_select.options)
     print("✅ 30. Giao diện /clan help mới (tường minh cơ chế EXP/Unlock & Lưu ý quan trọng) hoạt động 100%.")
 
+    # 31. Kiểm tra Nhiệm Vụ Ngày (Daily Quests)
+    from utils.time_helper import get_today_vn_string
+    today_k = get_today_vn_string()
+    d_quests = await db.ensure_daily_quests(clan_id, today_k)
+    assert len(d_quests) == 3
+    d_res = await db.increment_daily_quest_progress(clan_id, today_k, "DAILY_CHAT", 20)
+    assert d_res["completed_now"] is True and d_res["reward_coins"] > 0
+    print("✅ 31. Hệ thống Nhiệm Vụ Ngày (Daily Quests) hoạt động 100%.")
+
+    # 32. Kiểm tra Hệ thống Linh Thú Băng Đảng (Clan Pet, Shop, Evolution, Pillow Vector & Smart Cache)
+    from utils.pet_canvas import generate_clan_pet_image, PET_CACHE_DIR
+    from utils.canvas import generate_clan_wallpaper
+    pet = await db.create_clan_pet(clan_id, "cyber_cat", "MewCyber")
+    assert pet["species"] == "cyber_cat" and pet["stage"] == 1 and pet["pet_coins"] == 100
+
+    buy_res = await db.buy_pet_item(clan_id, "bg_cyber_grid", 50)
+    assert buy_res["ok"] is True
+    await db.update_clan_pet(clan_id, equipped={"background": "bg_cyber_grid"})
+
+    # Tương tác tăng Pet EXP vượt mốc 200 để tiến hóa lên Stage 2 (Sơ Sinh)
+    evo_res = await db.interact_with_pet(clan_id, 20, 20, 220, 0, today_k, daily_exp_cap=300)
+    assert evo_res["ok"] is True and evo_res["evolved"] is True and evo_res["new_stage"] == 2
+
+    # Kiểm tra trần Pet EXP ngày (300)
+    cap_res = await db.interact_with_pet(clan_id, 10, 10, 200, 0, today_k, daily_exp_cap=300)
+    assert cap_res["ok"] is True and cap_res["capped"] is True and cap_res["added_exp"] == 80
+
+    # Kiểm tra render cả 4 loài bằng Pillow Vector + Smart Cache
+    for sp_id in ("cyber_cat", "mini_dragon", "spirit_fox", "royal_slime"):
+        await db.update_clan_pet(clan_id, species=sp_id, exp=10500, level=52, stage=5, equipped={"background": "bg_cyber_grid", "headwear": "hat_gold_crown", "outfit": "outfit_cyber_armor", "back": "back_cyber_wings", "held": "held_gamepad", "aura": "aura_gradient_halo"})
+        p_obj = await db.get_clan_pet(clan_id)
+        p_buf = generate_clan_pet_image(p_obj, clan1_obj)
+        assert p_buf.getbuffer().nbytes > 5000
+
+    # Kiểm tra ghép Apex Pet (Stage 5) lên Wallpaper Full HD
+    wp_buf = generate_clan_wallpaper(clan1_obj, c1_members, [], {}, pet=p_obj)
+    assert wp_buf.getbuffer().nbytes > 10000
+    for f in PET_CACHE_DIR.glob(f"{clan_id}_*.png"):
+        f.unlink(missing_ok=True)
+    print("✅ 32. Hệ thống Linh Thú Băng (4 loài Pillow Vector, 5 giai đoạn, Tủ đồ, Smart Cache & Wallpaper) hoạt động 100%.")
+
+    # 33. Kiểm tra Hub tinh gọn (Gom Nhiệm Vụ & Điểm Danh, Bỏ Ảnh Nền/Nhật Ký/Cài Đặt Role khỏi Hub)
+    from utils.ui_components import ClanHubView, ClanMissionHubView, ClanPetView
+    hub_leader = ClanHubView(user=SimpleNamespace(id=111111, guild_permissions=SimpleNamespace(administrator=False)), clan=dict(clan1_obj, rank="LEADER"), bot=bot)
+    hub_labels = [getattr(c, "label", "") for c in hub_leader.children]
+    assert "Nhiệm Vụ & Điểm Danh" in hub_labels
+    assert "Linh Thú Băng" in hub_labels
+    assert "Ảnh Nền Băng (Full HD)" not in hub_labels
+    assert "Nhật Ký Băng" not in hub_labels
+    assert "Cài Đặt Role" not in hub_labels
+    assert "Rời Băng" not in hub_labels
+    m_hub = ClanMissionHubView(clan=clan1_obj, bot=bot)
+    assert len(m_hub.children) == 5
+    p_view = ClanPetView(clan=clan1_obj, pet=p_obj, user=SimpleNamespace(id=111111, guild_permissions=SimpleNamespace(administrator=False)), bot=bot)
+    assert len(p_view.children) >= 8
+    print("✅ 33. Hub tinh gọn & các View Nhiệm Vụ / Linh Thú hoạt động chuẩn xác 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 30 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 33 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%! ")
     print("=" * 60)
 
     # Dọn dẹp test db

@@ -51,7 +51,8 @@ from utils.ui_components import (
     validate_recruit_publisher,
     validate_linkable_role,
     link_role_to_clan,
-    perform_daily_checkin
+    perform_daily_checkin,
+    open_clan_pet_screen
 )
 from utils.time_helper import (
     get_today_vn_string,
@@ -1199,6 +1200,16 @@ class ClanCommands(commands.Cog):
             await interaction.response.send_message(err, ephemeral=True)
             return
         await interaction.response.send_modal(RecruitPostModal(clan=clan, bot=self.bot))
+
+    @app_commands.command(name="clan-pet", description="Mở bảng chăm sóc & phối đồ Linh Thú Băng Đảng")
+    @app_commands.guild_only()
+    async def clan_pet(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        clan = await self.bot.db.get_clan_by_member(interaction.guild_id, interaction.user.id)
+        if not clan:
+            await interaction.followup.send("❌ Bạn chưa tham gia băng đảng nào!", ephemeral=True)
+            return
+        await open_clan_pet_screen(interaction, clan, self.bot, edit_original=False)
 
     @clan_group.command(name="help", description="Xem hướng dẫn sử dụng chi tiết, cơ chế EXP/Unlock & lưu ý quan trọng")
     async def clan_help(self, interaction: discord.Interaction):

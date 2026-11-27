@@ -186,7 +186,7 @@ WickedChen/
 ├── data/
 │   └── clan_bot.db            # File SQLite cơ sở dữ liệu duy nhất
 ├── tests/
-│   └── test_system.py         # Bộ kiểm thử tích hợp 30 bài test tự động
+│   └── test_system.py         # Bộ kiểm thử tích hợp 33 bài test tự động
 ├── HDSD.md                    # Cẩm nang hướng dẫn sử dụng chi tiết cho người dùng & Admin
 ├── config.py                  # Quản lý tập trung mọi biến môi trường
 ├── Dockerfile                 # Đóng gói container Docker siêu nhẹ

@@ -772,7 +772,8 @@ def generate_clan_wallpaper(
     clan: Dict[str, Any],
     members: List[Dict[str, Any]],
     milestones: List[Dict[str, Any]],
-    member_names: Optional[Dict[str, str]] = None
+    member_names: Optional[Dict[str, str]] = None,
+    pet: Optional[Dict[str, Any]] = None
 ) -> io.BytesIO:
     """Vẽ ảnh nền máy tính Full HD 1920x1080 kỷ niệm vẻ vang và dàn thành viên của Băng Đảng"""
     W, H = 1920, 1080
@@ -857,6 +858,20 @@ def generate_clan_wallpaper(
             if m_desc:
                 draw.text((1045, ty + 34), m_desc[:65], fill=(180, 195, 220), font=get_font(14, bold=False))
             ty += 74
+
+    # Ghép Linh Thú Tối Thượng (Stage 5) lên góc phải dưới Wallpaper Full HD
+    if pet and int(pet.get("stage", 1)) >= 5:
+        try:
+            from utils.pet_canvas import render_pet_sprite_only
+            pet_sprite = render_pet_sprite_only(
+                pet,
+                clan_color=clan.get("color_hex") or "#5865F2",
+                secondary_color=clan.get("secondary_color_hex"),
+                size=220
+            )
+            base.paste(pet_sprite, (W - 280, H - 270), pet_sprite)
+        except Exception:
+            pass
 
     # Watermark Footer
     draw.text((W // 2, 1030), "✨ WICKED CHEN CLAN ECOSYSTEM • DISCORD COMMUNITY WALLPAPER 1920x1080 ✨", fill=(120, 135, 165), font=get_font(14, bold=True), anchor="mm")

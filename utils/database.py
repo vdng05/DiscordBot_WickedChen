@@ -10,7 +10,7 @@ from pathlib import Path
 import time
 from typing import Optional, Dict, List, Any
 from utils.logger import setup_logging
-from utils.constants import DEFAULT_WEEKLY_QUESTS
+from utils.constants import DEFAULT_WEEKLY_QUESTS, DEFAULT_DAILY_QUESTS, get_pet_level_info
 
 logger = setup_logging("Database")
 
@@ -198,6 +198,59 @@ class DatabaseManager:
                 access_mode TEXT NOT NULL DEFAULT 'ALL' CHECK (access_mode IN ('ALL', 'ROLES', 'NONE')),
                 allowed_role_ids TEXT NOT NULL DEFAULT '[]',
                 updated_at INTEGER NOT NULL
+            );
+
+            -- 9. Nhiệm vụ ngày của băng
+            CREATE TABLE IF NOT EXISTS clan_daily_quests (
+                quest_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                clan_id INTEGER NOT NULL,
+                date_key TEXT NOT NULL,
+                quest_type TEXT NOT NULL,
+                target_value INTEGER NOT NULL,
+                current_value INTEGER DEFAULT 0,
+                reward_exp INTEGER NOT NULL,
+                reward_coins INTEGER DEFAULT 30,
+                completed INTEGER DEFAULT 0,
+                UNIQUE(clan_id, date_key, quest_type),
+                FOREIGN KEY (clan_id) REFERENCES clans(clan_id) ON DELETE CASCADE
+            );
+
+            -- 10. Linh Thú Băng Đảng (Clan Pet)
+            CREATE TABLE IF NOT EXISTS clan_pets (
+                clan_id INTEGER PRIMARY KEY,
+                species TEXT NOT NULL,
+                name TEXT NOT NULL,
+                exp INTEGER DEFAULT 0,
+                level INTEGER DEFAULT 1,
+                stage INTEGER DEFAULT 1,
+                hunger INTEGER DEFAULT 80,
+                mood INTEGER DEFAULT 80,
+                pet_coins INTEGER DEFAULT 100,
+                equipped_json TEXT NOT NULL DEFAULT '{}',
+                allow_member_style INTEGER DEFAULT 0,
+                last_decay_at INTEGER NOT NULL,
+                daily_exp_date TEXT,
+                daily_exp_earned INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (clan_id) REFERENCES clans(clan_id) ON DELETE CASCADE
+            );
+
+            -- 11. Tủ đồ chung của Linh Thú Băng
+            CREATE TABLE IF NOT EXISTS clan_pet_inventory (
+                clan_id INTEGER NOT NULL,
+                item_id TEXT NOT NULL,
+                purchased_at INTEGER NOT NULL,
+                PRIMARY KEY (clan_id, item_id),
+                FOREIGN KEY (clan_id) REFERENCES clans(clan_id) ON DELETE CASCADE
+            );
+
+            -- 12. Cooldown tương tác Linh Thú theo từng thành viên
+            CREATE TABLE IF NOT EXISTS clan_pet_cooldowns (
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                action_type TEXT NOT NULL,
+                last_used_at INTEGER NOT NULL,
+                PRIMARY KEY (guild_id, user_id, action_type)
             );
 
             -- Các chỉ mục tối ưu hiệu năng
@@ -984,4 +1037,241 @@ class DatabaseManager:
     async def update_request_message_id(self, request_id: int, message_id: int):
         async with self.connect() as db:
             await db.execute("UPDATE clan_requests SET message_id = ? WHERE request_id = ?", (str(message_id), request_id))
+            await db.commit()
+
+    # =========================================================================
+    # NHIỆM VỤ NGÀY (DAILY QUESTS)
+    # =========================================================================
+    async def ensure_daily_quests(self, clan_id: int, date_key: str) -> List[Dict[str, Any]]:
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            sql = "SELECT * FROM clan_daily_quests WHERE clan_id = ? AND date_key = ? ORDER BY quest_id ASC"
+            async with db.execute(sql, (clan_id, date_key)) as cursor:
+                existing = await cursor.fetchall()
+                if existing:
+                    return [dict(r) for r in existing]
+
+            insert_sql = """
+            INSERT OR IGNORE INTO clan_daily_quests (
+                clan_id, date_key, quest_type, target_value, current_value, reward_exp, reward_coins, completed
+            ) VALUES (?, ?, ?, ?, 0, ?, ?, 0)
+            """
+            for q in DEFAULT_DAILY_QUESTS:
+                await db.execute(insert_sql, (
+                    clan_id, date_key, q["quest_type"], q["target_value"], q["reward_exp"], q["reward_coins"]
+                ))
+            await db.commit()
+
+            async with db.execute(sql, (clan_id, date_key)) as cursor:
+                rows = await cursor.fetchall()
+                return [dict(r) for r in rows]
+
+    async def increment_daily_quest_progress(self, clan_id: int, date_key: str, quest_type: str, amount: int) -> Dict[str, Any]:
+        await self.ensure_daily_quests(clan_id, date_key)
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            sql = "SELECT * FROM clan_daily_quests WHERE clan_id = ? AND date_key = ? AND quest_type = ?"
+            async with db.execute(sql, (clan_id, date_key, quest_type)) as cursor:
+                row = await cursor.fetchone()
+                if not row:
+                    return {"updated": False, "completed_now": False, "reward_exp": 0, "reward_coins": 0}
+                q = dict(row)
+                if q["completed"]:
+                    return {"updated": False, "completed_now": False, "reward_exp": 0, "reward_coins": 0}
+                new_val = q["current_value"] + amount
+                completed_now = new_val >= q["target_value"]
+                await db.execute(
+                    "UPDATE clan_daily_quests SET current_value = ?, completed = ? WHERE quest_id = ?",
+                    (new_val, 1 if completed_now else 0, q["quest_id"])
+                )
+                await db.commit()
+                return {
+                    "updated": True,
+                    "completed_now": completed_now,
+                    "reward_exp": q["reward_exp"] if completed_now else 0,
+                    "reward_coins": q["reward_coins"] if completed_now else 0,
+                    "quest_type": quest_type,
+                }
+
+    # =========================================================================
+    # LINH THÚ BĂNG ĐẢNG (CLAN PET)
+    # =========================================================================
+    async def get_clan_pet(self, clan_id: int) -> Optional[Dict[str, Any]]:
+        """Lấy thông tin Linh Thú và tự động tính lazy decay (-5 mỗi 6 giờ)."""
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute("SELECT * FROM clan_pets WHERE clan_id = ?", (clan_id,)) as cursor:
+                row = await cursor.fetchone()
+                if not row:
+                    return None
+                pet = dict(row)
+
+            now = int(time.time())
+            elapsed = max(0, now - int(pet["last_decay_at"]))
+            intervals = elapsed // (6 * 3600)
+            if intervals > 0:
+                decay = intervals * 5
+                new_hunger = max(0, int(pet["hunger"]) - decay)
+                new_mood = max(0, int(pet["mood"]) - decay)
+                new_last_decay = int(pet["last_decay_at"]) + (intervals * 6 * 3600)
+                await db.execute(
+                    "UPDATE clan_pets SET hunger = ?, mood = ?, last_decay_at = ? WHERE clan_id = ?",
+                    (new_hunger, new_mood, new_last_decay, clan_id)
+                )
+                await db.commit()
+                pet["hunger"] = new_hunger
+                pet["mood"] = new_mood
+                pet["last_decay_at"] = new_last_decay
+
+            try:
+                pet["equipped"] = json.loads(pet.get("equipped_json") or "{}")
+            except Exception:
+                pet["equipped"] = {}
+            return pet
+
+    async def create_clan_pet(self, clan_id: int, species: str, name: str) -> Dict[str, Any]:
+        now = int(time.time())
+        async with self.connect() as db:
+            await db.execute(
+                """
+                INSERT INTO clan_pets (
+                    clan_id, species, name, exp, level, stage, hunger, mood,
+                    pet_coins, equipped_json, allow_member_style, last_decay_at, created_at
+                ) VALUES (?, ?, ?, 0, 1, 1, 80, 80, 100, '{}', 0, ?, ?)
+                """,
+                (clan_id, species, name[:24], now, now)
+            )
+            await db.commit()
+        return await self.get_clan_pet(clan_id)
+
+    async def update_clan_pet(self, clan_id: int, **kwargs):
+        if not kwargs:
+            return
+        if "equipped" in kwargs:
+            kwargs["equipped_json"] = json.dumps(kwargs.pop("equipped"))
+        fields = ", ".join(f"{k} = ?" for k in kwargs.keys())
+        values = list(kwargs.values()) + [clan_id]
+        async with self.connect() as db:
+            await db.execute(f"UPDATE clan_pets SET {fields} WHERE clan_id = ?", values)
+            await db.commit()
+
+    async def add_pet_coins(self, clan_id: int, coins: int):
+        if coins <= 0:
+            return
+        async with self.connect() as db:
+            await db.execute("UPDATE clan_pets SET pet_coins = pet_coins + ? WHERE clan_id = ?", (coins, clan_id))
+            await db.commit()
+
+    async def interact_with_pet(
+        self,
+        clan_id: int,
+        hunger_delta: int,
+        mood_delta: int,
+        raw_exp: int,
+        coin_cost: int,
+        date_key: str,
+        daily_exp_cap: int = 300,
+    ) -> Dict[str, Any]:
+        """Thực hiện Cho ăn / Vuốt ve / Tặng quà nguyên tử với trần Pet EXP theo ngày."""
+        pet = await self.get_clan_pet(clan_id)
+        if not pet:
+            return {"ok": False, "error": "❌ Băng chưa nhận Linh Thú!"}
+        if coin_cost > 0 and int(pet["pet_coins"]) < coin_cost:
+            return {"ok": False, "error": f"❌ Quỹ Xu Linh Thú không đủ! Cần **{coin_cost}** Xu (hiện có **{pet['pet_coins']}** Xu)."}
+
+        cur_daily_earned = int(pet.get("daily_exp_earned") or 0) if pet.get("daily_exp_date") == date_key else 0
+        allowed_exp = max(0, min(raw_exp, daily_exp_cap - cur_daily_earned))
+        new_daily_earned = cur_daily_earned + allowed_exp
+
+        new_hunger = min(100, max(0, int(pet["hunger"]) + hunger_delta))
+        new_mood = min(100, max(0, int(pet["mood"]) + mood_delta))
+        new_exp = int(pet["exp"]) + allowed_exp
+        new_coins = int(pet["pet_coins"]) - coin_cost
+
+        old_stage = int(pet["stage"])
+        old_level = int(pet["level"])
+        lvl_info = get_pet_level_info(new_exp)
+
+        async with self.connect() as db:
+            await db.execute(
+                """
+                UPDATE clan_pets
+                SET hunger = ?, mood = ?, exp = ?, level = ?, stage = ?,
+                    pet_coins = ?, daily_exp_date = ?, daily_exp_earned = ?
+                WHERE clan_id = ?
+                """,
+                (
+                    new_hunger, new_mood, new_exp, lvl_info["level"], lvl_info["stage"],
+                    new_coins, date_key, new_daily_earned, clan_id
+                )
+            )
+            await db.commit()
+
+        return {
+            "ok": True,
+            "added_exp": allowed_exp,
+            "capped": allowed_exp < raw_exp,
+            "old_level": old_level,
+            "new_level": lvl_info["level"],
+            "old_stage": old_stage,
+            "new_stage": lvl_info["stage"],
+            "evolved": lvl_info["stage"] > old_stage,
+            "stage_name": lvl_info["stage_name"],
+            "hunger": new_hunger,
+            "mood": new_mood,
+            "pet_coins": new_coins,
+        }
+
+    async def get_pet_inventory(self, clan_id: int) -> List[str]:
+        async with self.connect() as db:
+            async with db.execute("SELECT item_id FROM clan_pet_inventory WHERE clan_id = ?", (clan_id,)) as cursor:
+                rows = await cursor.fetchall()
+                return [r[0] for r in rows]
+
+    async def buy_pet_item(self, clan_id: int, item_id: str, price: int) -> Dict[str, Any]:
+        now = int(time.time())
+        async with self.connect() as db:
+            async with db.execute(
+                "SELECT 1 FROM clan_pet_inventory WHERE clan_id = ? AND item_id = ?", (clan_id, item_id)
+            ) as cur:
+                if await cur.fetchone():
+                    return {"ok": False, "error": "ℹ️ Băng của bạn đã sở hữu món đồ này trong Tủ Đồ rồi!"}
+
+            cursor = await db.execute(
+                "UPDATE clan_pets SET pet_coins = pet_coins - ? WHERE clan_id = ? AND pet_coins >= ?",
+                (price, clan_id, price)
+            )
+            if cursor.rowcount != 1:
+                return {"ok": False, "error": f"❌ Quỹ Xu Linh Thú không đủ (**{price} Xu**) để mua món đồ này!"}
+
+            await db.execute(
+                "INSERT INTO clan_pet_inventory (clan_id, item_id, purchased_at) VALUES (?, ?, ?)",
+                (clan_id, item_id, now)
+            )
+            await db.commit()
+            return {"ok": True}
+
+    async def get_pet_action_cooldown(self, guild_id: int, user_id: int, action_type: str, cooldown_sec: int) -> int:
+        now = int(time.time())
+        async with self.connect() as db:
+            async with db.execute(
+                "SELECT last_used_at FROM clan_pet_cooldowns WHERE guild_id = ? AND user_id = ? AND action_type = ?",
+                (str(guild_id), str(user_id), action_type)
+            ) as cur:
+                row = await cur.fetchone()
+                if not row:
+                    return 0
+                return max(0, cooldown_sec - (now - int(row[0])))
+
+    async def set_pet_action_cooldown(self, guild_id: int, user_id: int, action_type: str):
+        now = int(time.time())
+        async with self.connect() as db:
+            await db.execute(
+                """
+                INSERT INTO clan_pet_cooldowns (guild_id, user_id, action_type, last_used_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(guild_id, user_id, action_type) DO UPDATE SET last_used_at = excluded.last_used_at
+                """,
+                (str(guild_id), str(user_id), action_type, now)
+            )
             await db.commit()

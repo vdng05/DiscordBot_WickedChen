@@ -162,6 +162,9 @@ class ClanBot(commands.Bot):
             "SEND_CHALLENGE": ("⚔️ Gửi Thư Thách Đấu", discord.Color.red()),
             "CREATE_PARTY": ("🎮 Lập Kèo Chơi Game", discord.Color.blue()),
             "RECRUIT_POST": ("📢 Đăng Tin Tuyển Thành Viên", discord.Color.green()),
+            "PET_ADOPT": ("🥚 Nhận Trứng Linh Thú", discord.Color.gold()),
+            "PET_EVOLVE": ("✨ Linh Thú Tiến Hóa", discord.Color.purple()),
+            "PET_RENAME": ("✏️ Đổi Tên Linh Thú", discord.Color.blurple()),
         }
         try:
             clan = await self.db.get_clan_by_id(clan_id)
