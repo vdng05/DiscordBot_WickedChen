@@ -19,8 +19,21 @@ from utils.time_helper import get_vietnam_now
 
 PET_CACHE_DIR = Config.DATA_DIR / "pet_cache"
 PET_ASSETS_DIR = Config.BASE_DIR / "assets" / "pet"
-RENDER_VERSION = "v4"
+RENDER_VERSION = "v5"
 SS = 2  # Supersampling 2x: canvas nội bộ 1200x1200 -> 600x600
+
+
+_OUTFIT_SKIN_STYLES = {
+    "outfit_hoodie": ((110, 130, 185), (180, 200, 255), 0.08),
+    "outfit_bomber": ((215, 65, 85), (255, 210, 95), 0.10),
+    "outfit_cyber_armor": ((0, 225, 255), (85, 245, 255), 0.12),
+    "outfit_royal_vest": ((245, 195, 65), (255, 235, 150), 0.10),
+    "outfit_tuxedo": ((165, 175, 205), (235, 240, 255), 0.07),
+    "outfit_mage_robe": ((155, 85, 255), (110, 225, 255), 0.12),
+    "outfit_cloud_robe": ((225, 50, 75), (255, 150, 165), 0.10),
+    "outfit_samurai": ((215, 55, 65), (245, 200, 75), 0.11),
+    "outfit_tanktop": ((65, 185, 255), (255, 220, 110), 0.08),
+}
 
 
 def _load_pet_sprite(species: str, stage: int) -> Tuple[Optional[Image.Image], int]:
@@ -38,8 +51,28 @@ def _load_pet_sprite(species: str, stage: int) -> Tuple[Optional[Image.Image], i
     return None, stage
 
 
-def _draw_sprite_layer(img: Image.Image, species: str, stage: int, expression: str, c1: Tuple[int, int, int]) -> bool:
-    """Dán Sprite Game Art làm Layer 2 (trả về True nếu dùng sprite thành công)."""
+def _apply_skin_shader(sprite: Image.Image, outfit_id: Optional[str]) -> Tuple[Image.Image, Optional[Tuple[int, int, int]]]:
+    """Áp dụng sắc tố Skin nhẹ nhàng lên chính Sprite AI (giữ nguyên 100% chi tiết khối 3D)."""
+    if not outfit_id or outfit_id not in _OUTFIT_SKIN_STYLES:
+        return sprite, None
+    tint_col, rim_col, strength = _OUTFIT_SKIN_STYLES[outfit_id]
+    r, g, b, a = sprite.split()
+    rgb = Image.merge("RGB", (r, g, b))
+    tint_img = Image.new("RGB", sprite.size, tint_col)
+    blended_rgb = Image.blend(rgb, tint_img, strength)
+    sr, sg, sb = blended_rgb.split()
+    return Image.merge("RGBA", (sr, sg, sb, a)), rim_col
+
+
+def _draw_sprite_layer(
+    img: Image.Image,
+    species: str,
+    stage: int,
+    expression: str,
+    c1: Tuple[int, int, int],
+    outfit_id: Optional[str] = None,
+) -> bool:
+    """Dán Sprite Game Art làm Layer 2 (tích hợp Skin Shader + Rim Glow ôm sát dáng thú)."""
     sprite, loaded_stage = _load_pet_sprite(species, stage)
     if sprite is None:
         return False
@@ -48,20 +81,21 @@ def _draw_sprite_layer(img: Image.Image, species: str, stage: int, expression: s
     if stage >= 4 and loaded_stage < stage:
         target_size = min(750, target_size + 25)
     resized = sprite.resize((target_size, target_size), Image.Resampling.LANCZOS)
-
-    # Thêm ánh sáng viền mềm (Rim Glow) theo màu băng cho Stage 4-5
-    if stage >= 4:
-        alpha = resized.getchannel("A")
-        glow_layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        tinted = Image.new("RGBA", resized.size, (*_lighten(c1, 0.25), 140))
-        tinted.putalpha(alpha)
-        px = (img.width - resized.width) // 2
-        py = 595 - resized.height // 2
-        glow_layer.paste(tinted, (px, py), alpha)
-        img.alpha_composite(glow_layer.filter(ImageFilter.GaussianBlur(18)))
+    resized, skin_rim = _apply_skin_shader(resized, outfit_id)
 
     px = (img.width - resized.width) // 2
     py = 595 - resized.height // 2
+
+    # Ánh sáng viền mềm (Rim Glow) theo Skin hoặc màu băng
+    if stage >= 4 or skin_rim is not None:
+        rim_col = skin_rim if skin_rim is not None else _lighten(c1, 0.25)
+        alpha = resized.getchannel("A")
+        glow_layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        tinted = Image.new("RGBA", resized.size, (*rim_col, 165 if skin_rim else 135))
+        tinted.putalpha(alpha)
+        glow_layer.paste(tinted, (px, py), alpha)
+        img.alpha_composite(glow_layer.filter(ImageFilter.GaussianBlur(16)))
+
     img.alpha_composite(resized, (px, py))
 
     # Huy hiệu biểu cảm nhỏ gọn ở góc đầu nếu đang buồn ngủ hoặc đói
@@ -294,49 +328,66 @@ def _draw_aura_and_back(img: Image.Image, species: str, stage: int, equipped: di
 
     back_id = equipped.get("back")
     if stage >= 4 and back_id:
-        b_layer = Image.new("RGBA", (860, 580), (0, 0, 0, 0))
+        b_layer = Image.new("RGBA", (920, 620), (0, 0, 0, 0))
         bd = ImageDraw.Draw(b_layer, "RGBA")
+        cx = 460
         if back_id == "back_angel_wings":
-            # Cánh lông vũ đa tầng uốn cong bằng Bezier
-            for side in (-1, 1):
-                sx = 430 + side * 85
-                top_curve = _bezier((sx, 260), (sx + side * 140, 60), (sx + side * 280, 40), (sx + side * 340, 90))
-                bot_curve = _bezier((sx + side * 340, 90), (sx + side * 290, 260), (sx + side * 180, 340), (sx, 340))
-                bd.polygon(top_curve + bot_curve, fill=(248, 252, 255, 245), outline=(165, 195, 235, 255), width=6)
-                inner_pts = _bezier((sx, 290), (sx + side * 120, 140), (sx + side * 220, 140), (sx + side * 255, 210))
-                bd.line(inner_pts, fill=(195, 220, 250, 220), width=8)
+            def _paint_aw(d: ImageDraw.ImageDraw):
+                for side in (-1, 1):
+                    sx = cx + side * 105
+                    outer = _bezier((sx, 270), (sx + side * 165, 55), (sx + side * 310, 45), (sx + side * 375, 115)) + _bezier(
+                        (sx + side * 375, 115), (sx + side * 310, 295), (sx + side * 195, 385), (sx, 360)
+                    )
+                    d.polygon(outer, fill=(242, 248, 255, 185), outline=(185, 220, 255, 235), width=5)
+                    inner = _bezier((sx, 295), (sx + side * 125, 145), (sx + side * 235, 145), (sx + side * 275, 235))
+                    d.line(inner, fill=(255, 255, 255, 210), width=7)
+            _draw_bloom(b_layer, _paint_aw, blur_radius=12)
         elif back_id == "back_demon_wings":
-            for side in (-1, 1):
-                sx = 430 + side * 75
-                pts = _bezier((sx, 255), (sx + side * 150, 50), (sx + side * 290, 60), (sx + side * 345, 125)) + [
-                    (sx + side * 270, 260), (sx + side * 195, 345), (sx + side * 110, 325)
-                ]
-                bd.polygon(pts, fill=(44, 20, 66, 245), outline=(200, 65, 255, 255), width=7)
-                bd.line([(sx, 265), (sx + side * 265, 255)], fill=(190, 75, 255, 200), width=5)
+            def _paint_dw(d: ImageDraw.ImageDraw):
+                for side in (-1, 1):
+                    sx = cx + side * 95
+                    pts = _bezier((sx, 270), (sx + side * 165, 50), (sx + side * 320, 65), (sx + side * 375, 145)) + [
+                        (sx + side * 290, 290), (sx + side * 205, 375), (sx + side * 115, 350)
+                    ]
+                    d.polygon(pts, fill=(48, 18, 72, 190), outline=(215, 75, 255, 240), width=6)
+                    d.line([(sx, 285), (sx + side * 285, 275)], fill=(215, 85, 255, 175), width=4)
+            _draw_bloom(b_layer, _paint_dw, blur_radius=12)
         elif back_id == "back_royal_cape":
             cape_pts = (
-                [(300, 90), (560, 90)]
-                + _bezier((560, 90), (680, 280), (720, 460), (710, 540))
-                + [(430, 515), (150, 540)]
-                + _bezier((150, 540), (140, 460), (180, 280), (300, 90))
+                [(325, 100), (595, 100)]
+                + _bezier((595, 100), (725, 290), (765, 480), (750, 570))
+                + [(460, 540), (170, 570)]
+                + _bezier((170, 570), (155, 480), (195, 290), (325, 100))
             )
-            bd.polygon(cape_pts, fill=(148, 20, 44, 245), outline=(245, 200, 75, 255), width=8)
-            bd.polygon([(330, 105), (530, 105), (630, 510), (230, 510)], fill=(185, 28, 56, 220))
+            bd.polygon(cape_pts, fill=(138, 18, 42, 225), outline=(245, 200, 75, 240), width=7)
+            bd.polygon([(355, 118), (565, 118), (665, 535), (255, 535)], fill=(178, 26, 54, 185))
         elif back_id == "back_cyber_wings":
+            # Cánh Hologram năng lượng bán trong suốt tỏa ra sau lưng, không đè cứng
             def _paint_cw(d: ImageDraw.ImageDraw):
-                for side, col in ((-1, (0, 235, 255)), (1, (255, 55, 195))):
-                    sx = 430 + side * 70
-                    d.polygon([(sx, 240), (sx + side * 335, 75), (sx + side * 270, 285), (sx + side * 30, 315)], fill=(16, 26, 52, 240), outline=(*col, 255), width=7)
-                    d.polygon([(sx + side * 25, 280), (sx + side * 245, 210), (sx + side * 195, 345)], fill=(*col, 150))
-            _draw_bloom(b_layer, _paint_cw, blur_radius=12)
+                for side, col in ((-1, (0, 235, 255)), (1, (255, 65, 195))):
+                    sx = cx + side * 115
+                    d.polygon(
+                        [(sx, 245), (sx + side * 345, 65), (sx + side * 305, 255), (sx + side * 45, 310)],
+                        fill=(*col, 48),
+                        outline=(*col, 235),
+                        width=5,
+                    )
+                    d.polygon(
+                        [(sx + side * 30, 315), (sx + side * 265, 250), (sx + side * 210, 395), (sx + side * 15, 365)],
+                        fill=(*col, 38),
+                        outline=(*col, 195),
+                        width=4,
+                    )
+                    d.line([(sx, 265), (sx + side * 290, 125)], fill=(255, 255, 255, 175), width=3)
+            _draw_bloom(b_layer, _paint_cw, blur_radius=14)
         elif back_id == "back_katana":
             for s in (-1, 1):
-                x0, y0 = 430 - s * 270, 480
-                x1, y1 = 430 + s * 270, 55
-                bd.line([(x0, y0), (x1, y1)], fill=(36, 38, 48, 255), width=22)
-                hx, hy = 430 + s * 200, 130
-                bd.line([(hx, hy), (x1, y1)], fill=(220, 45, 65, 255), width=26)
-                bd.ellipse([hx - 22, hy - 22, hx + 22, hy + 22], fill=(245, 200, 65, 255), outline=(20, 22, 32, 255), width=5)
+                x0, y0 = cx - s * 285, 510
+                x1, y1 = cx + s * 285, 60
+                bd.line([(x0, y0), (x1, y1)], fill=(36, 38, 48, 240), width=20)
+                hx, hy = cx + s * 210, 140
+                bd.line([(hx, hy), (x1, y1)], fill=(220, 45, 65, 245), width=24)
+                bd.ellipse([hx - 20, hy - 20, hx + 20, hy + 20], fill=(245, 200, 65, 255), outline=(20, 22, 32, 255), width=5)
 
         _paste_anchored(img, b_layer, anchors["back"])
 
@@ -579,202 +630,212 @@ def _draw_face(img: Image.Image, species: str, stage: int, expression: str, c1: 
 
 
 def _draw_outfit(img: Image.Image, species: str, stage: int, equipped: dict, c1: Tuple[int, int, int]):
-    """Layer 4: Trang phục cắt may độ phân giải 2x có bóng đổ & chi tiết sắc nét."""
+    """Layer 4: Khăn choàng / Vòng cổ / Lõi năng lượng gọn nhẹ ôm cổ (không che thân thú AI)."""
     outfit_id = equipped.get("outfit")
     if stage < 3 or not outfit_id:
         return
 
-    if species == "royal_slime":
-        s_layer = Image.new("RGBA", (440, 240), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(s_layer, "RGBA")
-        col_map = {
-            "outfit_hoodie": (42, 46, 62, 235),
-            "outfit_bomber": (185, 48, 65, 235),
-            "outfit_cyber_armor": (22, 34, 62, 235),
-            "outfit_royal_vest": (135, 24, 48, 235),
-            "outfit_tuxedo": (24, 26, 36, 235),
-            "outfit_mage_robe": (72, 44, 136, 235),
-            "outfit_cloud_robe": (28, 30, 44, 235),
-            "outfit_samurai": (165, 32, 42, 235),
-            "outfit_tanktop": (65, 165, 245, 235),
-        }
-        scol = col_map.get(outfit_id, (*c1, 230))
-        sd.pieslice([60, 20, 380, 210], start=0, end=180, fill=scol, outline=(20, 22, 32, 255), width=6)
-        _paste_anchored(img, s_layer, (300, 385, 0.92))
-        return
-
-    o_layer = Image.new("RGBA", (480, 360), (0, 0, 0, 0))
+    o_layer = Image.new("RGBA", (320, 160), (0, 0, 0, 0))
     od = ImageDraw.Draw(o_layer, "RGBA")
-    outline = (20, 22, 32, 255)
-    shirt_poly = [(96, 48), (384, 48), (452, 132), (400, 176), (360, 136), (360, 316), (120, 316), (120, 136), (80, 176), (28, 132)]
+    outline = (18, 20, 32, 245)
 
-    if outfit_id == "outfit_hoodie":
-        od.polygon(shirt_poly, fill=(44, 48, 66, 250), outline=outline, width=7)
-        od.polygon([(168, 48), (240, 104), (312, 48)], fill=(*c1, 245), outline=outline, width=5)
-        od.line([(212, 92), (212, 156)], fill=(235, 235, 245, 255), width=6)
-        od.line([(268, 92), (268, 156)], fill=(235, 235, 245, 255), width=6)
-        od.rounded_rectangle([168, 216, 312, 292], radius=24, fill=(32, 36, 52, 255), outline=outline, width=5)
-    elif outfit_id == "outfit_bomber":
-        od.polygon(shirt_poly, fill=(185, 42, 62, 250), outline=outline, width=7)
-        od.polygon([(28, 132), (96, 48), (120, 136), (80, 176)], fill=(242, 242, 248, 250), outline=outline, width=5)
-        od.polygon([(452, 132), (384, 48), (360, 136), (400, 176)], fill=(242, 242, 248, 250), outline=outline, width=5)
-        od.line([(240, 56), (240, 312)], fill=(245, 210, 80, 255), width=7)
-        od.rectangle([120, 288, 360, 316], fill=(28, 30, 42, 255))
-    elif outfit_id == "outfit_cyber_armor":
-        od.polygon(shirt_poly, fill=(22, 34, 58, 250), outline=(0, 230, 255, 255), width=7)
-        od.polygon([(68, 52), (152, 44), (124, 108), (40, 96)], fill=(36, 52, 86, 255), outline=(0, 230, 255, 255), width=5)
-        od.polygon([(412, 52), (328, 44), (356, 108), (440, 96)], fill=(36, 52, 86, 255), outline=(0, 230, 255, 255), width=5)
-        _draw_bloom(o_layer, lambda d: d.polygon([(240, 96), (288, 148), (240, 200), (192, 148)], fill=(0, 235, 255, 245), outline=(255, 255, 255, 220), width=4), blur_radius=8)
-        od = ImageDraw.Draw(o_layer, "RGBA")
-        od.rectangle([124, 252, 356, 284], fill=(0, 215, 255, 200))
+    def _draw_scarf(main_col: Tuple[int, int, int], trim_col: Tuple[int, int, int]):
+        # Bóng đổ mềm dưới khăn
+        sh = Image.new("RGBA", o_layer.size, (0, 0, 0, 0))
+        sd = ImageDraw.Draw(sh, "RGBA")
+        sd.chord([54, 42, 266, 118], start=0, end=180, fill=(0, 0, 0, 110))
+        o_layer.alpha_composite(sh.filter(ImageFilter.GaussianBlur(6)))
+        d = ImageDraw.Draw(o_layer, "RGBA")
+        # Vòng khăn ôm cổ cong tự nhiên
+        collar_pts = _bezier((52, 54), (110, 96), (210, 96), (268, 54)) + _bezier((268, 54), (215, 70), (105, 70), (52, 54))
+        d.polygon(collar_pts, fill=(*main_col, 245), outline=outline, width=4)
+        # Đuôi khăn bay nhẹ lệch phải
+        tail_pts = [(195, 74), (242, 70), (262, 134), (222, 142)]
+        d.polygon(tail_pts, fill=(*main_col, 240), outline=outline, width=4)
+        d.line([(234, 74), (251, 134)], fill=(*trim_col, 230), width=4)
+        # Viền sáng trên khăn
+        hi_pts = _bezier((64, 58), (116, 86), (204, 86), (256, 58))
+        d.line(hi_pts, fill=(*trim_col, 220), width=4)
+
+    if outfit_id == "outfit_cyber_armor":
+        # Vòng cổ công nghệ + lõi năng lượng lục giác phát sáng Neon Cyan
+        _draw_scarf((20, 32, 58), (0, 230, 255))
+        _draw_bloom(
+            o_layer,
+            lambda d: d.polygon([(160, 64), (184, 84), (160, 108), (136, 84)], fill=(0, 240, 255, 250), outline=(255, 255, 255, 230), width=3),
+            blur_radius=8,
+        )
     elif outfit_id == "outfit_royal_vest":
-        od.polygon(shirt_poly, fill=(135, 22, 46, 250), outline=(245, 200, 75, 255), width=7)
-        od.polygon([(184, 48), (296, 48), (240, 164)], fill=(248, 248, 252, 255), outline=outline, width=4)
-        od.polygon([(228, 68), (252, 68), (248, 144), (240, 160), (232, 144)], fill=(245, 198, 65, 255))
-        od.line([(240, 164), (240, 312)], fill=(245, 200, 75, 255), width=7)
+        _draw_scarf((138, 22, 46), (245, 200, 75))
+        od = ImageDraw.Draw(o_layer, "RGBA")
+        od.ellipse([142, 68, 178, 104], fill=(245, 200, 75, 255), outline=outline, width=4)
+        od.ellipse([151, 77, 169, 95], fill=(220, 40, 68, 255))
     elif outfit_id == "outfit_tuxedo":
-        od.polygon(shirt_poly, fill=(24, 26, 36, 252), outline=(215, 220, 235, 220), width=6)
-        od.polygon([(188, 48), (292, 48), (240, 168)], fill=(250, 250, 255, 255), outline=outline, width=4)
-        od.polygon([(208, 68), (240, 88), (272, 68), (272, 96), (240, 84), (208, 96)], fill=(220, 42, 65, 255))
+        # Nơ bướm điệp viên đen + viền cổ trắng gọn gàng
+        od.polygon([(112, 66), (160, 86), (208, 66), (208, 104), (160, 88), (112, 104)], fill=(215, 38, 60, 250), outline=outline, width=4)
+        od.ellipse([148, 74, 172, 98], fill=(245, 48, 72, 255), outline=outline, width=3)
     elif outfit_id == "outfit_mage_robe":
-        od.polygon(shirt_poly, fill=(68, 42, 132, 250), outline=(245, 200, 75, 255), width=7)
-        od.line([(240, 56), (240, 312)], fill=(245, 200, 75, 255), width=8)
-        _draw_bloom(o_layer, lambda d: d.ellipse([212, 128, 268, 184], fill=(90, 220, 255, 240), outline=(245, 200, 75, 255), width=4), blur_radius=8)
+        _draw_scarf((68, 42, 132), (245, 200, 75))
+        _draw_bloom(o_layer, lambda d: d.ellipse([142, 68, 178, 104], fill=(95, 225, 255, 245), outline=(245, 200, 75, 255), width=4), blur_radius=8)
     elif outfit_id == "outfit_cloud_robe":
-        od.polygon(shirt_poly, fill=(28, 30, 46, 250), outline=(225, 65, 85, 255), width=7)
-        od.line([(172, 52), (296, 228)], fill=(245, 245, 250, 240), width=11)
-        od.line([(308, 52), (232, 152)], fill=(245, 245, 250, 240), width=11)
-        od.rectangle([116, 224, 364, 268], fill=(215, 48, 68, 255), outline=outline, width=5)
+        _draw_scarf((26, 28, 42), (225, 55, 78))
     elif outfit_id == "outfit_samurai":
-        od.polygon(shirt_poly, fill=(145, 28, 38, 250), outline=(245, 200, 75, 255), width=7)
-        for ry in (112, 164, 216, 268):
-            od.line([(124, ry), (356, ry)], fill=(245, 200, 75, 235), width=7)
-        od.polygon([(52, 56), (148, 48), (120, 124), (28, 108)], fill=(34, 36, 48, 255), outline=(245, 200, 75, 255), width=6)
-        od.polygon([(428, 56), (332, 48), (360, 124), (452, 108)], fill=(34, 36, 48, 255), outline=(245, 200, 75, 255), width=6)
+        _draw_scarf((152, 28, 38), (245, 200, 75))
+        od = ImageDraw.Draw(o_layer, "RGBA")
+        od.polygon([(142, 72), (178, 72), (170, 106), (150, 106)], fill=(245, 200, 75, 250), outline=outline, width=4)
+    elif outfit_id == "outfit_bomber":
+        _draw_scarf((185, 42, 62), (245, 245, 250))
+    elif outfit_id == "outfit_hoodie":
+        _draw_scarf((44, 48, 66), c1)
     elif outfit_id == "outfit_tanktop":
-        od.polygon([(148, 52), (332, 52), (352, 312), (128, 312)], fill=(246, 248, 255, 248), outline=(58, 162, 245, 255), width=7)
-        od.ellipse([192, 136, 288, 232], fill=(255, 205, 65, 240))
+        # Dây chuyền vàng + mặt trời mùa hè
+        chain = _bezier((80, 56), (125, 96), (195, 96), (240, 56))
+        od.line(chain, fill=(245, 200, 75, 250), width=6)
+        od.ellipse([144, 74, 176, 106], fill=(255, 210, 65, 255), outline=outline, width=4)
 
     _paste_anchored(img, o_layer, PET_ANCHORS[species][stage]["outfit"])
 
 
 def _draw_headwear(img: Image.Image, species: str, stage: int, equipped: dict):
-    """Layer 5 (2x): Mũ / Đội đầu sắc nét + Neon Bloom cho tai nghe & vòng thiên thần."""
+    """Layer 5 (2x): Mũ / Đội đầu sắc nét + đổ bóng mềm & highlight ánh sáng."""
     hat_id = equipped.get("headwear")
     if stage < 2 or not hat_id:
         return
     h_layer = Image.new("RGBA", (400, 280), (0, 0, 0, 0))
     hd = ImageDraw.Draw(h_layer, "RGBA")
-    outline = (20, 22, 32, 255)
+    outline = (20, 22, 32, 245)
     if hat_id == "hat_cap_back":
-        hd.pieslice([96, 76, 304, 236], start=180, end=360, fill=(225, 55, 70, 255), outline=outline, width=7)
-        hd.rectangle([230, 136, 352, 164], fill=(30, 34, 46, 255), outline=outline, width=6)
+        hd.pieslice([96, 76, 304, 236], start=180, end=360, fill=(215, 52, 68, 255), outline=outline, width=6)
+        hd.pieslice([116, 86, 250, 180], start=195, end=310, fill=(245, 110, 125, 130))
+        hd.rounded_rectangle([226, 136, 348, 166], radius=10, fill=(32, 36, 50, 255), outline=outline, width=5)
     elif hat_id == "hat_gaming_headset":
-        hd.arc([76, 56, 324, 244], start=185, end=355, fill=(38, 42, 58, 255), width=22)
+        # Vòng đeo mảnh ôm sát đầu + ốp tai Neon Bloom tinh tế
+        hd.arc([78, 64, 322, 242], start=190, end=350, fill=(36, 40, 56, 255), width=14)
+        hd.arc([84, 70, 316, 236], start=205, end=335, fill=(130, 145, 175, 165), width=4)
         _draw_bloom(
             h_layer,
             lambda d: (
-                d.rounded_rectangle([56, 132, 108, 224], radius=18, fill=(0, 225, 255, 255), outline=outline, width=5),
-                d.rounded_rectangle([292, 132, 344, 224], radius=18, fill=(255, 65, 185, 255), outline=outline, width=5),
+                d.rounded_rectangle([58, 138, 102, 218], radius=18, fill=(24, 32, 52, 245), outline=(0, 230, 255, 255), width=5),
+                d.rounded_rectangle([298, 138, 342, 218], radius=18, fill=(24, 32, 52, 245), outline=(255, 65, 185, 255), width=5),
+                d.ellipse([70, 162, 90, 194], fill=(0, 235, 255, 240)),
+                d.ellipse([310, 162, 330, 194], fill=(255, 70, 190, 240)),
             ),
             blur_radius=8,
         )
     elif hat_id == "hat_gold_crown":
-        hd.polygon([(100, 192), (116, 80), (168, 144), (200, 56), (232, 144), (284, 80), (300, 192)], fill=(255, 210, 65, 255), outline=outline, width=7)
-        hd.ellipse([186, 124, 214, 152], fill=(230, 45, 75, 255))
+        hd.polygon([(104, 192), (118, 86), (168, 146), (200, 60), (232, 146), (282, 86), (296, 192)], fill=(255, 206, 62, 255), outline=outline, width=6)
+        hd.polygon([(122, 184), (130, 114), (168, 156), (200, 84), (200, 184)], fill=(255, 232, 125, 135))
+        hd.ellipse([186, 126, 214, 154], fill=(230, 45, 75, 255), outline=outline, width=3)
     elif hat_id == "hat_ninja_band":
-        hd.rectangle([76, 128, 324, 184], fill=(28, 34, 52, 255), outline=outline, width=6)
-        hd.rectangle([148, 136, 252, 176], fill=(195, 205, 220, 255), outline=outline, width=4)
+        hd.rounded_rectangle([76, 130, 324, 182], radius=14, fill=(28, 34, 52, 250), outline=outline, width=5)
+        hd.rounded_rectangle([146, 136, 254, 176], radius=8, fill=(205, 215, 230, 255), outline=outline, width=4)
     elif hat_id == "hat_duck":
-        hd.ellipse([108, 68, 292, 196], fill=(255, 222, 65, 255), outline=outline, width=7)
-        hd.ellipse([160, 148, 240, 188], fill=(255, 140, 40, 255), outline=outline, width=6)
+        hd.ellipse([108, 68, 292, 196], fill=(255, 222, 65, 255), outline=outline, width=6)
+        hd.ellipse([160, 148, 240, 188], fill=(255, 140, 40, 255), outline=outline, width=5)
     elif hat_id == "hat_wizard":
-        hd.ellipse([52, 164, 348, 228], fill=(54, 38, 108, 255), outline=(245, 200, 75, 255), width=6)
-        hd.polygon([(112, 184), (288, 184), (216, 32)], fill=(68, 46, 134, 255), outline=outline, width=7)
-        hd.rectangle([128, 152, 272, 180], fill=(245, 200, 75, 255))
+        hd.ellipse([54, 164, 346, 226], fill=(54, 38, 108, 255), outline=(245, 200, 75, 255), width=5)
+        hd.polygon([(114, 184), (286, 184), (216, 36)], fill=(68, 46, 134, 255), outline=outline, width=6)
+        hd.rectangle([128, 152, 272, 178], fill=(245, 200, 75, 255))
     elif hat_id == "hat_oni_horns":
-        hd.polygon([(92, 196), (68, 76), (148, 164)], fill=(225, 45, 65, 255), outline=outline, width=7)
-        hd.polygon([(308, 196), (332, 76), (252, 164)], fill=(225, 45, 65, 255), outline=outline, width=7)
-        hd.ellipse([172, 136, 228, 192], fill=(245, 200, 75, 255), outline=outline, width=6)
+        hd.polygon([(94, 196), (70, 80), (148, 164)], fill=(225, 45, 65, 255), outline=outline, width=6)
+        hd.polygon([(306, 196), (330, 80), (252, 164)], fill=(225, 45, 65, 255), outline=outline, width=6)
+        hd.ellipse([172, 136, 228, 192], fill=(245, 200, 75, 255), outline=outline, width=5)
     elif hat_id == "hat_cat_ears_rgb":
-        hd.arc([88, 92, 312, 240], start=185, end=355, fill=(32, 36, 52, 255), width=16)
+        hd.arc([88, 92, 312, 240], start=185, end=355, fill=(32, 36, 52, 255), width=12)
         _draw_bloom(
             h_layer,
             lambda d: (
-                d.polygon([(92, 148), (72, 44), (160, 112)], fill=(32, 36, 52, 255), outline=(0, 235, 255, 255), width=7),
-                d.polygon([(308, 148), (328, 44), (240, 112)], fill=(32, 36, 52, 255), outline=(255, 65, 195, 255), width=7),
+                d.polygon([(92, 148), (72, 48), (160, 114)], fill=(32, 36, 52, 245), outline=(0, 235, 255, 255), width=6),
+                d.polygon([(308, 148), (328, 48), (240, 114)], fill=(32, 36, 52, 245), outline=(255, 65, 195, 255), width=6),
             ),
             blur_radius=8,
         )
     elif hat_id == "hat_halo_angel":
-        _draw_bloom(h_layer, lambda d: d.ellipse([96, 44, 304, 112], fill=(0, 0, 0, 0), outline=(255, 232, 120, 255), width=12), blur_radius=10)
+        _draw_bloom(h_layer, lambda d: d.ellipse([96, 44, 304, 112], fill=(0, 0, 0, 0), outline=(255, 232, 120, 255), width=10), blur_radius=10)
     _paste_anchored(img, h_layer, PET_ANCHORS[species][stage]["headwear"])
 
 
 def _draw_face_and_held(img: Image.Image, species: str, stage: int, equipped: dict):
-    """Layer 6 (2x): Kính trong suốt / Neon VR & Vật cầm tay phát sáng."""
+    """Layer 6 (2x): Kính có phản chiếu thủy tinh & Vật thể bay kèm (Floating Companion)."""
     face_id = equipped.get("face")
     if stage >= 3 and face_id:
         f_layer = Image.new("RGBA", (340, 160), (0, 0, 0, 0))
         fd = ImageDraw.Draw(f_layer, "RGBA")
         if face_id == "face_sunglasses":
-            fd.rounded_rectangle([36, 36, 152, 104], radius=16, fill=(18, 20, 28, 225), outline=(245, 200, 75, 255), width=6)
-            fd.rounded_rectangle([188, 36, 304, 104], radius=16, fill=(18, 20, 28, 225), outline=(245, 200, 75, 255), width=6)
-            fd.line([(152, 60), (188, 60)], fill=(245, 200, 75, 255), width=7)
+            fd.rounded_rectangle([38, 38, 152, 102], radius=16, fill=(18, 22, 34, 205), outline=(245, 200, 75, 255), width=5)
+            fd.rounded_rectangle([188, 38, 302, 102], radius=16, fill=(18, 22, 34, 205), outline=(245, 200, 75, 255), width=5)
+            fd.line([(56, 86), (112, 48)], fill=(255, 255, 255, 125), width=6)
+            fd.line([(206, 86), (262, 48)], fill=(255, 255, 255, 125), width=6)
+            fd.line([(152, 60), (188, 60)], fill=(245, 200, 75, 255), width=6)
         elif face_id == "face_vr_visor":
             _draw_bloom(
                 f_layer,
                 lambda d: (
-                    d.rounded_rectangle([32, 32, 308, 112], radius=26, fill=(16, 24, 48, 225), outline=(0, 235, 255, 255), width=7),
-                    d.line([(56, 72), (284, 72)], fill=(0, 235, 255, 245), width=8),
+                    d.rounded_rectangle([34, 34, 306, 110], radius=26, fill=(16, 26, 52, 195), outline=(0, 235, 255, 255), width=6),
+                    d.line([(56, 72), (284, 72)], fill=(0, 235, 255, 235), width=6),
                 ),
                 blur_radius=8,
             )
         elif face_id == "face_ninja_mask":
-            fd.polygon([(60, 64), (280, 64), (252, 152), (88, 152)], fill=(28, 32, 46, 245), outline=(14, 16, 24, 255), width=6)
+            fd.polygon([(62, 66), (278, 66), (250, 150), (90, 150)], fill=(28, 32, 46, 235), outline=(14, 16, 24, 255), width=5)
         elif face_id == "face_thug_life":
-            fd.rectangle([40, 44, 148, 88], fill=(12, 12, 16, 255))
-            fd.rectangle([192, 44, 300, 88], fill=(12, 12, 16, 255))
-            fd.rectangle([148, 52, 192, 68], fill=(12, 12, 16, 255))
-            fd.rectangle([60, 56, 88, 68], fill=(255, 255, 255, 255))
+            fd.rectangle([42, 44, 148, 86], fill=(12, 12, 16, 245))
+            fd.rectangle([192, 44, 298, 86], fill=(12, 12, 16, 245))
+            fd.rectangle([148, 52, 192, 68], fill=(12, 12, 16, 245))
+            fd.rectangle([62, 56, 90, 68], fill=(255, 255, 255, 255))
             fd.rectangle([212, 56, 240, 68], fill=(255, 255, 255, 255))
         elif face_id == "face_monocle":
-            fd.ellipse([192, 32, 284, 124], fill=(165, 225, 255, 80), outline=(245, 200, 75, 255), width=7)
-            fd.line([(284, 84), (296, 152)], fill=(245, 200, 75, 255), width=5)
+            fd.ellipse([192, 32, 284, 124], fill=(165, 225, 255, 75), outline=(245, 200, 75, 255), width=6)
+            fd.line([(284, 84), (296, 150)], fill=(245, 200, 75, 255), width=4)
         elif face_id == "face_star_blush":
-            fd.ellipse([36, 72, 92, 116], fill=(255, 120, 165, 220))
-            fd.ellipse([248, 72, 304, 116], fill=(255, 120, 165, 220))
-            _draw_sparkle(fd, 64, 94, 22, (255, 225, 90, 245))
+            bl = Image.new("RGBA", f_layer.size, (0, 0, 0, 0))
+            bd = ImageDraw.Draw(bl, "RGBA")
+            bd.ellipse([36, 72, 94, 116], fill=(255, 115, 165, 190))
+            bd.ellipse([246, 72, 304, 116], fill=(255, 115, 165, 190))
+            f_layer.alpha_composite(bl.filter(ImageFilter.GaussianBlur(8)))
+            fd = ImageDraw.Draw(f_layer, "RGBA")
+            _draw_sparkle(fd, 64, 94, 20, (255, 230, 105, 245))
         _paste_anchored(img, f_layer, PET_ANCHORS[species][stage]["face"])
 
     held_id = equipped.get("held")
     if stage >= 4 and held_id:
-        hl_layer = Image.new("RGBA", (240, 240), (0, 0, 0, 0))
+        hl_layer = Image.new("RGBA", (240, 260), (0, 0, 0, 0))
+        outline = (20, 22, 32, 245)
+        # Đĩa hào quang bay lơ lửng dưới vật thể
+        plat_col = (
+            (0, 225, 255) if held_id in ("held_gamepad", "held_sword") else
+            (245, 200, 75) if held_id in ("held_scepter", "held_lantern") else
+            (255, 95, 185)
+        )
+        _draw_bloom(
+            hl_layer,
+            lambda d: d.ellipse([48, 196, 192, 236], fill=(*plat_col, 45), outline=(*plat_col, 210), width=4),
+            blur_radius=8,
+        )
         hd = ImageDraw.Draw(hl_layer, "RGBA")
-        outline = (20, 22, 32, 255)
         if held_id == "held_gamepad":
-            hd.rounded_rectangle([32, 76, 208, 164], radius=32, fill=(32, 38, 56, 255), outline=(0, 225, 255, 255), width=6)
-            hd.ellipse([56, 100, 88, 132], fill=(0, 225, 255, 255))
-            hd.ellipse([148, 96, 172, 120], fill=(255, 70, 165, 255))
+            hd.rounded_rectangle([32, 82, 208, 170], radius=32, fill=(30, 36, 56, 250), outline=(0, 225, 255, 255), width=5)
+            hd.ellipse([56, 106, 88, 138], fill=(0, 225, 255, 255))
+            hd.ellipse([148, 102, 172, 126], fill=(255, 70, 165, 255))
         elif held_id == "held_boba":
-            hd.polygon([(76, 76), (164, 76), (148, 192), (92, 192)], fill=(245, 225, 195, 245), outline=outline, width=6)
-            hd.line([(120, 24), (120, 76)], fill=(255, 90, 140, 255), width=10)
-            for bx, by in ((100, 164), (120, 172), (136, 160)):
+            hd.polygon([(78, 76), (162, 76), (146, 190), (94, 190)], fill=(245, 225, 195, 245), outline=outline, width=5)
+            hd.line([(120, 24), (120, 76)], fill=(255, 90, 140, 255), width=9)
+            for bx, by in ((102, 162), (120, 170), (136, 158)):
                 hd.ellipse([bx - 8, by - 8, bx + 8, by + 8], fill=(30, 24, 24, 255))
         elif held_id == "held_scepter":
-            hd.line([(120, 216), (120, 64)], fill=(245, 200, 75, 255), width=14)
-            _draw_bloom(hl_layer, lambda d: d.ellipse([84, 24, 156, 96], fill=(90, 215, 255, 245), outline=(255, 240, 150, 255), width=5), blur_radius=10)
+            hd.line([(120, 206), (120, 68)], fill=(245, 200, 75, 255), width=12)
+            _draw_bloom(hl_layer, lambda d: d.ellipse([86, 26, 154, 94], fill=(90, 215, 255, 245), outline=(255, 240, 150, 255), width=5), blur_radius=10)
         elif held_id == "held_sword":
-            _draw_bloom(hl_layer, lambda d: d.polygon([(108, 16), (132, 16), (136, 152), (104, 152)], fill=(0, 235, 255, 250), outline=(255, 255, 255, 255), width=4), blur_radius=10)
+            _draw_bloom(hl_layer, lambda d: d.polygon([(108, 22), (132, 22), (136, 148), (104, 148)], fill=(0, 235, 255, 245), outline=(255, 255, 255, 255), width=4), blur_radius=10)
             hd = ImageDraw.Draw(hl_layer, "RGBA")
-            hd.rectangle([84, 152, 156, 172], fill=(245, 200, 75, 255), outline=outline, width=4)
-            hd.rectangle([110, 172, 130, 216], fill=(42, 46, 62, 255))
+            hd.rectangle([86, 148, 154, 168], fill=(245, 200, 75, 255), outline=outline, width=4)
+            hd.rectangle([110, 168, 130, 206], fill=(42, 46, 62, 255))
         elif held_id == "held_mic":
-            hd.line([(120, 208), (120, 100)], fill=(38, 42, 56, 255), width=14)
-            _draw_bloom(hl_layer, lambda d: d.ellipse([88, 44, 152, 108], fill=(225, 230, 245, 255), outline=(255, 70, 180, 255), width=5), blur_radius=8)
+            hd.line([(120, 202), (120, 102)], fill=(38, 42, 56, 255), width=12)
+            _draw_bloom(hl_layer, lambda d: d.ellipse([88, 46, 152, 110], fill=(225, 230, 245, 255), outline=(255, 70, 180, 255), width=5), blur_radius=8)
         elif held_id == "held_lantern":
-            hd.line([(120, 24), (120, 64)], fill=(245, 200, 75, 255), width=7)
-            _draw_bloom(hl_layer, lambda d: d.ellipse([72, 60, 168, 176], fill=(235, 65, 75, 245), outline=(245, 200, 75, 255), width=5), blur_radius=10)
+            hd.line([(120, 24), (120, 62)], fill=(245, 200, 75, 255), width=6)
+            _draw_bloom(hl_layer, lambda d: d.ellipse([72, 60, 168, 174], fill=(235, 65, 75, 245), outline=(245, 200, 75, 255), width=5), blur_radius=10)
         _paste_anchored(img, hl_layer, PET_ANCHORS[species][stage]["held"])
 
 
@@ -817,7 +878,7 @@ def render_pet_sprite_only(pet: Dict[str, Any], clan_color: str = "#5865F2", sec
 
     canvas = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 0))
     _draw_aura_and_back(canvas, species, stage, equipped, c1, c2)
-    if not _draw_sprite_layer(canvas, species, stage, expr, c1):
+    if not _draw_sprite_layer(canvas, species, stage, expr, c1, outfit_id=equipped.get("outfit")):
         _draw_body(canvas, species, stage, lvl_info["level"], c1, c2)
         _draw_face(canvas, species, stage, expr, c1)
     _draw_outfit(canvas, species, stage, equipped, c1)
@@ -875,7 +936,7 @@ def generate_clan_pet_image(pet: Dict[str, Any], clan: Dict[str, Any]) -> io.Byt
     hi_res = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 255))
     _draw_background(hi_res, equipped.get("background"), c1, c2, stage=stage)
     _draw_aura_and_back(hi_res, species, stage, equipped, c1, c2)
-    if not _draw_sprite_layer(hi_res, species, stage, expr, c1):
+    if not _draw_sprite_layer(hi_res, species, stage, expr, c1, outfit_id=equipped.get("outfit")):
         _draw_body(hi_res, species, stage, level, c1, c2)
         _draw_face(hi_res, species, stage, expr, c1)
     _draw_outfit(hi_res, species, stage, equipped, c1)
@@ -917,7 +978,7 @@ def generate_clan_pet_preview_image(pet: Dict[str, Any], clan: Dict[str, Any], p
     hi_res = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 255))
     _draw_background(hi_res, equipped.get("background"), c1, c2, stage=preview_stage)
     _draw_aura_and_back(hi_res, species, preview_stage, equipped, c1, c2)
-    if not _draw_sprite_layer(hi_res, species, preview_stage, expr, c1):
+    if not _draw_sprite_layer(hi_res, species, preview_stage, expr, c1, outfit_id=equipped.get("outfit")):
         _draw_body(hi_res, species, preview_stage, max(level, 3 if preview_stage == 1 else level), c1, c2)
         _draw_face(hi_res, species, preview_stage, expr, c1)
     _draw_outfit(hi_res, species, preview_stage, equipped, c1)
