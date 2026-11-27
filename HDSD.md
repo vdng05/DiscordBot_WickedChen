@@ -59,7 +59,7 @@ Mọi tính năng quan trọng đều được **model hóa 100% bằng nút b�
   - **Tên băng:** 3 đến 25 ký tự (Ví dụ: *Hoàng Gia*).
   - **Tag viết tắt:** 2 đến 5 ký tự in hoa (Ví dụ: *HG*).
   - **Khẩu hiệu:** Phương châm hoặc slogan của nhóm.
-- Sau khi gửi, bot sẽ tự động tạo Role riêng `[TAG] Tên Băng`, 1 kênh Chat và 1 kênh Voice riêng tư, cấp vai trò Chủ Băng cho bạn!
+- Sau khi gửi, bot sẽ tự động tạo Role riêng `[TAG] Tên Băng`, 1 **Kênh Chat riêng tư**, 1 **Kênh Nhật Ký riêng tư** và 1 **Kênh Voice công khai**, đồng thời cấp vai trò Chủ Băng cho bạn!
 
 ### 2. Thiết Lập & Tùy Biến Role Băng: `/clan setup-role` (hoặc nút 🛡️ trong `/clan hub`)
 Chủ Băng có toàn quyền thiết lập Role cho clan:
@@ -71,7 +71,7 @@ Chủ Băng có toàn quyền thiết lập Role cho clan:
 - **✏️ Đổi Tên Hiển Thị Role:** Tùy chỉnh tên role hiển thị trên server.
 - **📌 Tách Nhóm Thành Viên (Hoist):** 1-click Bật/Tắt hiển thị thành viên clan thành một nhóm riêng biệt trên danh sách online server.
 - **🔔 Cho Phép Tag (@mention):** 1-click Bật/Tắt cho phép mọi người tag role.
-- **🔗 Liên Kết Role Có Sẵn:** Chọn một Role đã có sẵn trong Server để làm Role Clan (qua menu chọn Role hoặc gõ lệnh `/clan set-role @role`).
+- **🔗 Liên Kết Role Có Sẵn:** Chọn một Role an toàn đã có sẵn trong Server để làm Role Clan (qua menu chọn Role hoặc gõ lệnh `/clan set-role @role`). *Lưu ý bảo mật: bot chặn các Role mang quyền quản trị/nhạy cảm, Role của băng khác, và chỉ Admin Server mới được gắn Role đang có người ngoài băng nắm giữ.*
 
 ### 3. Tải Lên Trực Tiếp Ảnh Logo, Banner & Icon Role
 Không cần phải đi copy link ảnh trên mạng phức tạp, bạn có thể **tải trực tiếp file ảnh từ máy tính hoặc điện thoại**:
@@ -85,7 +85,7 @@ Không cần phải đi copy link ảnh trên mạng phức tạp, bạn có th�
   - **🌟 Icon Role Băng:** `/clan upload-image loai:role_icon file:[chọn ảnh]` — Gán Icon hiển thị ngay bên cạnh tên của toàn thể anh em trong server *(Yêu cầu Server Boost Cấp 2)*.
 
 ### 4. Bảng Cài Đặt Băng Tổng Thể: `/clan settings`
-Mở bảng điều khiển tương tác (dành cho Chủ Băng & Cán Bộ):
+Mở bảng điều khiển tương tác (dành cho **Chủ Băng** hoặc **Quản Trị Viên Server**):
 - **🛡️ Cài Đặt Role Băng:** Mở nhanh giao diện thiết lập role (Màu Gradient, màu đơn, đổi tên, tách nhóm hoist...).
 - **🖼️ Cập Nhật Logo & Banner:** Mở Trung Tâm Tải Ảnh Trực Tiếp (gửi file ảnh, dán link hoặc quay về mặc định).
 - **🚪 Chế Độ Tuyển Quân:**
@@ -95,19 +95,19 @@ Mở bảng điều khiển tương tác (dành cho Chủ Băng & Cán Bộ):
 
 ### 5. Gửi Thư Thách Đấu Băng Đảng & Lập Kèo Game: `/clan party` (hoặc nút `⚔️ Thách Đấu / Tạo Kèo` trong `/clan hub`)
 - **⚔️ Gửi Thư Thách Đấu (Giao hữu giữa các băng):**
-  - Bấm **`[⚔️ Thách Đấu / Tạo Kèo]`** trong `/clan hub` (hoặc gõ `/clan party`) ➔ chọn **1 băng đối thủ cụ thể** hoặc chọn **📢 Gửi tới TẤT CẢ các băng trong server** từ menu thả xuống.
+  - Bấm **`[⚔️ Thách Đấu / Tạo Kèo]`** trong `/clan hub` (hoặc gõ `/clan party`) ➔ chọn **1 băng đối thủ cụ thể** hoặc chọn **📢 Gửi tới TẤT CẢ các băng trong server** *(tính năng gửi toàn server chỉ dành cho Chủ Băng / Phó Băng, giới hạn 12 giờ/lần để chống spam ping)* từ menu thả xuống.
   - Điền vào bảng popup: **Tựa Game Muốn Thách Đấu**, **Thể Thức & Quy Mô**, **Thời Gian Dự Kiến**, và **Nội Dung Thư Khiêu Chiến**.
   - Bot sẽ gửi Thư Thách Đấu kèm tag `@Role Băng Đối Thủ` sang kênh chat của băng nhận, kèm nút **`[⚔️ Chấp Nhận Thách Đấu]`** và **`[🛡️ Từ Chối Lịch Sự]`** để hai bên phản hồi trực tiếp!
 - **🎮 Lập Kèo Nội Bộ Băng Mình (LFG):**
   - Chọn nút **`[🎮 Lập Kèo Nội Bộ Băng Mình]`** để rủ anh em trong băng lập team leo rank/custom.
   - Tin nhắn kèo có nút **`[⚔️ Tham Gia]`**, **`[🛡️ Dự Bị]`**, **`[🚪 Rút Lui]`**, **`[🔒 Chốt / Đóng Kèo]`** và bot tự động tag nhắc trước giờ thi đấu 10 phút!
 
-### 5. Duyệt Đơn & Chào Đón Thành Viên Mới
+### 6. Duyệt Đơn & Chào Đón Thành Viên Mới
 - Khi có thành viên nộp đơn, bot sẽ gửi thẻ thông báo vào kênh chat riêng của băng.
 - Cán bộ chỉ cần bấm nút **`[✅ Duyệt Đơn]`** hoặc **`[❌ Từ Chối]`** ngay trên tin nhắn.
 - Sau khi duyệt thành công, bot sẽ gửi tin nhắn chào mừng kèm nút **`[🎉 Chào Mừng! 👋]`** để anh em trong băng bấm vào gửi lời chào đón đồng đội mới!
 
-### 6. Bổ Nhiệm & Quản Lý Nhân Sự (Nút `[👥 Quản Lý Thành Viên]` Trong `/clan hub`)
+### 7. Bổ Nhiệm & Quản Lý Nhân Sự (Nút `[👥 Quản Lý Thành Viên]` Trong `/clan hub`)
 Bạn không cần phải nhớ các câu lệnh slash command phức tạp, chỉ cần bấm **`[👥 Quản Lý Thành Viên]`** trong `/clan hub`:
 - **➕ Mời thành viên mới:** Menu chọn người dùng Discord (User Picker) trực quan, chọn ai là bot tự động gửi lời mời kèm nút xác nhận thẳng vào **DM** của họ *(hoặc kênh công khai nếu họ khóa DM, hạn 15 phút)*.
 - **⬆️ Thăng chức:** Bấm nút $\rightarrow$ Chọn thành viên từ menu thả xuống để thăng lên Cán Bộ hoặc Phó Băng.
@@ -117,16 +117,16 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 - **💥 Giải Tán Băng:** Nút Giải Tán Băng (yêu cầu gõ chính xác tên băng trong Modal để xác nhận an toàn, tránh bấm nhầm).
 *(Ngoài ra, bạn vẫn có thể dùng các lệnh `/clan invite`, `/clan promote`, `/clan demote`, `/clan kick`, `/clan transfer`, `/clan disband` nếu thích gõ lệnh)*.
 
-### 7. Trao Danh Hiệu & Biệt Danh Nội Bộ: Nút `[🎖️ Trao Danh Hiệu]` trong `/clan hub`
+### 8. Trao Danh Hiệu & Biệt Danh Nội Bộ: Nút `[🎖️ Trao Danh Hiệu]` trong `/clan hub`
 - Cán Bộ, Phó Băng và Chủ Băng có thể trao tặng các danh hiệu/biệt danh độc đáo cho thành viên (Ví dụ: `Gánh Team 👑`, `Cú Đêm 🌙`, `Chúa Hề 🤡`, `Trùm Nấu Lẩu 🍲`...).
 - **Cách dùng:** Mở `/clan hub` $\rightarrow$ bấm **`[🎖️ Trao Danh Hiệu]`** $\rightarrow$ chọn thành viên từ menu thả xuống $\rightarrow$ nhập danh hiệu mong muốn (hoặc để trống để gỡ).
 - Danh hiệu sẽ xuất hiện kiêu hãnh trên **Bảng thành viên (`/clan members`)** và khắc ghi trang trọng trên **Ảnh Nền Wallpaper Full HD** của băng!
 
-### 8. Biên Niên Sử & Xuất Ảnh Nền Wallpaper Full HD (1920x1080)
+### 9. Biên Niên Sử & Xuất Ảnh Nền Wallpaper Full HD (1920x1080)
 - **📜 Cột Mốc Lịch Sử:** Bấm **`[📜 Cột Mốc Lịch Sử]`** trong `/clan hub` để xem dòng thời gian ghi dấu các sự kiện trọng đại của băng (ngày thành lập, các mốc thăng cấp).
-- **🖼️ Xuất Ảnh Nền Desktop Full HD:** Bấm **`[🖼️ Ảnh Nền Băng (Full HD)]`** trong `/clan hub`. Bot sẽ vẽ tự động tác phẩm Wallpaper 1920x1080 tuyệt đẹp mang biểu tượng, chỉ số, danh sách nòng cốt và biên niên sử của băng để anh em tải về làm hình nền máy tính!
+- **🖼️ Xuất Ảnh Nền Desktop Full HD:** Bấm **`[🖼️ Ảnh Nền Băng (Full HD)]`** trong `/clan hub` *(cooldown 45 giây/băng để giữ mượt server)*. Bot sẽ vẽ tự động tác phẩm Wallpaper 1920x1080 tuyệt đẹp mang biểu tượng, chỉ số, danh sách nòng cốt và biên niên sử của băng để anh em tải về làm hình nền máy tính!
 
-### 9. Đồ Họa Mặc Định Siêu Lộng Lẫy (Tự Động Kiến Tạo Bằng Discord Framework)
+### 10. Đồ Họa Mặc Định Siêu Lộng Lẫy (Tự Động Kiến Tạo Bằng Discord Framework)
 - **Không lo thiếu ảnh:** Nếu Chủ Băng chưa tải ảnh tùy chỉnh lên, bot **hoàn toàn không sử dụng ảnh stock mạng chung chung** mà sẽ tự động vẽ đồ họa nhận diện thương hiệu riêng cho băng bằng Canvas Engine:
   - 🛡️ **Default Clan Logo (512x512):** Khiên Bát Giác Hoàng Gia (Royal Octagon Shield) mạ vàng, hào quang đa tầng neon theo màu chủ đạo của băng, vương miện hoàng gia, Tag băng phát sáng 3D và các hạt sao lấp lánh (Sparkles).
   - 🚩 **Default Clan Banner (1200x420 Widescreen):** Phong cách Cyber Gaming hiện đại với ma trận tổ ong lục giác, vệt sáng năng lượng, 4 góc bo kim loại, huy hiệu vương miện, 4 khối thông số glassmorphism và thanh tiến độ cấp độ rực rỡ.
@@ -137,11 +137,11 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 ## 👑 PHẦN 3: DÀNH CHO QUẢN TRỊ VIÊN SERVER (ADMIN)
 
 ### 1. Cơ Chế Tổ Chức Kênh & An Toàn Dữ Liệu Discord
-- **Duy nhất 1 Category `🏰 BĂNG ĐẢNG`:** Toàn bộ các băng trong server đều được gom gọn trong 1 Category duy nhất. Mỗi băng sở hữu 3 kênh:
+- **Category `🏰 BĂNG ĐẢNG` (tự động mở rộng nếu server cực lớn):** Toàn bộ các băng được gom gọn trong 1 Category duy nhất *(khi server phát triển vượt 46 kênh gần chạm trần 50 kênh của Discord, bot tự động tạo Category nối tiếp `🏰 BĂNG ĐẢNG 2` mà không ảnh hưởng dữ liệu cũ)*. Mỗi băng sở hữu 3 kênh:
   1. **💬 Kênh Chat Riêng của băng** *(Riêng tư — chỉ thành viên băng mới nhìn thấy & nhắn tin, không sợ rối sidebar)*.
   2. **📜 Kênh Nhật Ký của băng (`📜・nhat-ky-...`)** *(Riêng tư — chỉ thành viên băng mới nhìn thấy để theo dõi lịch sử hoạt động)*.
   3. **🔊 Kênh Voice của băng** *(Công khai/Public — mọi thành viên server đều có thể nhìn thấy và vào giao lưu)*.
-- **Không tự tiện sửa/xóa kênh & tin nhắn:** Bot **tuyệt đối không tự ý sửa tên, thay đổi hay xóa bất kỳ kênh, role hoặc tin nhắn nào** của người dùng trên Discord nếu không có lệnh thực thi trực tiếp từ Chủ Băng hoặc Quản Trị Viên.
+- **Không tự tiện sửa/xóa kênh & tin nhắn:** Bot **tuyệt đối không tự ý sửa tên, thay đổi hay xóa bất kỳ kênh, role hoặc tin nhắn trò chuyện thông thường nào** của người dùng trên Discord *(chỉ tự động dọn tin nhắn gửi tệp ảnh trong luồng upload ảnh và các bảng điều khiển của bot để giữ sạch chat)*.
 - **Tùy chỉnh thủ công (nếu muốn):** Dùng `/clan-admin setup` để chỉ định Category hoặc kênh Log server riêng theo ý bạn.
 
 ### 2. Phân Quyền Vai Trò Của Bot Trên Discord (RẤT QUAN TRỌNG)
@@ -169,10 +169,10 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 
 | Cấp Độ | EXP Yêu Cầu | Sĩ Số Tối Đa | Đặc Quyền Nổi Bật |
 | :---: | :---: | :---: | :--- |
-| **Cấp 1** | 0 EXP | 15 người | 1 Kênh Chat + 1 Kênh Voice riêng, đổi màu Role đơn sắc & Gradient |
-| **Cấp 2** | 1.000 EXP | 25 người | Tăng sĩ số tối đa, tùy chỉnh khẩu hiệu nâng cao |
+| **Cấp 1** | 0 EXP | 15 người | 1 Kênh Chat riêng + 1 Kênh Nhật Ký + 1 Kênh Voice public, đổi màu Role đơn sắc & Gradient, upload Logo/Banner |
+| **Cấp 2** | 1.000 EXP | 25 người | Tăng sĩ số tối đa lên 25 thành viên |
 | **Cấp 3** | 3.500 EXP | 40 người | 🔥 **Tự động mở khóa Kênh Voice thứ 2** để chia team chơi game |
-| **Cấp 4** | 8.000 EXP | 60 người | Tăng sĩ số tối đa, mở khóa Icon Role (nếu server đạt Boost Lv.2) |
+| **Cấp 4** | 8.000 EXP | 60 người | Tăng sĩ số tối đa lên 60 thành viên *(Icon Role khả dụng bất cứ lúc nào nếu server đạt Boost Lv.2)* |
 | **Cấp 5** | 15.000 EXP | 100 người | Đỉnh cao danh vọng, tối đa quyền hạn hội nhóm |
 
 ### Bí Quyết Cày Cấp Băng Nhanh Nhất:

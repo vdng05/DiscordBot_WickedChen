@@ -93,6 +93,15 @@ class DatabaseManager:
                 FOREIGN KEY (clan_id) REFERENCES clans(clan_id) ON DELETE CASCADE
             );
 
+            -- 3b. Lịch sử điểm danh độc lập theo user (chống thoát/vào băng để farm điểm danh trong ngày)
+            CREATE TABLE IF NOT EXISTS member_checkin_history (
+                guild_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                last_checkin_date TEXT NOT NULL,
+                checkin_streak INTEGER DEFAULT 1,
+                PRIMARY KEY (guild_id, user_id)
+            );
+
             -- 4. Theo dõi cooldown sau khi rời băng
             CREATE TABLE IF NOT EXISTS member_cooldowns (
                 guild_id TEXT NOT NULL,
@@ -197,10 +206,11 @@ class DatabaseManager:
             await db.executescript(schema)
             await db.commit()
 
-            # Migration: thêm secondary_color_hex và log_channel_id nếu chưa có
+            # Migration: thêm secondary_color_hex, log_channel_id và last_global_challenge_at nếu chưa có
             for alter_sql in (
                 "ALTER TABLE clans ADD COLUMN secondary_color_hex TEXT",
                 "ALTER TABLE clans ADD COLUMN log_channel_id TEXT",
+                "ALTER TABLE clans ADD COLUMN last_global_challenge_at INTEGER DEFAULT 0",
             ):
                 try:
                     await db.execute(alter_sql)
@@ -593,16 +603,76 @@ class DatabaseManager:
             await db.commit()
             return cursor.rowcount
 
-    async def update_checkin(self, guild_id: int, user_id: int, date_str: str, streak: int) -> int:
-        sql = """
-        UPDATE clan_members 
-        SET last_checkin_date = ?, checkin_streak = ?, contribution_points = contribution_points + 10
-        WHERE guild_id = ? AND user_id = ?
-        """
+    async def get_user_checkin_status(self, guild_id: int, user_id: int) -> Dict[str, Any]:
+        """Lấy ngày điểm danh gần nhất & streak độc lập (chống nhảy băng farm check-in)."""
         async with self.connect() as db:
-            cursor = await db.execute(sql, (date_str, streak, str(guild_id), str(user_id)))
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT last_checkin_date, checkin_streak FROM member_checkin_history WHERE guild_id = ? AND user_id = ?",
+                (str(guild_id), str(user_id))
+            ) as cursor:
+                hist = await cursor.fetchone()
+                if hist:
+                    return dict(hist)
+            async with db.execute(
+                "SELECT last_checkin_date, checkin_streak FROM clan_members WHERE guild_id = ? AND user_id = ?",
+                (str(guild_id), str(user_id))
+            ) as cursor:
+                mem = await cursor.fetchone()
+                if mem and mem["last_checkin_date"]:
+                    return {"last_checkin_date": mem["last_checkin_date"], "checkin_streak": mem["checkin_streak"] or 0}
+        return {"last_checkin_date": None, "checkin_streak": 0}
+
+    async def update_checkin(self, guild_id: int, user_id: int, date_str: str, streak: int) -> int:
+        """Cập nhật điểm danh nguyên tử theo (guild_id, user_id, date_str), trả về 0 nếu hôm nay đã điểm danh."""
+        async with self.connect() as db:
+            async with db.execute(
+                "SELECT last_checkin_date FROM member_checkin_history WHERE guild_id = ? AND user_id = ?",
+                (str(guild_id), str(user_id))
+            ) as cur:
+                hist = await cur.fetchone()
+                if hist and hist[0] == date_str:
+                    return 0
+
+            await db.execute(
+                """
+                INSERT INTO member_checkin_history (guild_id, user_id, last_checkin_date, checkin_streak)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                    last_checkin_date = excluded.last_checkin_date,
+                    checkin_streak = excluded.checkin_streak
+                WHERE member_checkin_history.last_checkin_date != excluded.last_checkin_date
+                """,
+                (str(guild_id), str(user_id), date_str, streak)
+            )
+            cursor = await db.execute(
+                """
+                UPDATE clan_members
+                SET last_checkin_date = ?, checkin_streak = ?, contribution_points = contribution_points + 10
+                WHERE guild_id = ? AND user_id = ? AND (last_checkin_date IS NULL OR last_checkin_date != ?)
+                """,
+                (date_str, streak, str(guild_id), str(user_id), date_str)
+            )
             await db.commit()
             return cursor.rowcount
+
+    async def get_global_challenge_remaining(self, clan_id: int, cooldown_seconds: int = 43200) -> int:
+        """Trả về số giây còn lại của cooldown gửi Thư Thách Đấu toàn server (0 nếu sẵn sàng)."""
+        now = int(time.time())
+        async with self.connect() as db:
+            async with db.execute("SELECT last_global_challenge_at FROM clans WHERE clan_id = ?", (clan_id,)) as cur:
+                row = await cur.fetchone()
+                if not row or not row[0]:
+                    return 0
+                elapsed = now - int(row[0])
+                return max(0, cooldown_seconds - elapsed)
+
+    async def mark_global_challenge_sent(self, clan_id: int):
+        """Ghi nhận timestamp băng vừa gửi Thư Thách Đấu toàn server."""
+        now = int(time.time())
+        async with self.connect() as db:
+            await db.execute("UPDATE clans SET last_global_challenge_at = ? WHERE clan_id = ?", (now, clan_id))
+            await db.commit()
 
     async def remove_member(self, guild_id: int, user_id: int) -> int:
         async with self.connect() as db:

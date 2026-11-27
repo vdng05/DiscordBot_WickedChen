@@ -106,10 +106,10 @@ PRAGMA synchronous = NORMAL;
 ### 4.2. Nhóm B: Trung Tâm Điều Khiển, Khởi Tạo & Tùy Biến Băng
 - `/clan hub`: **Trung tâm điều khiển 1-Click** tương tác toàn diện (Hồ sơ, Điểm danh, Nhiệm vụ tuần, Cột mốc lịch sử, Ảnh nền Full HD, Nhật ký băng, Quản lý nhân sự, Trao danh hiệu, Cài đặt băng & Role, Thách đấu/Tạo kèo) với cơ chế điều hướng tại chỗ & tự động dọn bảng cũ.
 - `/clan create`: Mở **Discord Modal** nhập Tên băng (3-25 ký tự), Tag ngắn (2-5 ký tự viết hoa), Khẩu hiệu (tối đa 100 ký tự). Bot tự tạo Role và cụm 3 kênh (Chat riêng, Nhật ký riêng, Voice công khai).
-- `/clan settings`: Mở bảng điều khiển dành riêng cho Chủ Băng / Cán Bộ:
+- `/clan settings`: Mở bảng điều khiển dành riêng cho **Chủ Băng (`LEADER`) hoặc Admin Server**:
   - *Đổi Tên / Tag / Khẩu Hiệu:* Hộp thoại Modal nhập mới (khóa cooldown 7 ngày để chống Rate Limit Discord).
-  - *Cài Đặt Role (`/clan setup-role`, `/clan set-role`, `/clan set-gradient`):* Đổi tên Role, màu đơn sắc hoặc **Gradient 2 màu**, tách nhóm (`hoist`), cho phép tag (`mentionable`), hoặc liên kết Role có sẵn.
-  - *Logo, Banner & Icon Role (`/clan upload-image`, `/clan set-image`):* Tải ảnh trực tiếp từ máy tính/điện thoại (thời gian chờ **15 phút**), dán link URL, hoặc dùng **Logo Bát Giác & Banner Cyber Gaming Canvas mặc định** (không yêu cầu Level 2 cho Banner; Icon Role yêu cầu server đạt Boost Lv.2).
+  - *Cài Đặt Role (`/clan setup-role`, `/clan set-role`, `/clan set-gradient`):* Đổi tên Role, màu đơn sắc hoặc **Gradient 2 màu**, tách nhóm (`hoist`), cho phép tag (`mentionable`), hoặc liên kết Role an toàn có sẵn *(chặn Role quản trị/nhạy cảm, Role của băng khác và Role đang có người ngoài băng nắm giữ nếu bạn không phải Admin)*.
+  - *Logo, Banner & Icon Role (`/clan upload-image`, `/clan set-image`):* Tải ảnh trực tiếp từ máy tính/điện thoại (thời gian chờ **15 phút**), dán link URL, hoặc dùng **Logo Bát Giác & Banner Cyber Gaming Canvas mặc định** (Logo & Banner dùng được ngay từ Level 1; Icon Role yêu cầu server đạt Boost Lv.2).
   - *Chế Độ Tuyển Quân:* Chọn giữa Mở Tự Do (`OPEN`), Cần Duyệt (`APPROVAL` - mặc định), hoặc Chỉ Nhận Lời Mời (`INVITE_ONLY`).
 - `/clan disband`: Mở Modal bắt buộc nhập chính xác tên băng để xác nhận giải tán.
 - `/clan help`: Xem hướng dẫn sử dụng chi tiết trực quan ngay trong Discord.
@@ -132,7 +132,7 @@ PRAGMA synchronous = NORMAL;
 ### 4.5. Nhóm E: Hoạt Động Gắn Kết & Thách Đấu
 - `/clan checkin`: Điểm danh mỗi ngày (reset lúc 00:00 giờ Việt Nam). Thưởng **+30 EXP băng**, **+10 Điểm cống hiến**. Đạt chuỗi 7 ngày liên tiếp thưởng thêm **+50 EXP**.
 - `/clan party`: Mở trung tâm **Thách Đấu & Lập Kèo**:
-  - **Gửi Thư Thách Đấu:** Chọn 1 băng đối thủ (hoặc tất cả các băng trong server), nhập Tựa Game, Thể Thức, Thời Gian và Nội Dung qua Modal; băng nhận có nút **Chấp Nhận Thách Đấu** / **Từ Chối Lịch Sự**.
+  - **Gửi Thư Thách Đấu:** Chọn 1 băng đối thủ (hoặc tất cả các băng trong server — chỉ `LEADER`/`CO_LEADER`, cooldown 12 giờ/lần để chống spam ping), nhập Tựa Game, Thể Thức, Thời Gian và Nội Dung qua Modal; băng nhận có nút **Chấp Nhận Thách Đấu** / **Từ Chối Lịch Sự**.
   - **Lập Kèo Nội Bộ (LFG):** Rủ anh em cùng băng lập team chơi game kèm nút **Tham Gia**, **Dự Bị**, **Rút Lui**, **Chốt / Đóng Kèo** và tự động nhắc trước 10 phút.
 - `/clan quests`: Bảng theo dõi 3 nhiệm vụ tuần đồng đội (**Điểm danh**, **Voice Co-op**, **Sôi nổi kênh chat**). Hoàn thành thưởng từ **+300 đến +500 EXP**.
 
@@ -144,16 +144,16 @@ PRAGMA synchronous = NORMAL;
 - **Chat tương tác:** +5 EXP băng & +1 Điểm cống hiến (tin nhắn tối thiểu 5 ký tự trong kênh chat băng, cooldown 60 giây chống spam).
 - **Ngồi Voice Co-op:** Cứ mỗi 5 phút có từ 2 thành viên cùng băng ngồi chung trong kênh Voice (không tính kênh AFK; vẫn tính khi mute/deafen), băng nhận **+15 EXP** và mỗi người nhận **+3 Điểm cống hiến**.
 - **Đêm Lửa Trại Cuối Tuần (x2 EXP):** Diễn ra vào **20:00 – 23:00 Thứ Bảy & Chủ Nhật** (giờ Việt Nam), nhân đôi toàn bộ EXP nhận được từ Chat và Voice Co-op.
-- **Điểm danh & Nhiệm vụ tuần:** Cộng thưởng theo quy tắc ở Nhóm E.
+- **Điểm danh & Nhiệm vụ tuần:** Cộng thưởng theo quy tắc ở Nhóm E *(lịch sử điểm danh theo dõi độc lập từng ngày theo `(guild_id, user_id)`, không thể rời băng sang băng khác để điểm danh lần 2 trong ngày)*.
 
 ### Bảng Mốc Cấp Độ:
 | Cấp độ | EXP yêu cầu | Sĩ số tối đa | Đặc quyền nổi bật |
 | :---: | :---: | :---: | :--- |
-| **Level 1** | 0 EXP | 15 người | 1 Kênh Chat riêng + 1 Kênh Nhật Ký + 1 Kênh Voice public, đổi màu Role đơn sắc/Gradient, upload Logo & Banner |
-| **Level 2** | 1.000 EXP | 25 người | Tăng sĩ số tối đa, tùy chỉnh khẩu hiệu nâng cao |
+| **Level 1** | 0 EXP | 15 người | 1 Kênh Chat riêng + 1 Kênh Nhật Ký + 1 Kênh Voice public, đổi màu Role đơn sắc/Gradient, upload Logo & Banner (Icon Role tùy theo Server Boost Lv.2) |
+| **Level 2** | 1.000 EXP | 25 người | Tăng sĩ số tối đa lên 25, mở rộng không gian hoạt động của băng |
 | **Level 3** | 3.500 EXP | 40 người | **Mở khóa kênh Voice thứ 2** (tự động tạo kênh Voice 2 tách nhóm chơi game) |
-| **Level 4** | 8.000 EXP | 60 người | Tăng sĩ số tối đa, mở khóa Icon Role VIP (yêu cầu server Boost Lv.2) |
-| **Level 5** | 15.000 EXP | 100 người | Đỉnh cao danh vọng, tối đa quyền hạn hội nhóm |
+| **Level 4** | 8.000 EXP | 60 người | Tăng sĩ số tối đa lên 60 thành viên |
+| **Level 5** | 15.000 EXP | 100 người | Đỉnh cao danh vọng, tối đa 100 thành viên |
 
 ---
 
@@ -185,7 +185,7 @@ WickedChen/
 ├── data/
 │   └── clan_bot.db            # File SQLite cơ sở dữ liệu duy nhất
 ├── tests/
-│   └── test_system.py         # Bộ kiểm thử tích hợp 24 bài test tự động
+│   └── test_system.py         # Bộ kiểm thử tích hợp 27 bài test tự động
 ├── HDSD.md                    # Cẩm nang hướng dẫn sử dụng chi tiết cho người dùng & Admin
 ├── config.py                  # Quản lý tập trung mọi biến môi trường
 ├── Dockerfile                 # Đóng gói container Docker siêu nhẹ
@@ -220,7 +220,7 @@ DISCORD_TOKEN=dien_bot_token_vao_day
 OWNER_IDS=dien_discord_user_id_cua_ban
 SYNC_ON_STARTUP=true
 TIMEZONE=Asia/Ho_Chi_Minh
-DEFAULT_LEAVE_COOLDOWN_HOURS=24
+DEFAULT_LEAVE_COOLDOWN_HOURS=0
 LOG_LEVEL=INFO
 ```
 

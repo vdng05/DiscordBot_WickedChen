@@ -493,11 +493,12 @@ class ClanEvents(commands.Cog):
         if lvl_info["level"] > old_level:
             extra_voice_id = clan.get("extra_voice_channel_id")
 
-            # Mở khóa Level 3: Tạo Voice Channel thứ 2 (Public trong duy nhất Category BĂNG ĐẢNG)
+            # Mở khóa Level 3: Tạo Voice Channel thứ 2 (Public, tự mở rộng Category nếu gần trần 50 kênh)
             if lvl_info["level"] >= 3 and not extra_voice_id:
                 try:
+                    from utils.text_helper import get_available_clan_category
                     cfg = await self.bot.db.get_guild_config(guild.id)
-                    category = guild.get_channel(int(cfg["clan_category_id"])) if (cfg and cfg.get("clan_category_id")) else None
+                    category = await get_available_clan_category(guild, self.bot.db, cfg, needed_slots=1)
                     clan_role = guild.get_role(int(clan["role_id"])) if clan.get("role_id") else None
 
                     overwrites = {

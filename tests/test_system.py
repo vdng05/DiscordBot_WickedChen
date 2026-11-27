@@ -429,8 +429,90 @@ async def run_tests():
     assert len(ba_view.children) == 6
     print("✅ 24. Phân quyền Role sử dụng bot dành cho Chủ Bot (ALL / ROLES / NONE) hoạt động chuẩn xác 100%.")
 
+    # 25. Kiểm tra chống farm Điểm Danh khi thoát băng cũ sang băng mới trong cùng ngày
+    from utils.ui_components import perform_daily_checkin, validate_linkable_role
+    clan2_id = await db.create_clan(
+        guild_id=123456789,
+        name="Shadow Wolves",
+        tag="SW",
+        description="Second Clan",
+        role_id=8888,
+        text_channel_id=7778,
+        voice_channel_id=6668,
+        leader_id=444444
+    )
+    await db.add_member(123456789, 777123, clan_id, "MEMBER")
+    res_first = await perform_daily_checkin(db, 123456789, 777123)
+    assert res_first["ok"] is True
+    await db.remove_member(123456789, 777123)
+    await db.add_member(123456789, 777123, clan2_id, "MEMBER")
+    res_second = await perform_daily_checkin(db, 123456789, 777123)
+    assert res_second["ok"] is False
+    print("✅ 25. Cơ chế chống farm điểm danh qua nhiều băng trong cùng 1 ngày hoạt động 100%.")
+
+    # 26. Kiểm tra chặn leo thang đặc quyền khi liên kết Role có sẵn (validate_linkable_role)
+    from types import SimpleNamespace
+    fake_bot_top = SimpleNamespace(position=10)
+    fake_guild = SimpleNamespace(me=SimpleNamespace(top_role=fake_bot_top))
+    normal_actor = SimpleNamespace(guild_permissions=SimpleNamespace(administrator=False))
+    admin_actor = SimpleNamespace(guild_permissions=SimpleNamespace(administrator=True))
+
+    class _FakeRole:
+        def __init__(self, rid, name, pos=5, managed=False, is_default=False, perms_override=None, members=None):
+            perm_attrs = {p: False for p in (
+                "administrator", "manage_guild", "manage_roles", "manage_channels",
+                "kick_members", "ban_members", "moderate_members", "mention_everyone",
+                "manage_webhooks", "manage_messages", "manage_threads"
+            )}
+            if perms_override:
+                perm_attrs.update(perms_override)
+            self.id = rid
+            self.name = name
+            self.position = pos
+            self.mention = f"<@&{rid}>"
+            self.managed = managed
+            self.permissions = SimpleNamespace(**perm_attrs)
+            self.members = members or []
+            self._is_default = is_default
+
+        def is_default(self):
+            return self._is_default
+
+        def __ge__(self, other):
+            return self.position >= other.position
+
+    _make_role = _FakeRole
+
+    clan1_obj = await db.get_clan_by_id(clan_id)
+    clan2_obj = await db.get_clan_by_id(clan2_id)
+    all_clans_list = [clan1_obj, clan2_obj]
+    c1_members = await db.get_clan_members(clan_id)
+
+    # Role có quyền manage_roles -> bị chặn
+    mod_role = _make_role(3001, "Moderator", perms_override={"manage_roles": True})
+    assert validate_linkable_role(fake_guild, normal_actor, mod_role, clan1_obj, all_clans_list, c1_members) is not None
+    # Role thuộc băng khác -> bị chặn
+    other_clan_role = _make_role(int(clan2_obj["role_id"]), "SW Role")
+    assert validate_linkable_role(fake_guild, admin_actor, other_clan_role, clan1_obj, all_clans_list, c1_members) is not None
+    # Role đang có người ngoài băng sở hữu (non-admin) -> bị chặn
+    vip_holder = SimpleNamespace(id=999000, bot=False)
+    vip_role = _make_role(3002, "VIP", members=[vip_holder])
+    assert validate_linkable_role(fake_guild, normal_actor, vip_role, clan1_obj, all_clans_list, c1_members) is not None
+    # Role sạch không quyền nhạy cảm -> hợp lệ
+    clean_role = _make_role(3003, "Clean Role", members=[])
+    assert validate_linkable_role(fake_guild, normal_actor, clean_role, clan1_obj, all_clans_list, c1_members) is None
+    print("✅ 26. Bảo mật validate_linkable_role (chặn quyền nhạy cảm, role băng khác & role người ngoài) hoạt động 100%.")
+
+    # 27. Kiểm tra Cooldown gửi Thư Thách Đấu toàn server & Trạng thái EXPIRED request
+    assert await db.get_global_challenge_remaining(clan_id, 43200) == 0
+    await db.mark_global_challenge_sent(clan_id)
+    assert await db.get_global_challenge_remaining(clan_id, 43200) > 40000
+    req_tmp = await db.create_request(clan_id, 123456789, 888111, 111111, "INVITE")
+    assert await db.update_request_status(req_tmp, "EXPIRED") == 1
+    print("✅ 27. Cooldown Thư Thách Đấu toàn server (12h) & xử lý trạng thái EXPIRED hoạt động 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 24 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
+    print("🎉 TẤT CẢ 27 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%!")
     print("=" * 60)
 
     # Dọn dẹp test db

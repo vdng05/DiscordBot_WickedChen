@@ -46,7 +46,10 @@ from utils.ui_components import (
     ClanHubView,
     WelcomeGreetingView,
     ClanRoleSetupView,
-    ClanQuickPartyModal
+    ClanQuickPartyModal,
+    validate_linkable_role,
+    link_role_to_clan,
+    perform_daily_checkin
 )
 from utils.time_helper import (
     get_today_vn_string,
@@ -298,67 +301,14 @@ class ClanCommands(commands.Cog):
             return
 
         guild = interaction.guild
-        if role.is_default():
-            await interaction.followup.send("❌ Không thể chọn Role `@everyone`!", ephemeral=True)
+        all_clans = await self.bot.db.get_all_clans_in_guild(guild.id)
+        clan_members = await self.bot.db.get_clan_members(clan["clan_id"])
+        err_msg = validate_linkable_role(guild, interaction.user, role, clan, all_clans, clan_members)
+        if err_msg:
+            await interaction.followup.send(err_msg, ephemeral=True)
             return
 
-        if role.managed:
-            await interaction.followup.send("❌ Không thể chọn Role tự động của Bot khác!", ephemeral=True)
-            return
-
-        if role >= guild.me.top_role:
-            await interaction.followup.send(
-                f"⚠️ Role {role.mention} đang nằm cao hơn hoặc bằng Role của Bot!\n"
-                "Vui lòng vào **Server Settings -> Roles** kéo Role của Bot lên cao hơn.",
-                ephemeral=True
-            )
-            return
-
-        # Cập nhật quyền trên Text & Voice Channels
-        old_role_id = clan.get("role_id")
-        old_role = guild.get_role(int(old_role_id)) if old_role_id else None
-
-        for ch_key in ("text_channel_id", "voice_channel_id", "extra_voice_channel_id"):
-            ch_id = clan.get(ch_key)
-            if ch_id:
-                ch = guild.get_channel(int(ch_id))
-                if ch:
-                    try:
-                        if old_role:
-                            await ch.set_permissions(old_role, overwrite=None, reason="Đổi role clan")
-                        await ch.set_permissions(
-                            role,
-                            view_channel=True,
-                            send_messages=True,
-                            embed_links=True,
-                            attach_files=True,
-                            read_message_history=True,
-                            connect=True,
-                            speak=True,
-                            use_voice_activation=True,
-                            reason="Gán role mới cho clan"
-                        )
-                    except Exception as ch_err:
-                        logger.warn(f"Lỗi cập nhật quyền kênh: {ch_err}")
-
-        # Cấp role cho toàn bộ thành viên hiện tại
-        members = await self.bot.db.get_clan_members(clan["clan_id"])
-        for m in members:
-            try:
-                target_mem = guild.get_member(int(m["user_id"])) or await guild.fetch_member(int(m["user_id"]))
-                if target_mem:
-                    await target_mem.add_roles(role, reason="Gán role mới cho clan")
-            except Exception:
-                pass
-
-        hex_color = f"#{role.color.value:06X}" if role.color.value else "#5865F2"
-        await self.bot.db.update_clan(clan["clan_id"], role_id=str(role.id), color_hex=hex_color)
-        await self.bot.db.add_clan_log(
-            clan_id=clan["clan_id"],
-            actor_id=interaction.user.id,
-            action="LINK_ROLE",
-            details=f"Gán role mới {role.name} ({role.id})."
-        )
+        await link_role_to_clan(guild, clan, role, interaction.user, self.bot.db)
         await interaction.followup.send(f"✅ Đã gán thành công Role {role.mention} làm Role chính thức của Băng!", ephemeral=True)
 
     # =========================================================================
@@ -441,7 +391,7 @@ class ClanCommands(commands.Cog):
                     sent_where = f"<#{interaction.channel.id}>"
 
         if not msg:
-            await self.bot.db.update_request_status(req_id, "CANCELLED")
+            await self.bot.db.update_request_status(req_id, "EXPIRED")
             await interaction.followup.send(
                 f"❌ Không thể gửi lời mời tới {user.mention} vì họ đã **khóa tin nhắn riêng (DM)** và không thể xem kênh này! Hãy mời ở một kênh công khai.",
                 ephemeral=True
@@ -855,48 +805,25 @@ class ClanCommands(commands.Cog):
     @clan_group.command(name="checkin", description="Điểm danh hằng ngày nhận EXP băng và điểm cống hiến cá nhân")
     async def clan_checkin(self, interaction: discord.Interaction):
         await interaction.response.defer()
-        guild = interaction.guild
-        user = interaction.user
-
-        clan = await self.bot.db.get_clan_by_member(guild.id, user.id)
-        if not clan:
-            await interaction.followup.send("❌ Bạn chưa tham gia bất kỳ băng đảng nào!")
+        res = await perform_daily_checkin(self.bot.db, interaction.guild.id, interaction.user.id)
+        if not res["ok"]:
+            await interaction.followup.send(res["error"])
             return
 
-        today = get_today_vn_string()
-        yesterday = get_yesterday_vn_string()
-
-        if clan.get("last_checkin_date") == today:
-            await interaction.followup.send("❌ Hôm nay bạn đã điểm danh rồi! Hãy quay lại sau 00:00 (giờ Việt Nam).")
-            return
-
-        new_streak = 1
-        if clan.get("last_checkin_date") == yesterday:
-            new_streak = (clan.get("checkin_streak") or 0) + 1
-
-        clan_exp_to_add = EXP_REWARDS.CHECKIN_EXP
-        is_streak_7 = (new_streak % 7 == 0)
-        if is_streak_7:
-            clan_exp_to_add += EXP_REWARDS.CHECKIN_STREAK_7_BONUS_EXP
-
-        await self.bot.db.update_checkin(guild.id, user.id, today, new_streak)
-        await self.bot.db.add_clan_exp(clan["clan_id"], clan_exp_to_add, clan_exp_to_add)
-
-        # Cập nhật nhiệm vụ tuần CHECKIN_COUNT
-        week_key = get_current_week_key()
-        quest_res = await self.bot.db.increment_quest_progress(clan["clan_id"], week_key, "CHECKIN_COUNT", 1)
-        if quest_res["completed_now"]:
-            await self.bot.db.add_clan_exp(clan["clan_id"], quest_res["reward_exp"], quest_res["reward_exp"])
-
+        clan = res["clan"]
         embed = discord.Embed(
             title="📅 ĐIỂM DANH HẰNG NGÀY THÀNH CÔNG!",
             description=f"Bạn đã điểm danh thành công cho băng **{clan['name']}**!",
             color=discord.Color.green(),
             timestamp=datetime.now()
         )
-        embed.add_field(name="🔥 Chuỗi Điểm Danh (Streak)", value=f"**{new_streak}** ngày {'🎁 *(Thưởng +50 EXP mốc 7 ngày!)*' if is_streak_7 else ''}", inline=True)
-        embed.add_field(name="🏰 EXP Băng Nhận Được", value=f"**+{clan_exp_to_add}** EXP", inline=True)
-        embed.add_field(name="🏆 Điểm Cống Hiến Cá Nhân", value=f"**+{EXP_REWARDS.CHECKIN_CONTRIBUTION}** điểm", inline=True)
+        embed.add_field(
+            name="🔥 Chuỗi Điểm Danh (Streak)",
+            value=f"**{res['new_streak']}** ngày {'🎁 *(Thưởng +50 EXP mốc 7 ngày!)*' if res['is_streak_7'] else ''}",
+            inline=True
+        )
+        embed.add_field(name="🏰 EXP Băng Nhận Được", value=f"**+{res['clan_exp_to_add']}** EXP", inline=True)
+        embed.add_field(name="🏆 Điểm Cống Hiến Cá Nhân", value=f"**+{res['contribution']}** điểm", inline=True)
         embed.set_footer(text="Hãy duy trì điểm danh hằng ngày cùng anh em!")
 
         await interaction.followup.send(embed=embed)

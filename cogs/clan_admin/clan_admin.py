@@ -135,7 +135,8 @@ class ClanAdmin(commands.Cog):
         members_synced = 0
         issues = []
 
-        category = guild.get_channel(int(config["clan_category_id"]))
+        from utils.text_helper import to_channel_slug, get_available_clan_category
+        category = await get_available_clan_category(guild, self.bot.db, config, needed_slots=3)
 
         for c in clans:
             # 1. Kiểm tra Role
@@ -156,8 +157,9 @@ class ClanAdmin(commands.Cog):
                     issues.append(f"Không thể tạo lại Role cho băng **{c['name']}**: {e}")
 
             # 2. Kiểm tra Kênh Chat, Nhật Ký Băng & Voice Public (KHÔNG tự ý sửa đổi/xóa kênh đang tồn tại)
-            from utils.text_helper import to_channel_slug
             clean_slug = to_channel_slug(c["name"])[:30]
+            if category and len(category.channels) >= 47:
+                category = await get_available_clan_category(guild, self.bot.db, config, needed_slots=3)
             expected_ch_name = f"💬・{clean_slug}"
             expected_log_name = f"📜・nhat-ky-{clean_slug}"[:35]
 
