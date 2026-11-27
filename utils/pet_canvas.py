@@ -469,3 +469,40 @@ def generate_clan_pet_image(pet: Dict[str, Any], clan: Dict[str, Any]) -> io.Byt
         pass
     buf.seek(0)
     return buf
+
+
+def generate_clan_pet_preview_image(pet: Dict[str, Any], clan: Dict[str, Any], preview_item: Dict[str, Any]) -> io.BytesIO:
+    """Render ảnh xem trước vật phẩm trong Cửa Hàng trực tiếp lên Linh Thú (không ghi cache)."""
+    c1_hex = clan.get("color_hex") or "#5865F2"
+    c2_hex = clan.get("secondary_color_hex") or ""
+    c1 = hex_to_rgb(c1_hex)
+    c2 = hex_to_rgb(c2_hex) if c2_hex else _blend(c1, (255, 255, 255), 0.35)
+
+    lvl_info = get_pet_level_info(int(pet.get("exp", 0)))
+    cur_stage = lvl_info["stage"]
+    preview_stage = max(cur_stage, int(preview_item.get("min_stage", 1)))
+    level = lvl_info["level"]
+    species = pet["species"]
+    equipped = dict(pet.get("equipped") or {})
+    equipped[preview_item["slot"]] = preview_item["item_id"]
+
+    hunger = int(pet.get("hunger", 80))
+    mood = int(pet.get("mood", 80))
+    expr = compute_pet_expression(hunger, mood)
+
+    img = Image.new("RGBA", (600, 600), (0, 0, 0, 255))
+    _draw_background(img, equipped.get("background"), c1, c2)
+    _draw_aura_and_back(img, species, preview_stage, equipped, c1, c2)
+    _draw_body(img, species, preview_stage, max(level, 3 if preview_stage == 1 else level), c1, c2)
+    _draw_face(img, species, preview_stage, expr)
+    _draw_outfit(img, species, preview_stage, equipped, c1)
+    _draw_headwear(img, species, preview_stage, equipped)
+    _draw_face_and_held(img, species, preview_stage, equipped)
+
+    stage_label = f"Xem trước (Stage {preview_stage})" if preview_stage > cur_stage else lvl_info["stage_name"]
+    _draw_ui_overlay(img, pet, stage_label, level, c1)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf

@@ -4564,6 +4564,14 @@ class BotAccessControlView(SafeView):
     async def disable_all_btn(self, interaction: discord.Interaction, button: ui.Button):
         await self._set_mode(interaction, "NONE", "🔴 Đã **TẮT TẤT CẢ** — Chỉ Chủ Bot mới có thể sử dụng bot trên máy chủ này!")
 
+    @ui.button(label="Quản Lý & Buff (Chủ Bot)", emoji="👑", style=discord.ButtonStyle.primary, row=2)
+    async def owner_panel_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        embed = await build_bot_owner_panel_embed(interaction.guild, clans, None, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, selected_clan=None, mode=self.mode, role_ids=self.role_ids, bot=self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+
     @ui.button(label="Xóa Hết Role Đã Chọn", emoji="🧹", style=discord.ButtonStyle.secondary, row=2)
     async def clear_roles_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
@@ -4585,6 +4593,334 @@ class BotAccessControlView(SafeView):
             pass
         if hasattr(self.bot, "dismiss_user_panel"):
             await self.bot.dismiss_user_panel(interaction.user.id)
+
+
+# =============================================================================
+# BẢNG QUẢN LÝ & BUFF TOÀN HỆ THỐNG DÀNH CHO CHỦ BOT (/bot-access)
+# =============================================================================
+
+async def build_bot_owner_panel_embed(
+    guild: discord.Guild,
+    clans: List[Dict[str, Any]],
+    selected_clan: Optional[Dict[str, Any]],
+    db: Any,
+) -> discord.Embed:
+    if not selected_clan:
+        return discord.Embed(
+            title=f"👑 BẢNG QUẢN LÝ & BUFF HỆ THỐNG — {guild.name}",
+            description=(
+                f"Hiện có **{len(clans)}** băng đảng đang hoạt động trong máy chủ.\n\n"
+                "👉 Hãy **chọn một băng đảng** ở menu bên dưới để:\n"
+                "• **⚡ Buff EXP Băng** (tự động lên cấp & mở slot)\n"
+                "• **🐾 Buff Pet EXP, Xu Linh Thú, Độ No & Độ Vui**\n"
+                "• **✏️ Sửa Tên, Tag, Sĩ Số Tối Đa hoặc Đổi Role**\n"
+                "• **🧹 Xóa Pet** hoặc **🗑️ Xóa Sạch Băng & Toàn Bộ Dữ Liệu**"
+            ),
+            color=discord.Color.gold(),
+            timestamp=datetime.now()
+        )
+
+    mem_count = await db.get_member_count(selected_clan["clan_id"])
+    pet = await db.get_clan_pet(selected_clan["clan_id"])
+    pet_txt = (
+        f"🐾 **{pet['name']}** (`{pet['species']}`) • Lv.**{pet['level']}** (Stage {pet['stage']})\n"
+        f"┗ Pet EXP: **{pet['exp']:,}** • Xu: **{pet['pet_coins']:,}** 🪙 • No: **{pet['hunger']}%** • Vui: **{pet['mood']}%**"
+        if pet else "_Chưa nhận Linh Thú_"
+    )
+    role_mention = f"<@&{selected_clan['role_id']}>" if selected_clan.get("role_id") else "_Không có_"
+    embed = discord.Embed(
+        title=f"👑 QUẢN LÝ BĂNG: [{selected_clan['tag']}] {selected_clan['name']}",
+        description=f"📜 Khẩu hiệu: *{selected_clan.get('description') or 'Chưa có'}*",
+        color=parse_hex_color(selected_clan.get("color_hex")),
+        timestamp=datetime.now()
+    )
+    embed.add_field(name="👑 Chủ Băng", value=f"<@{selected_clan['leader_id']}>", inline=True)
+    embed.add_field(name="📈 Cấp & EXP", value=f"Lv.**{selected_clan['level']}** (`{selected_clan['exp']:,}` EXP)", inline=True)
+    embed.add_field(name="👥 Sĩ Số & Role", value=f"**{mem_count}/{selected_clan['max_members']}** • {role_mention}", inline=True)
+    embed.add_field(name="🐾 Linh Thú & Quỹ Xu", value=pet_txt, inline=False)
+    embed.set_footer(text="Chỉ Chủ Bot (Bot Owner) mới có quyền thao tác bảng này")
+    return embed
+
+
+class BotOwnerBuffClanModal(SafeModal, title="⚡ Buff / Điều Chỉnh EXP Băng"):
+    def __init__(self, clan: Dict[str, Any], mode: str, role_ids: List[str], bot: Any):
+        super().__init__()
+        self.clan = clan
+        self.mode = mode
+        self.role_ids = role_ids
+        self.bot = bot
+        self.exp_input = ui.TextInput(
+            label="Số EXP Băng Cộng/Trừ (VD: 1000 hoặc -500)",
+            placeholder="Nhập số nguyên, ví dụ 2500",
+            default="1000",
+            max_length=12,
+            required=True
+        )
+        self.add_item(self.exp_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            delta = int(self.exp_input.value.strip())
+        except ValueError:
+            await auto_dismiss_notice(interaction, content="❌ Vui lòng nhập số nguyên hợp lệ!", delay=5)
+            return
+        await interaction.response.defer()
+        updated = await self.bot.db.owner_buff_clan_exp(self.clan["clan_id"], delta)
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        embed = await build_bot_owner_panel_embed(interaction.guild, clans, updated, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, updated, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+        await auto_dismiss_notice(interaction, content=f"⚡ Đã điều chỉnh **{delta:+,} EXP** cho băng **[{updated['tag']}] {updated['name']}** (Lv.{updated['level']})!", delay=5)
+
+
+class BotOwnerBuffPetModal(SafeModal, title="🐾 Buff Pet EXP & Xu Linh Thú"):
+    def __init__(self, clan: Dict[str, Any], mode: str, role_ids: List[str], bot: Any):
+        super().__init__()
+        self.clan = clan
+        self.mode = mode
+        self.role_ids = role_ids
+        self.bot = bot
+        self.pet_exp = ui.TextInput(label="Cộng/Trừ Pet EXP", default="500", max_length=12, required=True)
+        self.pet_coins = ui.TextInput(label="Cộng/Trừ Xu Linh Thú", default="500", max_length=12, required=True)
+        self.hunger_delta = ui.TextInput(label="Cộng Độ No (0-100)", default="100", max_length=6, required=False)
+        self.mood_delta = ui.TextInput(label="Cộng Độ Vui (0-100)", default="100", max_length=6, required=False)
+        self.add_item(self.pet_exp)
+        self.add_item(self.pet_coins)
+        self.add_item(self.hunger_delta)
+        self.add_item(self.mood_delta)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            d_exp = int(self.pet_exp.value.strip() or "0")
+            d_coins = int(self.pet_coins.value.strip() or "0")
+            d_hun = int(self.hunger_delta.value.strip() or "0")
+            d_mood = int(self.mood_delta.value.strip() or "0")
+        except ValueError:
+            await auto_dismiss_notice(interaction, content="❌ Giá trị nhập vào phải là số nguyên!", delay=5)
+            return
+        await interaction.response.defer()
+        pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
+        if not pet:
+            pet = await self.bot.db.create_clan_pet(self.clan["clan_id"], "cyber_cat", "Bé Mèo Cyber")
+        updated_pet = await self.bot.db.owner_buff_pet(self.clan["clan_id"], d_exp, d_coins, d_hun, d_mood)
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        clan_obj = await self.bot.db.get_clan_by_id(self.clan["clan_id"])
+        embed = await build_bot_owner_panel_embed(interaction.guild, clans, clan_obj, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, clan_obj, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+        await auto_dismiss_notice(
+            interaction,
+            content=f"🐾 Đã buff Pet **{updated_pet['name']}**: Lv.**{updated_pet['level']}** (Stage {updated_pet['stage']}), Xu: **{updated_pet['pet_coins']:,}** 🪙!",
+            delay=6
+        )
+
+
+class BotOwnerEditClanModal(SafeModal, title="✏️ Chỉnh Sửa Thông Tin Băng"):
+    def __init__(self, clan: Dict[str, Any], mode: str, role_ids: List[str], bot: Any):
+        super().__init__()
+        self.clan = clan
+        self.mode = mode
+        self.role_ids = role_ids
+        self.bot = bot
+        self.clan_name = ui.TextInput(label="Tên Băng Mới", default=clan["name"][:25], min_length=3, max_length=25, required=True)
+        self.clan_tag = ui.TextInput(label="Tag Mới (2-5 ký tự)", default=clan["tag"][:5], min_length=2, max_length=5, required=True)
+        self.clan_desc = ui.TextInput(label="Khẩu Hiệu", default=(clan.get("description") or "")[:100], max_length=100, required=False)
+        self.max_mem = ui.TextInput(label="Sĩ Số Tối Đa", default=str(clan.get("max_members", 15)), max_length=4, required=True)
+        self.add_item(self.clan_name)
+        self.add_item(self.clan_tag)
+        self.add_item(self.clan_desc)
+        self.add_item(self.max_mem)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            new_max = max(1, min(500, int(self.max_mem.value.strip())))
+        except ValueError:
+            await auto_dismiss_notice(interaction, content="❌ Sĩ số tối đa phải là số nguyên!", delay=5)
+            return
+        await interaction.response.defer()
+        new_name = self.clan_name.value.strip()
+        new_tag = self.clan_tag.value.strip().upper()
+        new_desc = self.clan_desc.value.strip()
+        await self.bot.db.update_clan(
+            self.clan["clan_id"],
+            name=new_name,
+            tag=new_tag,
+            description=new_desc,
+            max_members=new_max
+        )
+        role = interaction.guild.get_role(int(self.clan["role_id"])) if self.clan.get("role_id") else None
+        if role:
+            try:
+                await role.edit(name=f"[{new_tag}] {new_name}", reason="Chủ Bot chỉnh sửa thông tin băng")
+            except Exception:
+                pass
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        updated = await self.bot.db.get_clan_by_id(self.clan["clan_id"])
+        embed = await build_bot_owner_panel_embed(interaction.guild, clans, updated, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, updated, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+        await auto_dismiss_notice(interaction, content=f"✅ Đã cập nhật thông tin băng **[{new_tag}] {new_name}**!", delay=5)
+
+
+class BotOwnerDeleteClanConfirmView(SafeView):
+    """Xác nhận xóa sạch băng đảng, Role, Kênh, Pet và toàn bộ dữ liệu liên quan."""
+    def __init__(self, clan: Dict[str, Any], mode: str, role_ids: List[str], bot: Any):
+        super().__init__(timeout=120)
+        self.clan = clan
+        self.mode = mode
+        self.role_ids = role_ids
+        self.bot = bot
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return hasattr(self.bot, "is_bot_owner") and await self.bot.is_bot_owner(interaction.user)
+
+    @ui.button(label="Xác Nhận Xóa Toàn Bộ", emoji="💥", style=discord.ButtonStyle.danger)
+    async def confirm_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        guild = interaction.guild
+        clan = self.clan
+        await self.bot.db.delete_clan_pet(clan["clan_id"])
+        await self.bot.db.delete_clan(clan["clan_id"])
+
+        for ch_key in ("text_channel_id", "log_channel_id", "voice_channel_id", "extra_voice_channel_id"):
+            ch_id = clan.get(ch_key)
+            if ch_id:
+                ch = guild.get_channel(int(ch_id))
+                if ch:
+                    try:
+                        await ch.delete(reason="Chủ Bot xóa toàn bộ băng & dữ liệu")
+                    except Exception:
+                        pass
+        if clan.get("role_id"):
+            role = guild.get_role(int(clan["role_id"]))
+            if role:
+                try:
+                    await role.delete(reason="Chủ Bot xóa toàn bộ băng & dữ liệu")
+                except Exception:
+                    pass
+        from utils.pet_canvas import PET_CACHE_DIR
+        for f in PET_CACHE_DIR.glob(f"{clan['clan_id']}_*.png"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
+
+        clans = await self.bot.db.get_all_clans_in_guild(guild.id)
+        embed = await build_bot_owner_panel_embed(guild, clans, None, self.bot.db)
+        view = BotOwnerSystemPanelView(guild, clans, None, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+        await auto_dismiss_notice(interaction, content=f"💥 Đã xóa sạch băng **[{clan['tag']}] {clan['name']}**, Role, Kênh và toàn bộ Pet!", delay=6)
+
+    @ui.button(label="Hủy Bỏ", emoji="↩️", style=discord.ButtonStyle.secondary)
+    async def cancel_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        embed = await build_bot_owner_panel_embed(interaction.guild, clans, self.clan, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, self.clan, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+
+
+class BotOwnerSystemPanelView(SafeView):
+    """Bảng quản lý, chỉnh sửa, xóa băng/Pet/Role và Buff dành riêng cho Chủ Bot."""
+    def __init__(
+        self,
+        guild: discord.Guild,
+        clans: List[Dict[str, Any]],
+        selected_clan: Optional[Dict[str, Any]],
+        mode: str,
+        role_ids: List[str],
+        bot: Any,
+    ):
+        super().__init__(timeout=600)
+        self.guild = guild
+        self.clans_map = {str(c["clan_id"]): c for c in clans}
+        self.selected_clan = selected_clan
+        self.mode = mode
+        self.role_ids = role_ids
+        self.bot = bot
+
+        opts = [
+            discord.SelectOption(
+                label=f"[{c['tag']}] {c['name']} (Lv.{c.get('level', 1)})"[:100],
+                value=str(c["clan_id"]),
+                default=(selected_clan is not None and str(c["clan_id"]) == str(selected_clan["clan_id"])),
+                description=f"EXP: {c.get('exp', 0):,} • Chủ băng ID: {c['leader_id']}"[:100]
+            )
+            for c in clans[:25]
+        ]
+        if not opts:
+            opts.append(discord.SelectOption(label="Chưa có băng nào trong server", value="NONE"))
+            self.clan_select.disabled = True
+        self.clan_select.options = opts
+
+        if not selected_clan:
+            for item in (self.buff_clan_btn, self.buff_pet_btn, self.edit_clan_btn, self.delete_pet_btn, self.delete_clan_btn):
+                self.remove_item(item)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if hasattr(self.bot, "is_bot_owner") and await self.bot.is_bot_owner(interaction.user):
+            return True
+        await auto_dismiss_notice(interaction, content="🔒 Chỉ **Chủ Bot** mới có quyền sử dụng bảng này!", delay=5)
+        return False
+
+    @ui.select(placeholder="🏰 Chọn Băng Đảng muốn quản lý / buff...", row=0)
+    async def clan_select(self, interaction: discord.Interaction, select: ui.Select):
+        val = select.values[0]
+        if val == "NONE":
+            return
+        await interaction.response.defer()
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        chosen = await self.bot.db.get_clan_by_id(int(val))
+        embed = await build_bot_owner_panel_embed(interaction.guild, clans, chosen, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+
+    @ui.button(label="Buff EXP Băng", emoji="⚡", style=discord.ButtonStyle.success, row=1)
+    async def buff_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BotOwnerBuffClanModal(self.selected_clan, self.mode, self.role_ids, self.bot))
+
+    @ui.button(label="Buff Pet & Xu", emoji="🐾", style=discord.ButtonStyle.success, row=1)
+    async def buff_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BotOwnerBuffPetModal(self.selected_clan, self.mode, self.role_ids, self.bot))
+
+    @ui.button(label="Sửa Băng / Role", emoji="✏️", style=discord.ButtonStyle.primary, row=1)
+    async def edit_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BotOwnerEditClanModal(self.selected_clan, self.mode, self.role_ids, self.bot))
+
+    @ui.button(label="Xóa Pet Băng", emoji="🧹", style=discord.ButtonStyle.danger, row=2)
+    async def delete_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        await self.bot.db.delete_clan_pet(self.selected_clan["clan_id"])
+        from utils.pet_canvas import PET_CACHE_DIR
+        for f in PET_CACHE_DIR.glob(f"{self.selected_clan['clan_id']}_*.png"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
+        embed = await build_bot_owner_panel_embed(interaction.guild, clans, chosen, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+        await auto_dismiss_notice(interaction, content=f"🧹 Đã xóa toàn bộ dữ liệu Linh Thú của băng **[{chosen['tag']}] {chosen['name']}**!", delay=5)
+
+    @ui.button(label="Xóa Băng & Tất Cả", emoji="🗑️", style=discord.ButtonStyle.danger, row=2)
+    async def delete_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        embed = discord.Embed(
+            title=f"⚠️ XÁC NHẬN XÓA TOÀN BỘ: [{self.selected_clan['tag']}] {self.selected_clan['name']}",
+            description="Hành động này sẽ xóa **Role Discord**, **các Kênh của băng**, **Linh Thú**, **Tủ đồ Pet** và **toàn bộ dữ liệu** không thể khôi phục!",
+            color=discord.Color.red()
+        )
+        view = BotOwnerDeleteClanConfirmView(self.selected_clan, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
+
+    @ui.button(label="Về Phân Quyền Role", emoji="🔐", style=discord.ButtonStyle.secondary, row=2)
+    async def back_access_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        embed = build_bot_access_embed(interaction.guild.name, self.mode, self.role_ids)
+        view = BotAccessControlView(interaction.guild.name, self.mode, self.role_ids, bot=self.bot)
+        await interaction.edit_original_response(embed=embed, view=view)
 
 
 # =============================================================================
@@ -4900,7 +5236,9 @@ async def _render_mission_hub(interaction: discord.Interaction, clan: Dict[str, 
         file = discord.File(fp=buf, filename="quests.png")
         files = [file]
         logo_ref = await resolve_clan_logo(clan, files, fallback_to_default=True)
-        embed = build_quests_embed(clan, weekly_quests, week_key, attachment_filename="quests.png", logo_filename=logo_ref)
+        embed = build_quests_embed(clan, weekly_quests, week_key, attachment_filename="quests.png")
+        if logo_ref:
+            embed.set_thumbnail(url=logo_ref)
     else:
         meta_map = {q["quest_type"]: q for q in DEFAULT_DAILY_QUESTS}
         lines = []
@@ -5130,14 +5468,23 @@ class ClanPetRenameModal(SafeModal, title="✏️ Đổi Tên Linh Thú Băng"):
 
 
 class ClanPetShopView(SafeView):
-    """Cửa hàng thời trang & phông nền Linh Thú (mua bằng Xu Linh Thú)."""
-    def __init__(self, clan: Dict[str, Any], pet: Dict[str, Any], owned_ids: List[str], style_filter: str, bot: Any):
+    """Cửa hàng thời trang & phông nền Linh Thú — Hỗ trợ XEM TRƯỚC vật phẩm trên Pet trước khi mua."""
+    def __init__(
+        self,
+        clan: Dict[str, Any],
+        pet: Dict[str, Any],
+        owned_ids: List[str],
+        style_filter: str,
+        bot: Any,
+        selected_item_id: Optional[str] = None,
+    ):
         super().__init__(timeout=300)
         self.clan = clan
         self.pet = pet
         self.owned_ids = set(owned_ids)
         self.style_filter = style_filter
         self.bot = bot
+        self.selected_item_id = selected_item_id
 
         style_opts = [
             discord.SelectOption(label="Tất cả phong cách", value="ALL", emoji="🌟", default=(style_filter == "ALL"))
@@ -5155,6 +5502,7 @@ class ClanPetShopView(SafeView):
                 discord.SelectOption(
                     label=f"{it['name']} ({owned_tag})"[:100],
                     value=it["item_id"],
+                    default=(it["item_id"] == selected_item_id),
                     description=f"{PET_SLOT_NAMES.get(it['slot'], it['slot'])} • Yêu cầu Stage {it['min_stage']}"[:100]
                 )
             )
@@ -5163,15 +5511,33 @@ class ClanPetShopView(SafeView):
             self.buy_select.disabled = True
         self.buy_select.options = item_opts
 
+        if not selected_item_id or selected_item_id not in PET_CATALOG_MAP:
+            self.remove_item(self.confirm_buy_btn)
+        else:
+            sel_item = PET_CATALOG_MAP[selected_item_id]
+            if selected_item_id in self.owned_ids:
+                self.confirm_buy_btn.label = "Đã Sở Hữu Trong Tủ Đồ"
+                self.confirm_buy_btn.style = discord.ButtonStyle.secondary
+                self.confirm_buy_btn.disabled = True
+            else:
+                self.confirm_buy_btn.label = f"Mua Ngay ({sel_item['price']} Xu)"
+                self.confirm_buy_btn.style = discord.ButtonStyle.success
+                self.confirm_buy_btn.disabled = int(pet.get("pet_coins", 0)) < sel_item["price"]
+
     @ui.select(placeholder="🎨 Lọc theo phong cách thời trang...", row=0)
     async def style_select(self, interaction: discord.Interaction, select: ui.Select):
         await interaction.response.defer()
         pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
         inv = await self.bot.db.get_pet_inventory(self.clan["clan_id"])
         view = ClanPetShopView(self.clan, pet, inv, select.values[0], self.bot)
-        await interaction.edit_original_response(view=view)
+        embed = discord.Embed(
+            title=f"🛒 CỬA HÀNG LINH THÚ — Quỹ Băng: {pet['pet_coins']:,} Xu 🪙",
+            description="Chọn vật phẩm ở menu dưới để **xem trước trực tiếp trên Linh Thú** trước khi bấm mua!",
+            color=discord.Color.gold()
+        )
+        await interaction.edit_original_response(embed=embed, attachments=[], view=view)
 
-    @ui.select(placeholder="🛒 Chọn vật phẩm muốn mua vào Tủ Đồ Băng...", row=1)
+    @ui.select(placeholder="👁️ Chọn vật phẩm để XEM TRƯỚC trên Linh Thú...", row=1)
     async def buy_select(self, interaction: discord.Interaction, select: ui.Select):
         item_id = select.values[0]
         if item_id == "NONE":
@@ -5179,14 +5545,45 @@ class ClanPetShopView(SafeView):
         item = PET_CATALOG_MAP.get(item_id)
         if not item:
             return
-        res = await self.bot.db.buy_pet_item(self.clan["clan_id"], item_id, item["price"])
+        await interaction.response.defer()
+        pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
+        inv = await self.bot.db.get_pet_inventory(self.clan["clan_id"])
+
+        from utils.pet_canvas import generate_clan_pet_preview_image
+        buf = await asyncio.to_thread(generate_clan_pet_preview_image, pet, self.clan, item)
+        file = discord.File(fp=buf, filename="pet_preview.png")
+
+        owned = item_id in inv
+        cur_info = get_pet_level_info(int(pet.get("exp", 0)))
+        stage_warn = f"\n⚠️ *Linh Thú hiện đang ở Stage {cur_info['stage']}, món này mặc được từ **Stage {item['min_stage']}** (đang hiển thị mô phỏng)*." if cur_info["stage"] < item["min_stage"] else ""
+        embed = discord.Embed(
+            title=f"👁️ XEM TRƯỚC: {item['name']}",
+            description=(
+                f"• **Phong cách:** {PET_STYLE_NAMES.get(item['style'], item['style'])}\n"
+                f"• **Vị trí:** {PET_SLOT_NAMES.get(item['slot'], item['slot'])}\n"
+                f"• **Giá bán:** **{item['price']}** Xu 🪙 *(Quỹ băng hiện có: **{pet['pet_coins']:,}** Xu)*\n"
+                f"• **Trạng thái:** {'✅ Đã sở hữu trong Tủ Đồ' if owned else '🛒 Chưa mua'}"
+                f"{stage_warn}"
+            ),
+            color=discord.Color.gold()
+        )
+        embed.set_image(url="attachment://pet_preview.png")
+        view = ClanPetShopView(self.clan, pet, inv, self.style_filter, self.bot, selected_item_id=item_id)
+        await interaction.edit_original_response(embed=embed, attachments=[file], view=view)
+
+    @ui.button(label="Mua Vật Phẩm Này", emoji="🛒", style=discord.ButtonStyle.success, row=2)
+    async def confirm_buy_btn(self, interaction: discord.Interaction, button: ui.Button):
+        if not self.selected_item_id or self.selected_item_id not in PET_CATALOG_MAP:
+            return
+        item = PET_CATALOG_MAP[self.selected_item_id]
+        res = await self.bot.db.buy_pet_item(self.clan["clan_id"], self.selected_item_id, item["price"])
         if not res["ok"]:
             await auto_dismiss_notice(interaction, content=res["error"], delay=5)
             return
         await interaction.response.defer()
         pet = await self.bot.db.get_clan_pet(self.clan["clan_id"])
         inv = await self.bot.db.get_pet_inventory(self.clan["clan_id"])
-        view = ClanPetShopView(self.clan, pet, inv, self.style_filter, self.bot)
+        view = ClanPetShopView(self.clan, pet, inv, self.style_filter, self.bot, selected_item_id=self.selected_item_id)
         embed = discord.Embed(
             title=f"🛒 CỬA HÀNG LINH THÚ — Quỹ: {pet['pet_coins']:,} Xu 🪙",
             description=f"✅ Đã mua **{item['name']}** vào Tủ Đồ Chung của băng! Hãy vào **Tủ Đồ & Phối Style** để mặc cho Pet.",

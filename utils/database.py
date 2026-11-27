@@ -10,7 +10,7 @@ from pathlib import Path
 import time
 from typing import Optional, Dict, List, Any
 from utils.logger import setup_logging
-from utils.constants import DEFAULT_WEEKLY_QUESTS, DEFAULT_DAILY_QUESTS, get_pet_level_info
+from utils.constants import DEFAULT_WEEKLY_QUESTS, DEFAULT_DAILY_QUESTS, LEVELS, get_pet_level_info
 
 logger = setup_logging("Database")
 
@@ -1275,3 +1275,54 @@ class DatabaseManager:
                 (str(guild_id), str(user_id), action_type, now)
             )
             await db.commit()
+
+    async def delete_clan_pet(self, clan_id: int):
+        """Xóa toàn bộ dữ liệu Linh Thú & Tủ đồ của băng."""
+        async with self.connect() as db:
+            await db.execute("DELETE FROM clan_pet_inventory WHERE clan_id = ?", (clan_id,))
+            await db.execute("DELETE FROM clan_pets WHERE clan_id = ?", (clan_id,))
+            await db.commit()
+
+    async def owner_buff_clan_exp(self, clan_id: int, exp_delta: int) -> Optional[Dict[str, Any]]:
+        """Chủ Bot buff/điều chỉnh EXP băng và tự động tính lại Level & Sĩ số tối đa."""
+        clan = await self.get_clan_by_id(clan_id)
+        if not clan:
+            return None
+        new_exp = max(0, int(clan.get("exp", 0)) + exp_delta)
+        new_weekly = max(0, int(clan.get("weekly_exp", 0)) + max(0, exp_delta))
+        lvl_row = LEVELS[0]
+        for lv in LEVELS:
+            if new_exp >= lv["req_exp"]:
+                lvl_row = lv
+        async with self.connect() as db:
+            await db.execute(
+                "UPDATE clans SET exp = ?, weekly_exp = ?, level = ?, max_members = ? WHERE clan_id = ?",
+                (new_exp, new_weekly, lvl_row["level"], lvl_row["max_members"], clan_id)
+            )
+            await db.commit()
+        return await self.get_clan_by_id(clan_id)
+
+    async def owner_buff_pet(
+        self,
+        clan_id: int,
+        exp_delta: int = 0,
+        coins_delta: int = 0,
+        hunger_delta: int = 0,
+        mood_delta: int = 0,
+    ) -> Optional[Dict[str, Any]]:
+        """Chủ Bot buff Pet EXP, Xu Linh Thú, Độ No và Độ Vui trực tiếp."""
+        pet = await self.get_clan_pet(clan_id)
+        if not pet:
+            return None
+        new_exp = max(0, int(pet.get("exp", 0)) + exp_delta)
+        new_coins = max(0, int(pet.get("pet_coins", 0)) + coins_delta)
+        new_hunger = min(100, max(0, int(pet.get("hunger", 80)) + hunger_delta))
+        new_mood = min(100, max(0, int(pet.get("mood", 80)) + mood_delta))
+        info = get_pet_level_info(new_exp)
+        async with self.connect() as db:
+            await db.execute(
+                "UPDATE clan_pets SET exp = ?, level = ?, stage = ?, pet_coins = ?, hunger = ?, mood = ? WHERE clan_id = ?",
+                (new_exp, info["level"], info["stage"], new_coins, new_hunger, new_mood, clan_id)
+            )
+            await db.commit()
+        return await self.get_clan_pet(clan_id)

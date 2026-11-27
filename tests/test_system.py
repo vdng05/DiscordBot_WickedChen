@@ -426,7 +426,7 @@ async def run_tests():
     ba_embed = build_bot_access_embed("Test Server", "ROLES", ["555111"])
     assert "PHÂN QUYỀN SỬ DỤNG BOT" in ba_embed.title
     ba_view = BotAccessControlView("Test Server", "ROLES", ["555111"], bot=bot)
-    assert len(ba_view.children) == 6
+    assert len(ba_view.children) == 7
     print("✅ 24. Phân quyền Role sử dụng bot dành cho Chủ Bot (ALL / ROLES / NONE) hoạt động chuẩn xác 100%.")
 
     # 25. Kiểm tra chống farm Điểm Danh khi thoát băng cũ sang băng mới trong cùng ngày
@@ -623,8 +623,37 @@ async def run_tests():
     assert len(p_view.children) >= 8
     print("✅ 33. Hub tinh gọn & các View Nhiệm Vụ / Linh Thú hoạt động chuẩn xác 100%.")
 
+    # 34. Kiểm tra Weekly Quests embed, Pet Shop Preview & Bot Owner Buff/Delete tools
+    from utils.embeds import build_quests_embed
+    from utils.time_helper import get_current_week_key
+    from utils.pet_canvas import generate_clan_pet_preview_image
+    from utils.constants import PET_CATALOG_MAP
+    from utils.ui_components import ClanPetShopView, BotOwnerSystemPanelView
+
+    w_quests = await db.ensure_weekly_quests(clan_id, get_current_week_key())
+    q_embed = build_quests_embed(clan1_obj, w_quests, get_current_week_key(), attachment_filename="quests.png")
+    assert "NHIỆM VỤ TUẦN" in q_embed.title
+
+    prev_item = PET_CATALOG_MAP["back_cyber_wings"]
+    prev_buf = generate_clan_pet_preview_image(p_obj, clan1_obj, prev_item)
+    assert prev_buf.getbuffer().nbytes > 5000
+    shop_view = ClanPetShopView(clan1_obj, p_obj, [], "ALL", bot, selected_item_id="back_cyber_wings")
+    assert any(getattr(c, "label", "").startswith("Mua Ngay") for c in shop_view.children)
+
+    buffed_clan = await db.owner_buff_clan_exp(clan_id, 4000)
+    assert buffed_clan["level"] >= 3
+    buffed_pet = await db.owner_buff_pet(clan_id, exp_delta=500, coins_delta=777, hunger_delta=100, mood_delta=100)
+    assert buffed_pet["pet_coins"] >= 777
+    await db.delete_clan_pet(clan_id)
+    assert await db.get_clan_pet(clan_id) is None
+
+    fake_owner_guild = SimpleNamespace(name="Test Guild", id=123456789)
+    owner_panel = BotOwnerSystemPanelView(fake_owner_guild, [buffed_clan], buffed_clan, "ALL", [], bot)
+    assert any(getattr(c, "label", "") == "Buff Pet & Xu" for c in owner_panel.children)
+    print("✅ 34. Weekly Quests, Xem Trước Shop Linh Thú & Bộ công cụ Chủ Bot (/bot-access) hoạt động 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 33 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%! ")
+    print("🎉 TẤT CẢ 34 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%! ")
     print("=" * 60)
 
     # Dọn dẹp test db
