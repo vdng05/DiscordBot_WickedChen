@@ -4798,9 +4798,20 @@ class RecruitMembersButton(ui.DynamicItem[ui.Button], template=r"clan_recruit:me
             return
 
         members = await bot.db.get_clan_members(self.clan_id)
-        embed = build_members_embed(clan, members, page=1, total_pages=max(1, (len(members) + 9) // 10), guild=interaction.guild)
-        view = MembersPaginationView(clan_id=self.clan_id, page=1, total_pages=max(1, (len(members) + 9) // 10), bot=bot)
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        files: List[discord.File] = []
+        logo_ref = await resolve_clan_logo(clan, files, fallback_to_default=True)
+        logo_filename = logo_ref.replace("attachment://", "") if (logo_ref and logo_ref.startswith("attachment://")) else None
+        embed, total_pages = build_members_embed(clan, members, page=1, page_size=10, logo_filename=logo_filename)
+        if logo_ref and not logo_filename:
+            embed.set_thumbnail(url=logo_ref)
+        view = MembersPaginationView(
+            clan_id=self.clan_id,
+            current_page=1,
+            total_pages=total_pages,
+            current_filter="ALL",
+            bot=bot
+        )
+        await interaction.followup.send(embed=embed, files=files, view=view, ephemeral=True)
 
 
 class RecruitPublicView(SafeView):

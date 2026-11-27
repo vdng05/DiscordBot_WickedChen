@@ -544,6 +544,13 @@ async def run_tests():
     rec_view = RecruitPublicView(clan_id=clan_id)
     assert len(rec_view.children) == 2
 
+    from utils.embeds import build_members_embed
+    from utils.ui_components import MembersPaginationView
+    m_embed, m_total = build_members_embed(valid_pub_clan, c1_members, page=1, page_size=10)
+    assert m_total >= 1
+    m_view = MembersPaginationView(clan_id=clan_id, current_page=1, total_pages=m_total, current_filter="ALL", bot=bot)
+    assert m_view.current_page == 1
+
     req_pend = await db.create_request(clan_id, 123456789, 555777, 555777, "APPLY")
     assert await db.has_pending_request(clan_id, 555777) is True
     await db.update_request_status(req_pend, "REJECTED")
