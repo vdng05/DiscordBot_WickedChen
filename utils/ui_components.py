@@ -4851,6 +4851,8 @@ class BotOwnerSystemPanelView(SafeView):
         mode: str,
         role_ids: List[str],
         bot: Any,
+        pending_species: Optional[str] = None,
+        pending_stage: Optional[int] = None,
     ):
         super().__init__(timeout=600)
         self.guild = guild
@@ -4859,6 +4861,8 @@ class BotOwnerSystemPanelView(SafeView):
         self.mode = mode
         self.role_ids = role_ids
         self.bot = bot
+        self.pending_species = pending_species
+        self.pending_stage = pending_stage
 
         opts = [
             discord.SelectOption(
@@ -4879,6 +4883,7 @@ class BotOwnerSystemPanelView(SafeView):
                 label=f"{sp_info['name']} ({sp_id})",
                 value=sp_id,
                 emoji=sp_info.get("emoji"),
+                default=(pending_species == sp_id),
                 description=sp_info.get("desc", "")[:100],
             )
             for sp_id, sp_info in PET_SPECIES.items()
@@ -4887,6 +4892,7 @@ class BotOwnerSystemPanelView(SafeView):
             discord.SelectOption(
                 label=f"Stage {st['stage']}: {st['name']} (Lv.{st['min_level']}+)",
                 value=str(st["stage"]),
+                default=(pending_stage == st["stage"]),
                 description=st.get("perk", "")[:100],
             )
             for st in PET_STAGES
@@ -4896,6 +4902,7 @@ class BotOwnerSystemPanelView(SafeView):
             for item in (
                 self.species_select,
                 self.stage_select,
+                self.apply_pet_btn,
                 self.buff_clan_btn,
                 self.buff_pet_btn,
                 self.unlock_all_items_btn,
@@ -4920,36 +4927,47 @@ class BotOwnerSystemPanelView(SafeView):
         await interaction.response.defer()
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         chosen = await self.bot.db.get_clan_by_id(int(val))
+        pet = await self.bot.db.get_clan_pet(chosen["clan_id"]) if chosen else None
+        p_sp = pet["species"] if pet else None
+        p_st = pet["stage"] if pet else None
         embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
-        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot, p_sp, p_st)
         await interaction.edit_original_response(embed=embed, view=view, attachments=files)
 
-    @ui.select(placeholder="🧬 Đổi Chủng Loài Pet (Test nhanh 4 loài)...", row=1)
+    @ui.select(placeholder="🧬 1. Chọn Chủng Loài Pet (sau đó bấm Áp Dụng)...", row=1)
     async def species_select(self, interaction: discord.Interaction, select: ui.Select):
-        await interaction.response.defer()
-        sp_id = select.values[0]
-        pet = await self.bot.db.owner_set_pet_state(self.selected_clan["clan_id"], species=sp_id)
-        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
-        chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
-        embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
-        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
-        sp_name = PET_SPECIES.get(sp_id, {}).get("name", sp_id)
-        await auto_dismiss_notice(interaction, content=f"🧬 Đã đổi Linh Thú sang **{sp_name}** (Stage {pet['stage']})!", delay=4)
+        self.pending_species = select.values[0]
+        for opt in self.species_select.options:
+            opt.default = (opt.value == self.pending_species)
+        await interaction.response.edit_message(view=self)
 
-    @ui.select(placeholder="🚀 Chọn Giai Đoạn Trưởng Thành (Stage 1 → 5)...", row=2)
+    @ui.select(placeholder="🚀 2. Chọn Giai Đoạn Stage 1→5 (sau đó bấm Áp Dụng)...", row=2)
     async def stage_select(self, interaction: discord.Interaction, select: ui.Select):
+        self.pending_stage = int(select.values[0])
+        for opt in self.stage_select.options:
+            opt.default = (opt.value == str(self.pending_stage))
+        await interaction.response.edit_message(view=self)
+
+    @ui.button(label="Áp Dụng Pet", emoji="✅", style=discord.ButtonStyle.success, row=3)
+    async def apply_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
-        st = int(select.values[0])
-        pet = await self.bot.db.owner_set_pet_state(self.selected_clan["clan_id"], stage=st)
+        pet = await self.bot.db.owner_set_pet_state(
+            self.selected_clan["clan_id"],
+            species=self.pending_species,
+            stage=self.pending_stage,
+        )
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
         embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
-        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        view = BotOwnerSystemPanelView(
+            interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot,
+            pending_species=pet["species"], pending_stage=pet["stage"],
+        )
         await interaction.edit_original_response(embed=embed, view=view, attachments=files)
-        await auto_dismiss_notice(interaction, content=f"🚀 Đã đưa Pet lên **Stage {pet['stage']} (Lv.{pet['level']})**!", delay=4)
+        sp_name = PET_SPECIES.get(pet["species"], {}).get("name", pet["species"])
+        await auto_dismiss_notice(interaction, content=f"✅ Đã áp dụng: **{sp_name}** • **Stage {pet['stage']} (Lv.{pet['level']})**!", delay=4)
 
-    @ui.button(label="Buff EXP Băng", emoji="⚡", style=discord.ButtonStyle.success, row=3)
+    @ui.button(label="Buff EXP", emoji="⚡", style=discord.ButtonStyle.success, row=3)
     async def buff_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(BotOwnerBuffClanModal(self.selected_clan, self.mode, self.role_ids, self.bot))
 
@@ -4957,7 +4975,7 @@ class BotOwnerSystemPanelView(SafeView):
     async def buff_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(BotOwnerBuffPetModal(self.selected_clan, self.mode, self.role_ids, self.bot))
 
-    @ui.button(label="Mở Full Tủ Đồ", emoji="🎁", style=discord.ButtonStyle.primary, row=3)
+    @ui.button(label="Full Tủ Đồ", emoji="🎁", style=discord.ButtonStyle.primary, row=3)
     async def unlock_all_items_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         all_ids = [item["item_id"] for item in PET_CATALOG]
@@ -4965,7 +4983,7 @@ class BotOwnerSystemPanelView(SafeView):
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
         embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
-        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot, pet["species"], pet["stage"])
         await interaction.edit_original_response(embed=embed, view=view, attachments=files)
         await auto_dismiss_notice(interaction, content=f"🎁 Đã mở khóa toàn bộ **{len(all_ids)} món đồ** & tặng **+10,000 Xu** (Tổng: {pet['pet_coins']:,} 🪙)!", delay=5)
 
@@ -4975,7 +4993,7 @@ class BotOwnerSystemPanelView(SafeView):
         await interaction.response.defer()
         pet = await self.bot.db.get_clan_pet(self.selected_clan["clan_id"])
         if not pet:
-            pet = await self.bot.db.create_clan_pet(self.selected_clan["clan_id"], "cyber_cat", "Bé Mèo Cyber")
+            pet = await self.bot.db.create_clan_pet(self.selected_clan["clan_id"], self.pending_species or "cyber_cat", "Bé Mèo Cyber")
         info = get_pet_level_info(int(pet.get("exp", 0)))
         unlocked_slots = info["unlocked_slots"]
         new_eq: Dict[str, str] = {}
@@ -4983,19 +5001,19 @@ class BotOwnerSystemPanelView(SafeView):
             cands = [i["item_id"] for i in PET_CATALOG if i["slot"] == slot and i["min_stage"] <= info["stage"]]
             if cands:
                 new_eq[slot] = random.choice(cands)
-        await self.bot.db.owner_set_pet_state(self.selected_clan["clan_id"], equipped=new_eq)
+        updated_pet = await self.bot.db.owner_set_pet_state(self.selected_clan["clan_id"], equipped=new_eq)
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
         embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
-        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot, updated_pet["species"], updated_pet["stage"])
         await interaction.edit_original_response(embed=embed, view=view, attachments=files)
         await auto_dismiss_notice(interaction, content=f"🎲 Đã phối ngẫu nhiên **{len(new_eq)} món đồ** cho Stage {info['stage']}!", delay=4)
 
-    @ui.button(label="Sửa Băng / Role", emoji="✏️", style=discord.ButtonStyle.secondary, row=3)
+    @ui.button(label="Sửa Băng", emoji="✏️", style=discord.ButtonStyle.secondary, row=4)
     async def edit_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(BotOwnerEditClanModal(self.selected_clan, self.mode, self.role_ids, self.bot))
 
-    @ui.button(label="Xóa Pet Băng", emoji="🧹", style=discord.ButtonStyle.danger, row=4)
+    @ui.button(label="Xóa Pet", emoji="🧹", style=discord.ButtonStyle.danger, row=4)
     async def delete_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         await self.bot.db.delete_clan_pet(self.selected_clan["clan_id"])
@@ -5012,7 +5030,7 @@ class BotOwnerSystemPanelView(SafeView):
         await interaction.edit_original_response(embed=embed, view=view, attachments=files)
         await auto_dismiss_notice(interaction, content=f"🧹 Đã xóa toàn bộ dữ liệu Linh Thú của băng **[{chosen['tag']}] {chosen['name']}**!", delay=5)
 
-    @ui.button(label="Xóa Băng & Tất Cả", emoji="🗑️", style=discord.ButtonStyle.danger, row=4)
+    @ui.button(label="Xóa Băng", emoji="🗑️", style=discord.ButtonStyle.danger, row=4)
     async def delete_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         embed = discord.Embed(
@@ -5023,7 +5041,7 @@ class BotOwnerSystemPanelView(SafeView):
         view = BotOwnerDeleteClanConfirmView(self.selected_clan, self.mode, self.role_ids, self.bot)
         await interaction.edit_original_response(embed=embed, view=view, attachments=[])
 
-    @ui.button(label="Về Phân Quyền Role", emoji="🔐", style=discord.ButtonStyle.secondary, row=4)
+    @ui.button(label="Phân Quyền", emoji="🔐", style=discord.ButtonStyle.secondary, row=4)
     async def back_access_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         embed = build_bot_access_embed(interaction.guild.name, self.mode, self.role_ids)
