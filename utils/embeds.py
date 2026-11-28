@@ -152,7 +152,9 @@ def build_clan_info_embed(clan: Dict[str, Any], members: List[Dict[str, Any]], l
     embed.add_field(name="👥 Sĩ Số Thành Viên", value=f"**{len(members)} / {clan['max_members']}** thành viên", inline=True)
 
     embed.add_field(name="🌟 Tiến Trình Cấp Độ", value=f"{exp_display}\n{exp_bar}", inline=False)
-    embed.add_field(name="🔥 Điểm Năng Động Tuần", value=f"**+{clan.get('weekly_exp', 0):,}** EXP", inline=True)
+    clan_streak = int(clan.get("clan_streak") or 0)
+    embed.add_field(name="🔥 Chuỗi Lửa Băng", value=f"🔥 **{clan_streak} ngày** *(≥ 2 người điểm danh/ngày)*", inline=True)
+    embed.add_field(name="⚡ Điểm Năng Động Tuần", value=f"**+{clan.get('weekly_exp', 0):,}** EXP", inline=True)
     embed.add_field(name="🚪 Chế Độ Tuyển Quân", value=JoinModes.NAMES.get(clan.get("join_mode"), clan.get("join_mode", "APPROVAL")), inline=True)
     embed.add_field(name="📅 Ngày Khởi Lập", value=f"<t:{clan['created_at']}:D> (<t:{clan['created_at']}:R>)", inline=True)
 

@@ -13,9 +13,9 @@ Mọi tính năng quan trọng đều được **model hóa 100% bằng nút b�
   - Bấm **`[✨ Thành Lập Băng Mới]`**: Mở form đăng ký băng mới.
   - Bấm **`[🏆 Bảng Xếp Hạng Server]`**: Xem bảng vàng danh dự và chuyển đổi các tiêu chí (Cấp độ, Tuần, Sĩ số) bằng nút bấm.
 - **Nếu đã có băng:**
-  - **Hằng ngày:** Bấm **`[📅 Điểm Danh Hằng Ngày]`**, **`[🎯 Nhiệm Vụ Tuần]`**, **`[🏰 Hồ Sơ Băng Của Bạn]`**, hoặc **`[🚪 Rời Băng]`** (có xác nhận 2 lớp an toàn).
-  - **Vinh danh & Nghệ thuật:** Bấm **`[📜 Cột Mốc Lịch Sử]`**, **`[🖼️ Ảnh Nền Băng (Full HD)]`**, **`[📜 Nhật Ký Băng]`**.
-  - **Quản lý & Nhân sự (Cán Bộ / Chủ Băng):** Bấm **`[👥 Quản Lý Thành Viên]`** (Mời qua menu chọn người, Thăng chức, Giáng chức, Trục xuất, Chuyển quyền Chủ Băng), **`[🎖️ Trao Danh Hiệu]`**, **`[⚙️ Cài Đặt Băng]`**, **`[🛡️ Cài Đặt Role]`**.
+  - **Hằng ngày & Gắn kết:** Bấm **`[🎯 Nhiệm Vụ & Điểm Danh]`** (gom Điểm danh hằng ngày, Nhiệm vụ Ngày & Nhiệm vụ Tuần), **`[🏰 Hồ Sơ Băng Của Bạn]`** (xem thông số, **🔥 Chuỗi Lửa Băng**, xuất **Ảnh Nền Full HD**, bật/tắt **🔥 Lửa Streak trên biệt danh**, hoặc **Rời Băng**), **`[🐾 Linh Thú Băng]`**, **`[⚔️ Thách Đấu / Tạo Kèo]`**.
+  - **Vinh danh & Xếp hạng:** Bấm **`[🏆 Bảng Xếp Hạng Server]`**, **`[📜 Cột Mốc Lịch Sử]`**.
+  - **Quản lý & Nhân sự (Cán Bộ / Chủ Băng):** Bấm **`[👥 Quản Lý Thành Viên]`** (Mời, Thăng/Giáng chức, Trục xuất, Trao Danh Hiệu, Chuyển quyền Chủ Băng), **`[📢 Đăng Tin Tuyển]`**, **`[⚙️ Cài Đặt Băng]`** (bao gồm Cài Đặt Role, Logo/Banner & Chế độ tuyển).
 
 ### 🧹 Cơ Chế Tự Động Dọn Dẹp & Chống Đầy Chat (Auto-Dismiss & In-Place Navigation)
 - **Điều Hướng Tại Chỗ (In-Place Edit):** Khi bấm vào các mục con (Hồ sơ, Nhiệm vụ, Cột mốc, Cài đặt, Bảng xếp hạng...), bot sẽ biến đổi trực tiếp trên cùng một tin nhắn, **không spam thêm tin nhắn mới** làm trôi chat.
@@ -33,22 +33,28 @@ Mọi tính năng quan trọng đều được **model hóa 100% bằng nút b�
   - **Hoặc chọn từ Menu:** Chọn băng bạn quan tâm từ Menu thả xuống để xem hồ sơ chi tiết cùng nút **`[📩 Nộp Đơn / Gia Nhập]`** và **`[👥 Xem Thành Viên]`**!
 - **Nếu được mời vào băng:** Khi Cán Bộ mời bạn, bot sẽ gửi **tin nhắn riêng (DM)** kèm sẵn nút **`[✅ Chấp Nhận Lời Mời]`** màu xanh — bấm 1 cái là vào ngay! *(Nếu bạn khóa DM, bot sẽ gửi lời mời ra một kênh công khai để bạn bấm).*
 
-### 2. Điểm Danh Nhận Thưởng Hằng Ngày
-- Bấm nút **`[📅 Điểm Danh Hằng Ngày]`** trong `/clan hub` (hoặc gõ `/clan checkin`).
-- Mỗi ngày nhận ngay **+10 Điểm cống hiến cá nhân** và đóng góp **+30 EXP** cho băng.
-- **Chuỗi liên tiếp (Streak):** Điểm danh đều đặn 7 ngày liên tiếp được thưởng thêm **+50 EXP**! *(Reset lúc 00:00 hằng ngày theo giờ Việt Nam)*.
+### 2. Điểm Danh & Lửa Streak Băng Đảng
+- Bấm **`[🎯 Nhiệm Vụ & Điểm Danh]`** ➔ **`[📅 Điểm Danh Hằng Ngày]`** (hoặc nút **`[📅 Điểm Danh Nhanh]`** trong Hồ Sơ Băng, hoặc gõ `/clan checkin`).
+- Mỗi ngày nhận ngay **+10 Điểm cống hiến cá nhân**, **+30 EXP băng** và **+15 Xu Linh Thú**. Chuỗi cá nhân 7 ngày liên tiếp thưởng thêm **+50 EXP**! *(Reset lúc 00:00 hằng ngày theo giờ Việt Nam)*.
+- **🔥 Chuỗi Lửa Băng & Biệt Danh (`🔥 N`):**
+  - Khi băng có **tối thiểu 2 thành viên điểm danh trong ngày**, **Chuỗi Lửa Băng** (hiển thị ngay trong **Hồ Sơ Băng**, bắt đầu từ `0 ngày`) sẽ tăng lên +1.
+  - Trong **Hồ Sơ Băng**, bấm nút **`[🔥 Lửa Streak: Đang Tắt / Đang Bật]`** để tự nguyện gắn hậu tố ` 🔥 N` vào sau biệt danh gốc *(kể cả thành viên mới vào băng khi bật lên cũng dùng chung chuỗi lửa hiện tại của băng)*.
+  - Bot **tuyệt đối không cắt xén hay ghi đè tên gốc**; nếu tên + lửa vượt giới hạn 32 ký tự của Discord, bot sẽ giữ nguyên tên và báo rõ số ký tự cần tự rút gọn.
 
-### 3. Cày Nhiệm Vụ Tuần Đồng Đội (Weekly Quests)
-- Bấm nút **`[🎯 Nhiệm Vụ Tuần]`** trong `/clan hub` (hoặc gõ `/clan quests`) để theo dõi:
-  1. **📅 Điểm Danh Đồng Đội:** Đạt đủ tổng số 35 lượt check-in của cả băng trong tuần (+350 EXP).
-  2. **🎙️ Voice Co-op Chơi Game:** Cùng ngồi kênh Voice buôn chuyện / nghe nhạc / treo máy cùng nhau từ 2 người trở lên (+500 EXP khi đạt 300 phút). Mute hay deafen nghe nhạc vẫn tính điểm bình thường!
-  3. **💬 Sôi Nổi Kênh Chat:** Tương tác, trò chuyện trong kênh chat riêng của băng (+300 EXP khi đạt 100 tin nhắn).
-- Hoàn thành mỗi nhiệm vụ thưởng thẳng từ **+300 đến +500 EXP** cho băng *(Tự động làm mới vào 00:00 Thứ Hai hằng tuần)*.
+### 3. Cày Nhiệm Vụ Ngày & Nhiệm Vụ Tuần Đồng Đội
+- Bấm nút **`[🎯 Nhiệm Vụ & Điểm Danh]`** trong `/clan hub` (hoặc gõ `/clan quests`) để chuyển đổi giữa **🌤️ Nhiệm Vụ Ngày** (làm mới mỗi ngày lúc 00:00 VN, thưởng EXP + Xu Linh Thú) và **🎯 Nhiệm Vụ Tuần** (làm mới 00:00 Thứ Hai):
+  1. **📅 Điểm Danh Đồng Đội:** Đạt đủ tổng số lượt check-in của cả băng (+350 EXP).
+  2. **🎙️ Voice Co-op Chơi Game:** Từ 2 thành viên trở lên ngồi chung kênh Voice (+500 EXP khi đạt 300 phút; mute/deafen vẫn tính).
+  3. **💬 Sôi Nổi Kênh Chat:** Trò chuyện trong kênh chat riêng của băng (+300 EXP khi đạt 100 tin nhắn).
 
-### 4. Rời Băng Tự Do (Không Bị Timeout / Cooldown)
-- Bấm nút **`[🚪 Rời Băng]`** màu đỏ trong `/clan hub` (hoặc gõ `/clan leave`).
-- Bot sẽ mở hộp thoại xác nhận 2 lớp để tránh bấm nhầm.
-- ✨ **Tự do tuyệt đối:** Bạn hoàn toàn không bị áp dụng thời gian chờ (cooldown/timeout) sau khi rời băng, có thể thoải mái tạo băng mới hoặc nộp đơn vào băng khác ngay lập tức!
+### 4. Nuôi Linh Thú Băng Đảng: `/clan-pet` (hoặc nút `🐾 Linh Thú Băng` trong `/clan hub`)
+- Mỗi băng chọn 1 trong 4 loài (**Mèo Cyber, Tiểu Long, Cáo Tinh, Slime Hoàng Gia**) và cả băng cùng chăm sóc (Cho ăn, Vuốt ve, Tặng quà) để tích **Pet EXP** & **Xu Linh Thú**.
+- Pet tiến hóa qua **5 giai đoạn** (Trứng → Sơ Sinh → Thiếu Niên → Trưởng Thành → Tối Thượng), mở khóa thêm các ô trang bị và buff thụ động **+5% đến +15% EXP Điểm danh**.
+- **Cửa hàng & Tủ đồ:** Có nút **Xem trước** vật phẩm trước khi mua và trang phục được vẽ **ôm khít dáng thân Pet**.
+
+### 5. Rời Băng Tự Do (Không Bị Timeout / Cooldown)
+- Vào **`[🏰 Hồ Sơ Băng Của Bạn]`** ➔ bấm nút **`[🚪 Rời Băng]`** màu đỏ (hoặc gõ `/clan leave`).
+- Bot sẽ mở hộp thoại xác nhận 2 lớp, tự động gỡ hậu tố Lửa Streak (nếu đang bật) và hoàn toàn không phạt cooldown khi chuyển băng.
 
 ---
 
@@ -118,14 +124,14 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 - **💥 Giải Tán Băng:** Nút Giải Tán Băng (yêu cầu gõ chính xác tên băng trong Modal để xác nhận an toàn, tránh bấm nhầm).
 *(Ngoài ra, bạn vẫn có thể dùng các lệnh `/clan invite`, `/clan promote`, `/clan demote`, `/clan kick`, `/clan transfer`, `/clan disband` nếu thích gõ lệnh)*.
 
-### 8. Trao Danh Hiệu & Biệt Danh Nội Bộ: Nút `[🎖️ Trao Danh Hiệu]` trong `/clan hub`
+### 8. Trao Danh Hiệu & Biệt Danh Nội Bộ: Trong `[👥 Quản Lý Thành Viên]`
 - Cán Bộ, Phó Băng và Chủ Băng có thể trao tặng các danh hiệu/biệt danh độc đáo cho thành viên (Ví dụ: `Gánh Team 👑`, `Cú Đêm 🌙`, `Chúa Hề 🤡`, `Trùm Nấu Lẩu 🍲`...).
-- **Cách dùng:** Mở `/clan hub` $\rightarrow$ bấm **`[🎖️ Trao Danh Hiệu]`** $\rightarrow$ chọn thành viên từ menu thả xuống $\rightarrow$ nhập danh hiệu mong muốn (hoặc để trống để gỡ).
+- **Cách dùng:** Mở `/clan hub` $\rightarrow$ bấm **`[👥 Quản Lý Thành Viên]`** $\rightarrow$ bấm **`[🎖️ Trao Danh Hiệu]`** $\rightarrow$ chọn thành viên từ menu thả xuống $\rightarrow$ nhập danh hiệu mong muốn (hoặc để trống để gỡ).
 - Danh hiệu sẽ xuất hiện kiêu hãnh trên **Bảng thành viên (`/clan members`)** và khắc ghi trang trọng trên **Ảnh Nền Wallpaper Full HD** của băng!
 
 ### 9. Biên Niên Sử & Xuất Ảnh Nền Wallpaper Full HD (1920x1080)
 - **📜 Cột Mốc Lịch Sử:** Bấm **`[📜 Cột Mốc Lịch Sử]`** trong `/clan hub` để xem dòng thời gian ghi dấu các sự kiện trọng đại của băng (ngày thành lập, các mốc thăng cấp).
-- **🖼️ Xuất Ảnh Nền Desktop Full HD:** Bấm **`[🖼️ Ảnh Nền Băng (Full HD)]`** trong `/clan hub` *(cooldown 45 giây/băng để giữ mượt server)*. Bot sẽ vẽ tự động tác phẩm Wallpaper 1920x1080 tuyệt đẹp mang biểu tượng, chỉ số, danh sách nòng cốt và biên niên sử của băng để anh em tải về làm hình nền máy tính!
+- **🖼️ Xuất Ảnh Nền Desktop Full HD:** Vào **`[🏰 Hồ Sơ Băng Của Bạn]`** $\rightarrow$ bấm **`[🖼️ Ảnh Nền Băng]`** *(cooldown 45 giây/băng)*. Bot sẽ vẽ tự động tác phẩm Wallpaper 1920x1080 mang biểu tượng, chỉ số, danh sách nòng cốt, biên niên sử và **Linh Thú Trưởng Thành** của băng!
 
 ### 10. Đồ Họa Mặc Định Siêu Lộng Lẫy (Tự Động Kiến Tạo Bằng Discord Framework)
 - **Không lo thiếu ảnh:** Nếu Chủ Băng chưa tải ảnh tùy chỉnh lên, bot **hoàn toàn không sử dụng ảnh stock mạng chung chung** mà sẽ tự động vẽ đồ họa nhận diện thương hiệu riêng cho băng bằng Canvas Engine:
@@ -158,11 +164,12 @@ Bạn không cần phải nhớ các câu lệnh slash command phức tạp, ch�
 ### 4. Xóa Bắt Buộc Khi Băng Vi Phạm: `/clan-admin force-delete`
 - Gõ `/clan-admin force-delete [tên_băng] [lý_do]`: Bot sẽ hiện nút xác nhận 2 lớp, sau đó xóa sạch Role, Kênh và dữ liệu của băng vi phạm, đồng thời lưu nhật ký xử lý vào kênh Log server.
 
-### 5. Phân Quyền Sử Dụng Bot Theo Role (Dành Riêng Cho Chủ Bot): `/bot-access`
-- Gõ `/bot-access` để mở bảng điều khiển phân quyền theo từng máy chủ:
+### 5. Phân Quyền & Bộ Công Cụ Quản Lý Toàn Hệ Thống (Dành Riêng Cho Chủ Bot): `/bot-access`
+- Gõ `/bot-access` để mở bảng điều khiển theo từng máy chủ:
   - **🟢 Bật Tất Cả (Mặc định):** Mọi thành viên trong server đều có thể sử dụng bot.
-  - **🎯 Chọn Role Cụ Thể:** Chọn 1 hoặc nhiều Role từ menu thả xuống — chỉ người có Role đó mới dùng được bot.
-  - **🔴 Tắt Tất Cả:** Tạm khóa sử dụng bot với toàn bộ thành viên (riêng Chủ Bot luôn có quyền thao tác để bật lại bất cứ lúc nào).
+  - **🎯 Chọn Role Cụ Thể:** Chọn 1 hoặc nhiều Role từ menu thả xuống (có phân trang cho server đông role) — chỉ người có Role đó mới dùng được bot.
+  - **🔴 Tắt Tất Cả:** Tạm khóa sử dụng bot với toàn bộ thành viên (riêng Chủ Bot luôn có quyền thao tác).
+  - **👑 Quản Lý & Buff Hệ Thống:** Chọn bất kỳ băng nào để **Buff EXP Băng**, **Buff Pet & Xu**, **Đổi Chủng Loài & Stage Pet (1→5) kèm xem trước ảnh trực tiếp**, **Mở Full Tủ Đồ**, **Random Style**, **Sửa thông tin băng** hoặc **Xóa Pet / Xóa Băng**.
 
 ---
 

@@ -80,18 +80,23 @@ PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
 ```
 
-### 11 Bảng Dữ Liệu Chính:
+### 16 Bảng Dữ Liệu Chính:
 1. `guild_configs`: Cấu hình Category, kênh Log, Role yêu cầu và thời gian cooldown của từng Server.
-2. `clans`: Lưu trữ tên, tag, khẩu hiệu, role_id, text_channel_id, log_channel_id, voice_channel_id, voice_channel_2_id, cấp độ, EXP, màu role, logo, banner.
-3. `clan_members`: Lưu danh sách thành viên, cấp bậc (LEADER -> MEMBER), danh hiệu nội bộ (`custom_title`), điểm cống hiến, chuỗi ngày điểm danh (Streak).
-4. `member_cooldowns`: Theo dõi timestamp hết hạn thời gian chờ sau khi rời băng (nếu server bật cooldown).
-5. `clan_requests`: Quản lý lời mời (`INVITE`) và đơn xin vào (`APPLY`), đi kèm `status` (`PENDING`, `ACCEPTED`, `REJECTED`, `EXPIRED`, `CANCELLED`).
-6. `clan_parties`: Lưu trữ các kèo chơi game LFG, người tạo, slot tối đa, giờ hẹn, trạng thái `OPEN`/`CLOSED`.
-7. `clan_party_participants`: Danh sách người tham gia kèo phân tách giữa `MAIN` (đội hình chính) và `RESERVE` (dự bị).
-8. `clan_weekly_quests`: 3 nhiệm vụ hợp tác tuần của từng băng (`CHECKIN_COUNT`, `VOICE_MINUTES`, `CHAT_MESSAGES`).
-9. `clan_logs`: Lịch sử hoạt động nội bộ (thăng/giáng chức, mời, rời, kick, thăng cấp, danh hiệu).
-10. `clan_milestones`: Các cột mốc lịch sử trọng đại của băng (ngày thành lập, các mốc thăng cấp).
-11. `bot_access_configs`: Cấu hình phân quyền Role được phép sử dụng bot theo từng server (`ALL`, `ROLES`, `NONE`).
+2. `clans`: Lưu trữ tên, tag, khẩu hiệu, role_id, text_channel_id, log_channel_id, voice_channel_id, extra_voice_channel_id, cấp độ, EXP, **chuỗi lửa băng (`clan_streak`, `last_streak_date`, `daily_checkin_count`)**, màu role, logo, banner.
+3. `clan_members`: Lưu danh sách thành viên, cấp bậc (LEADER -> MEMBER), danh hiệu nội bộ (`custom_title`), điểm cống hiến, chuỗi ngày điểm danh, và trạng thái **Lửa Streak trên biệt danh** (`streak_nick_enabled`, `last_applied_suffix`, `had_original_nick`, `nick_warned_len`).
+4. `member_checkin_history`: Theo dõi lịch sử điểm danh độc lập theo `(guild_id, user_id)` để chống farm điểm danh qua nhiều băng trong ngày.
+5. `member_cooldowns`: Theo dõi timestamp hết hạn thời gian chờ sau khi rời băng (nếu server bật cooldown).
+6. `clan_requests`: Quản lý lời mời (`INVITE`) và đơn xin vào (`APPLY`), đi kèm `status` (`PENDING`, `ACCEPTED`, `REJECTED`, `EXPIRED`, `CANCELLED`).
+7. `clan_parties`: Lưu trữ các kèo chơi game LFG, người tạo, slot tối đa, giờ hẹn, trạng thái `OPEN`/`CLOSED`.
+8. `clan_party_participants`: Danh sách người tham gia kèo phân tách giữa `MAIN` (đội hình chính) và `RESERVE` (dự bị).
+9. `clan_weekly_quests`: 3 nhiệm vụ hợp tác tuần của từng băng (`CHECKIN_COUNT`, `VOICE_MINUTES`, `CHAT_MESSAGES`).
+10. `clan_daily_quests`: 3 nhiệm vụ ngày của từng băng (`DAILY_CHECKIN`, `DAILY_CHAT`, `DAILY_VOICE`), thưởng EXP & Xu Linh Thú.
+11. `clan_pets`: Linh Thú chung của từng băng (`species`, `name`, `exp`, `level`, `stage`, `hunger`, `mood`, `pet_coins`, `equipped_json`, `allow_member_style`).
+12. `clan_pet_inventory`: Tủ đồ chung các trang phục & phụ kiện Linh Thú đã mở khóa của băng.
+13. `clan_pet_cooldowns`: Cooldown tương tác chăm sóc Linh Thú theo từng thành viên.
+14. `clan_logs`: Lịch sử hoạt động nội bộ (thăng/giáng chức, mời, rời, kick, thăng cấp, danh hiệu).
+15. `clan_milestones`: Các cột mốc lịch sử trọng đại của băng (ngày thành lập, các mốc thăng cấp).
+16. `bot_access_configs`: Cấu hình phân quyền Role được phép sử dụng bot theo từng server (`ALL`, `ROLES`, `NONE`).
 
 ---
 
@@ -101,10 +106,11 @@ PRAGMA synchronous = NORMAL;
 - `/clan-admin setup`: Chỉ định Category chứa kênh các băng, kênh Log sự kiện, bật/tắt cho mem tự tạo, role điều kiện và số giờ cooldown rời băng (mặc định `0`).
 - `/clan-admin force-delete [tên_băng] [lý_do]`: Buộc xóa băng vi phạm quy định server (đi kèm nút xác nhận 2 lớp an toàn).
 - `/clan-admin sync`: Quét toàn bộ server, tự động khôi phục lại Role/Kênh bị thiếu nếu lỡ bị xóa tay và đồng bộ thành viên (không tự ý sửa tên hay xóa kênh đang tồn tại).
-- `/bot-access` *(Dành riêng cho Chủ Bot trong `OWNER_IDS`)*: Chọn Role được phép dùng bot (`Bật Tất Cả`, `Chọn Role Cụ Thể`, hoặc `Tắt Tất Cả`), hỗ trợ phân trang danh sách Role cho server đông role.
+- `/bot-access` *(Dành riêng cho Chủ Bot trong `OWNER_IDS`)*: Phân quyền Role được phép dùng bot (`Bật Tất Cả`, `Chọn Role Cụ Thể` có phân trang, hoặc `Tắt Tất Cả`) và mở **👑 Quản Lý & Buff Hệ Thống** (buff EXP băng, buff Pet & Xu, đổi Loài/Stage & xem trước Pet trực tiếp, mở Full Tủ Đồ, Random Style, sửa tên/tag/sĩ số, hoặc xóa sạch băng/Pet).
 
 ### 4.2. Nhóm B: Trung Tâm Điều Khiển, Khởi Tạo & Tùy Biến Băng
-- `/clan hub`: **Trung tâm điều khiển 1-Click** tương tác toàn diện (Hồ sơ, Điểm danh, Nhiệm vụ tuần, Cột mốc lịch sử, Ảnh nền Full HD, Nhật ký băng, Quản lý nhân sự, Trao danh hiệu, Cài đặt băng & Role, Thách đấu/Tạo kèo) với cơ chế điều hướng tại chỗ & tự động dọn bảng cũ.
+- `/clan hub`: **Trung tâm điều khiển 1-Click tinh gọn** (`Nhiệm Vụ & Điểm Danh`, `Hồ Sơ Băng`, `Linh Thú Băng`, `Thách Đấu / Tạo Kèo`, `Bảng Xếp Hạng`, `Cột Mốc Lịch Sử`, `Quản Lý Thành Viên`, `Đăng Tin Tuyển`, `Cài Đặt Băng`) với cơ chế điều hướng tại chỗ & tự động dọn bảng cũ.
+- `/clan-pet`: Mở trực tiếp bảng **Linh Thú Băng Đảng** (chọn 1 trong 4 loài: *Mèo Cyber, Tiểu Long, Cáo Tinh, Slime Hoàng Gia*; nuôi qua 5 giai đoạn từ Trứng → Tối Thượng bằng đồ họa Pillow 2x Supersampling; Cửa hàng xem trước 45 món đồ & Tủ đồ ôm khít silhouette; buff +5% đến +15% EXP Điểm danh & xuất hiện trên Wallpaper Full HD).
 - `/clan create`: Mở **Discord Modal** nhập Tên băng (3-25 ký tự), Tag ngắn (2-5 ký tự viết hoa), Khẩu hiệu (tối đa 100 ký tự). Bot tự tạo Role và cụm 3 kênh (Chat riêng, Nhật ký riêng, Voice công khai).
 - `/clan settings`: Mở bảng điều khiển dành riêng cho **Chủ Băng (`LEADER`) hoặc Admin Server**:
   - *Đổi Tên / Tag / Khẩu Hiệu:* Hộp thoại Modal nhập mới (khóa cooldown 7 ngày để chống Rate Limit Discord).
@@ -124,18 +130,18 @@ PRAGMA synchronous = NORMAL;
 - `/clan leave`: Tự nguyện rời băng (có xác nhận 2 lớp; Chủ Băng bắt buộc phải nhượng quyền hoặc giải tán).
 
 ### 4.4. Nhóm D: Hồ Sơ, Thành Viên & Bảng Xếp Hạng
-- `/clan info [tên_băng]`: Xem hồ sơ băng đảng màu trùng màu Role, kèm Logo, Banner (tùy chỉnh hoặc Canvas mặc định), Sĩ số, Cấp độ, Thanh tiến trình EXP và các nút tương tác nhanh (**Xem Thành Viên**, **Xem Banner Băng**, **Xin Gia Nhập**).
+- `/clan info [tên_băng]`: Xem hồ sơ băng đảng màu trùng màu Role, kèm Logo, Banner, Sĩ số, Cấp độ, **🔥 Chuỗi Lửa Băng**, Thanh tiến trình EXP và các nút tương tác nhanh (**Xem Thành Viên**, **Điểm Danh Nhanh**, **Xem Banner Băng**, **Ảnh Nền Băng Full HD**, **Rời Băng**, **🔥 Lửa Streak: Đang Tắt/Bật** để tự nguyện gắn ` 🔥 N` sau tên gốc).
 - `/clan members [tên_băng]`: Danh sách thành viên phân trang (10 người/trang), hiển thị chức vụ, **danh hiệu nội bộ**, điểm cống hiến, kèm **Menu Dropdown lọc theo chức vụ**.
 - `/clan list`: Danh sách toàn bộ các băng trong server kèm trạng thái tuyển quân.
 - `/clan leaderboard [tiêu_chí]`: Bảng vinh danh top băng đảng theo Cấp độ & EXP, Năng động tuần, hoặc Đông thành viên nhất.
 - `/clan logs [trang]`: Nhật ký hoạt động nội bộ gần đây kèm mốc thời gian tương đối của Discord (`<t:timestamp:R>`).
 
 ### 4.5. Nhóm E: Hoạt Động Gắn Kết & Thách Đấu
-- `/clan checkin`: Điểm danh mỗi ngày (reset lúc 00:00 giờ Việt Nam). Thưởng **+30 EXP băng**, **+10 Điểm cống hiến**. Đạt chuỗi 7 ngày liên tiếp thưởng thêm **+50 EXP**.
+- `/clan checkin`: Điểm danh mỗi ngày (reset lúc 00:00 giờ Việt Nam). Thưởng **+30 EXP băng**, **+10 Điểm cống hiến** và **+15 Xu Linh Thú**. Đạt chuỗi cá nhân 7 ngày liên tiếp thưởng thêm **+50 EXP**. Khi băng đạt **≥ 2 người điểm danh/ngày**, **Chuỗi Lửa Băng (`clan_streak`)** tăng +1 và tự động đồng bộ lên biệt danh các thành viên đang bật Lửa Streak.
 - `/clan party`: Mở trung tâm **Thách Đấu & Lập Kèo**:
   - **Gửi Thư Thách Đấu:** Chọn 1 băng đối thủ (hoặc tất cả các băng trong server — chỉ `LEADER`/`CO_LEADER`, cooldown 12 giờ/lần để chống spam ping), nhập Tựa Game, Thể Thức, Thời Gian và Nội Dung qua Modal; băng nhận có nút **Chấp Nhận Thách Đấu** / **Từ Chối Lịch Sự**.
   - **Lập Kèo Nội Bộ (LFG):** Rủ anh em cùng băng lập team chơi game kèm nút **Tham Gia**, **Dự Bị**, **Rút Lui**, **Chốt / Đóng Kèo** và tự động nhắc trước 10 phút.
-- `/clan quests`: Bảng theo dõi 3 nhiệm vụ tuần đồng đội (**Điểm danh**, **Voice Co-op**, **Sôi nổi kênh chat**). Hoàn thành thưởng từ **+300 đến +500 EXP**.
+- `/clan quests`: Bảng theo dõi **Nhiệm Vụ Ngày** (3 nhiệm vụ làm mới 00:00 mỗi ngày) & **Nhiệm Vụ Tuần** (3 nhiệm vụ đồng đội: **Điểm danh**, **Voice Co-op**, **Sôi nổi kênh chat**, thưởng **+300 đến +500 EXP**).
 
 ---
 
@@ -180,13 +186,15 @@ WickedChen/
 │   ├── error_handler.py       # Bộ bắt và xử lý lỗi tập trung cho Slash Commands
 │   ├── image_storage.py       # Lưu trữ bền vững ảnh Logo/Banner tải lên (local://)
 │   ├── logger.py              # Định dạng log màu và timestamp
+│   ├── pet_canvas.py          # Canvas Engine 2x vẽ Linh Thú 5 giai đoạn & trang phục ôm khít silhouette
+│   ├── streak_nick.py         # Dịch vụ Lửa Streak trên biệt danh (Exact-Suffix Match, giới hạn 32 ký tự)
 │   ├── text_helper.py         # Chuyển đổi tên kênh tiếng Việt không dấu chuẩn Discord
 │   ├── time_helper.py         # Xử lý giờ Việt Nam (Asia/Ho_Chi_Minh) & chu kỳ tuần ISO
 │   └── ui_components.py       # Discord Views, Buttons, Select Menus và Modals
 ├── data/
 │   └── clan_bot.db            # File SQLite cơ sở dữ liệu duy nhất
 ├── tests/
-│   └── test_system.py         # Bộ kiểm thử tích hợp 34 bài test tự động
+│   └── test_system.py         # Bộ kiểm thử tích hợp 35 bài test tự động
 ├── HDSD.md                    # Cẩm nang hướng dẫn sử dụng chi tiết cho người dùng & Admin
 ├── config.py                  # Quản lý tập trung mọi biến môi trường
 ├── Dockerfile                 # Đóng gói container Docker siêu nhẹ

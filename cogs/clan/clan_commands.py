@@ -102,11 +102,13 @@ class ClanHelpView(discord.ui.View):
             embed = discord.Embed(
                 title="📖 CƠ CHẾ HỆ THỐNG & BẢNG CẤP ĐỘ (EXP / UNLOCK)",
                 description=(
-                    "**1. Cách Kiếm EXP & Điểm Cống Hiến:**\n"
-                    "• **Điểm danh hằng ngày (`/clan checkin`):** +30 EXP băng & +10 Điểm cống hiến. Chuỗi 7 ngày liên tiếp thưởng thêm **+50 EXP** *(reset 00:00 giờ VN, tối đa 1 lần/ngày/người)*.\n"
+                    "**1. Cách Kiếm EXP, Xu Linh Thú & Chuỗi Lửa Băng:**\n"
+                    "• **Điểm danh hằng ngày (`/clan checkin`):** +30 EXP băng, +10 Cống hiến & +15 Xu Linh Thú. Chuỗi cá nhân 7 ngày thưởng thêm **+50 EXP** *(reset 00:00 giờ VN, tối đa 1 lần/ngày/người)*.\n"
+                    "• **🔥 Chuỗi Lửa Băng (`🔥 N` trên biệt danh):** Khi băng có **≥ 2 người điểm danh/ngày**, `Chuỗi Lửa Băng` tăng +1. Thành viên tự bật/tắt nút **`🔥 Lửa Streak`** trong **Hồ Sơ Băng** để gắn hậu tố ` 🔥 N` sau tên gốc *(bảo toàn tên gốc, giới hạn 32 ký tự)*.\n"
                     "• **Chat kênh riêng băng:** +5 EXP băng & +1 Cống hiến (tin nhắn từ 5 ký tự, cooldown 60 giây).\n"
                     "• **Ngồi Voice Co-op:** Từ 2 thành viên cùng băng ngồi chung Voice (trừ kênh AFK) mỗi 5 phút nhận **+15 EXP** & **+3 Cống hiến**.\n"
-                    "• **Nhiệm vụ tuần (`/clan quests`):** Hoàn thành 3 nhiệm vụ (Điểm danh, Voice Co-op, Sôi nổi chat) nhận **+300 đến +500 EXP** mỗi nhiệm vụ.\n"
+                    "• **Nhiệm Vụ Ngày & Tuần:** Mở **`🎯 Nhiệm Vụ & Điểm Danh`** trong `/clan hub` (hoặc `/clan quests`) để nhận thêm **EXP + Xu Linh Thú**.\n"
+                    "• **🐾 Linh Thú Băng Đảng (`/clan-pet`):** Cả băng cùng nuôi lớn qua 5 giai đoạn (từ Trứng → Tối Thượng), mặc đồ theo silhouette & nhận buff **+5% đến +15% EXP Điểm danh**!\n"
                     "• **🔥 Đêm Lửa Trại Cuối Tuần (T7 & CN, 20:00–23:00):** Toàn bộ EXP Chat & Voice được **nhân đôi (x2)**!\n\n"
                     "**2. Bảng Mốc Cấp Độ & Mở Khóa Đặc Quyền:**\n"
                     "• **Level 1 (0 EXP):** Tối đa **15** thành viên • Mở 1 Kênh Chat riêng + 1 Kênh Nhật Ký tự động + 1 Kênh Voice public, đổi màu Role đơn sắc/Gradient, up Logo & Banner.\n"
@@ -146,9 +148,10 @@ class ClanHelpView(discord.ui.View):
                     "• Hoặc gõ `/clan hub` → `Xem Danh Sách Băng` / `Nộp Đơn Vào Băng` (hoặc `/clan apply`).\n"
                     "• Nếu được Cán Bộ mời, bấm nút **`[✅ Chấp Nhận Lời Mời]`** ngay trong tin nhắn riêng (DM).\n\n"
                     "**2. Hoạt động hằng ngày:**\n"
-                    "• Gõ `/clan hub` → bấm **`[📅 Điểm Danh Hằng Ngày]`**, theo dõi **`[🎯 Nhiệm Vụ Tuần]`**, hoặc rủ anh em lập team bằng **`[⚔️ Thách Đấu / Tạo Kèo]`**.\n\n"
+                    "• Gõ `/clan hub` → bấm **`[🎯 Nhiệm Vụ & Điểm Danh]`** (gồm Điểm danh, Nhiệm vụ Ngày & Nhiệm vụ Tuần), **`[🐾 Linh Thú Băng]`** (hoặc `/clan-pet`) để chăm sóc Pet & phối đồ, hoặc **`[⚔️ Thách Đấu / Tạo Kèo]`**.\n"
+                    "• Mở **`[🏰 Hồ Sơ Băng Của Bạn]`** để xem **🔥 Chuỗi Lửa Băng**, xuất **🖼️ Ảnh Nền Full HD**, hoặc bấm **`[🔥 Lửa Streak]`** để bật lửa trên biệt danh.\n\n"
                     "**3. Rời băng tự do:**\n"
-                    "• Bấm **`[🚪 Rời Băng]`** (hoặc `/clan leave`), có xác nhận 2 lớp. Không bị phạt cooldown khi chuyển băng."
+                    "• Trong **Hồ Sơ Băng**, bấm **`[🚪 Rời Băng]`** (hoặc `/clan leave`), có xác nhận 2 lớp. Bot tự động gỡ lửa streak (nếu có) và không phạt cooldown."
                 ),
                 color=discord.Color.green()
             )
@@ -162,8 +165,8 @@ class ClanHelpView(discord.ui.View):
                     "• Tự động tạo lại Role hoặc Kênh bị thiếu của các băng và đồng bộ thành viên.\n"
                     "• Bot **không tự ý sửa tên hay xóa kênh đang tồn tại**.\n\n"
                     "**3. Xóa băng vi phạm (`/clan-admin force-delete`):** Có xác nhận 2 lớp an toàn.\n\n"
-                    "**4. Phân quyền Role dùng bot (`/bot-access` — Chỉ Chủ Bot):**\n"
-                    "• Chọn `Bật Tất Cả`, `Chọn Role Cụ Thể` (hỗ trợ phân trang nhiều role), hoặc `Tắt Tất Cả`."
+                    "**4. Phân quyền & Quản trị Chủ Bot (`/bot-access` — Chỉ Chủ Bot):**\n"
+                    "• Chọn Role được dùng bot (`Bật Tất Cả`, `Chọn Role Cụ Thể`, `Tắt Tất Cả`) hoặc mở **`👑 Quản Lý & Buff Hệ Thống`** để buff EXP/Pet/Xu, đổi Loài & Stage Pet, mở Full Tủ Đồ, Random Style, sửa hoặc xóa băng."
                 ),
                 color=discord.Color.gold()
             )
@@ -1238,10 +1241,11 @@ class ClanCommands(commands.Cog):
             name="🚀 Các Lệnh Chính Thường Dùng",
             value=(
                 "• `/clan hub`: Mở trung tâm điều khiển 1-Click\n"
+                "• `/clan-pet`: Chăm sóc, nâng cấp & phối đồ Linh Thú Băng\n"
                 "• `/clan create`: Thành lập một băng đảng mới\n"
                 "• `/clan-recruit`: Đăng tin tuyển thành viên vào `#tuyen-thanh-vien`\n"
                 "• `/clan checkin`: Điểm danh hằng ngày nhận EXP & cống hiến\n"
-                "• `/clan info`: Xem hồ sơ, cấp độ & sĩ số băng"
+                "• `/clan info`: Xem hồ sơ, chuỗi lửa băng, cấp độ & sĩ số"
             ),
             inline=False
         )
