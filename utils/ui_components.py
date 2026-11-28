@@ -9,7 +9,7 @@ import asyncio
 import re
 import time
 import aiosqlite
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from utils.constants import (
     Ranks,
     JoinModes,
@@ -4612,7 +4612,8 @@ async def build_bot_owner_panel_embed(
                 f"Hiện có **{len(clans)}** băng đảng đang hoạt động trong máy chủ.\n\n"
                 "👉 Hãy **chọn một băng đảng** ở menu bên dưới để:\n"
                 "• **⚡ Buff EXP Băng** (tự động lên cấp & mở slot)\n"
-                "• **🐾 Buff Pet EXP, Xu Linh Thú, Độ No & Độ Vui**\n"
+                "• **🐾 Đổi Loài Pet, Chọn Stage (1–5), Buff Pet EXP & Xu**\n"
+                "• **🎁 Mở Full Tủ Đồ & Random Style** để test trực tiếp ảnh Pet\n"
                 "• **✏️ Sửa Tên, Tag, Sĩ Số Tối Đa hoặc Đổi Role**\n"
                 "• **🧹 Xóa Pet** hoặc **🗑️ Xóa Sạch Băng & Toàn Bộ Dữ Liệu**"
             ),
@@ -4622,10 +4623,11 @@ async def build_bot_owner_panel_embed(
 
     mem_count = await db.get_member_count(selected_clan["clan_id"])
     pet = await db.get_clan_pet(selected_clan["clan_id"])
+    sp_name = PET_SPECIES.get(pet["species"], {}).get("name", pet["species"]) if pet else ""
     pet_txt = (
-        f"🐾 **{pet['name']}** (`{pet['species']}`) • Lv.**{pet['level']}** (Stage {pet['stage']})\n"
+        f"🐾 **{pet['name']}** ({sp_name}) • Lv.**{pet['level']}** (Stage {pet['stage']})\n"
         f"┗ Pet EXP: **{pet['exp']:,}** • Xu: **{pet['pet_coins']:,}** 🪙 • No: **{pet['hunger']}%** • Vui: **{pet['mood']}%**"
-        if pet else "_Chưa nhận Linh Thú_"
+        if pet else "_Chưa nhận Linh Thú (chọn Loài / Stage bên dưới để tạo & test ngay)_"
     )
     role_mention = f"<@&{selected_clan['role_id']}>" if selected_clan.get("role_id") else "_Không có_"
     embed = discord.Embed(
@@ -4640,6 +4642,25 @@ async def build_bot_owner_panel_embed(
     embed.add_field(name="🐾 Linh Thú & Quỹ Xu", value=pet_txt, inline=False)
     embed.set_footer(text="Chỉ Chủ Bot (Bot Owner) mới có quyền thao tác bảng này")
     return embed
+
+
+async def build_owner_panel_message(
+    guild: discord.Guild,
+    clans: List[Dict[str, Any]],
+    selected_clan: Optional[Dict[str, Any]],
+    db: Any,
+) -> Tuple[discord.Embed, List[discord.File]]:
+    """Tạo Embed + ảnh Pet trực tiếp (nếu băng có Pet) cho bảng Chủ Bot."""
+    embed = await build_bot_owner_panel_embed(guild, clans, selected_clan, db)
+    files: List[discord.File] = []
+    if selected_clan:
+        pet = await db.get_clan_pet(selected_clan["clan_id"])
+        if pet:
+            from utils.pet_canvas import generate_clan_pet_image
+            buf = await asyncio.to_thread(generate_clan_pet_image, pet, selected_clan)
+            files.append(discord.File(buf, filename="owner_pet_preview.png"))
+            embed.set_image(url="attachment://owner_pet_preview.png")
+    return embed, files
 
 
 class BotOwnerBuffClanModal(SafeModal, title="⚡ Buff / Điều Chỉnh EXP Băng"):
@@ -4667,9 +4688,9 @@ class BotOwnerBuffClanModal(SafeModal, title="⚡ Buff / Điều Chỉnh EXP Bă
         await interaction.response.defer()
         updated = await self.bot.db.owner_buff_clan_exp(self.clan["clan_id"], delta)
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
-        embed = await build_bot_owner_panel_embed(interaction.guild, clans, updated, self.bot.db)
+        embed, files = await build_owner_panel_message(interaction.guild, clans, updated, self.bot.db)
         view = BotOwnerSystemPanelView(interaction.guild, clans, updated, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
         await auto_dismiss_notice(interaction, content=f"⚡ Đã điều chỉnh **{delta:+,} EXP** cho băng **[{updated['tag']}] {updated['name']}** (Lv.{updated['level']})!", delay=5)
 
 
@@ -4705,9 +4726,9 @@ class BotOwnerBuffPetModal(SafeModal, title="🐾 Buff Pet EXP & Xu Linh Thú"):
         updated_pet = await self.bot.db.owner_buff_pet(self.clan["clan_id"], d_exp, d_coins, d_hun, d_mood)
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         clan_obj = await self.bot.db.get_clan_by_id(self.clan["clan_id"])
-        embed = await build_bot_owner_panel_embed(interaction.guild, clans, clan_obj, self.bot.db)
+        embed, files = await build_owner_panel_message(interaction.guild, clans, clan_obj, self.bot.db)
         view = BotOwnerSystemPanelView(interaction.guild, clans, clan_obj, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
         await auto_dismiss_notice(
             interaction,
             content=f"🐾 Đã buff Pet **{updated_pet['name']}**: Lv.**{updated_pet['level']}** (Stage {updated_pet['stage']}), Xu: **{updated_pet['pet_coins']:,}** 🪙!",
@@ -4756,9 +4777,9 @@ class BotOwnerEditClanModal(SafeModal, title="✏️ Chỉnh Sửa Thông Tin B�
                 pass
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         updated = await self.bot.db.get_clan_by_id(self.clan["clan_id"])
-        embed = await build_bot_owner_panel_embed(interaction.guild, clans, updated, self.bot.db)
+        embed, files = await build_owner_panel_message(interaction.guild, clans, updated, self.bot.db)
         view = BotOwnerSystemPanelView(interaction.guild, clans, updated, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
         await auto_dismiss_notice(interaction, content=f"✅ Đã cập nhật thông tin băng **[{new_tag}] {new_name}**!", delay=5)
 
 
@@ -4806,22 +4827,22 @@ class BotOwnerDeleteClanConfirmView(SafeView):
                 pass
 
         clans = await self.bot.db.get_all_clans_in_guild(guild.id)
-        embed = await build_bot_owner_panel_embed(guild, clans, None, self.bot.db)
+        embed, files = await build_owner_panel_message(guild, clans, None, self.bot.db)
         view = BotOwnerSystemPanelView(guild, clans, None, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
         await auto_dismiss_notice(interaction, content=f"💥 Đã xóa sạch băng **[{clan['tag']}] {clan['name']}**, Role, Kênh và toàn bộ Pet!", delay=6)
 
     @ui.button(label="Hủy Bỏ", emoji="↩️", style=discord.ButtonStyle.secondary)
     async def cancel_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
-        embed = await build_bot_owner_panel_embed(interaction.guild, clans, self.clan, self.bot.db)
+        embed, files = await build_owner_panel_message(interaction.guild, clans, self.clan, self.bot.db)
         view = BotOwnerSystemPanelView(interaction.guild, clans, self.clan, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
 
 
 class BotOwnerSystemPanelView(SafeView):
-    """Bảng quản lý, chỉnh sửa, xóa băng/Pet/Role và Buff dành riêng cho Chủ Bot."""
+    """Bảng quản lý, chỉnh sửa, xóa băng/Pet/Role và Buff/Test nhanh dành riêng cho Chủ Bot."""
     def __init__(
         self,
         guild: discord.Guild,
@@ -4853,8 +4874,36 @@ class BotOwnerSystemPanelView(SafeView):
             self.clan_select.disabled = True
         self.clan_select.options = opts
 
+        self.species_select.options = [
+            discord.SelectOption(
+                label=f"{sp_info['name']} ({sp_id})",
+                value=sp_id,
+                emoji=sp_info.get("emoji"),
+                description=sp_info.get("desc", "")[:100],
+            )
+            for sp_id, sp_info in PET_SPECIES.items()
+        ]
+        self.stage_select.options = [
+            discord.SelectOption(
+                label=f"Stage {st['stage']}: {st['name']} (Lv.{st['min_level']}+)",
+                value=str(st["stage"]),
+                description=st.get("perk", "")[:100],
+            )
+            for st in PET_STAGES
+        ]
+
         if not selected_clan:
-            for item in (self.buff_clan_btn, self.buff_pet_btn, self.edit_clan_btn, self.delete_pet_btn, self.delete_clan_btn):
+            for item in (
+                self.species_select,
+                self.stage_select,
+                self.buff_clan_btn,
+                self.buff_pet_btn,
+                self.unlock_all_items_btn,
+                self.random_style_btn,
+                self.edit_clan_btn,
+                self.delete_pet_btn,
+                self.delete_clan_btn,
+            ):
                 self.remove_item(item)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -4871,23 +4920,82 @@ class BotOwnerSystemPanelView(SafeView):
         await interaction.response.defer()
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         chosen = await self.bot.db.get_clan_by_id(int(val))
-        embed = await build_bot_owner_panel_embed(interaction.guild, clans, chosen, self.bot.db)
+        embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
         view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
 
-    @ui.button(label="Buff EXP Băng", emoji="⚡", style=discord.ButtonStyle.success, row=1)
+    @ui.select(placeholder="🧬 Đổi Chủng Loài Pet (Test nhanh 4 loài)...", row=1)
+    async def species_select(self, interaction: discord.Interaction, select: ui.Select):
+        await interaction.response.defer()
+        sp_id = select.values[0]
+        pet = await self.bot.db.owner_set_pet_state(self.selected_clan["clan_id"], species=sp_id)
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
+        embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
+        sp_name = PET_SPECIES.get(sp_id, {}).get("name", sp_id)
+        await auto_dismiss_notice(interaction, content=f"🧬 Đã đổi Linh Thú sang **{sp_name}** (Stage {pet['stage']})!", delay=4)
+
+    @ui.select(placeholder="🚀 Chọn Giai Đoạn Trưởng Thành (Stage 1 → 5)...", row=2)
+    async def stage_select(self, interaction: discord.Interaction, select: ui.Select):
+        await interaction.response.defer()
+        st = int(select.values[0])
+        pet = await self.bot.db.owner_set_pet_state(self.selected_clan["clan_id"], stage=st)
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
+        embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
+        await auto_dismiss_notice(interaction, content=f"🚀 Đã đưa Pet lên **Stage {pet['stage']} (Lv.{pet['level']})**!", delay=4)
+
+    @ui.button(label="Buff EXP Băng", emoji="⚡", style=discord.ButtonStyle.success, row=3)
     async def buff_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(BotOwnerBuffClanModal(self.selected_clan, self.mode, self.role_ids, self.bot))
 
-    @ui.button(label="Buff Pet & Xu", emoji="🐾", style=discord.ButtonStyle.success, row=1)
+    @ui.button(label="Buff Pet & Xu", emoji="🐾", style=discord.ButtonStyle.success, row=3)
     async def buff_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(BotOwnerBuffPetModal(self.selected_clan, self.mode, self.role_ids, self.bot))
 
-    @ui.button(label="Sửa Băng / Role", emoji="✏️", style=discord.ButtonStyle.primary, row=1)
+    @ui.button(label="Mở Full Tủ Đồ", emoji="🎁", style=discord.ButtonStyle.primary, row=3)
+    async def unlock_all_items_btn(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.defer()
+        all_ids = [item["item_id"] for item in PET_CATALOG]
+        pet = await self.bot.db.owner_unlock_all_pet_items(self.selected_clan["clan_id"], all_ids, bonus_coins=10000)
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
+        embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
+        await auto_dismiss_notice(interaction, content=f"🎁 Đã mở khóa toàn bộ **{len(all_ids)} món đồ** & tặng **+10,000 Xu** (Tổng: {pet['pet_coins']:,} 🪙)!", delay=5)
+
+    @ui.button(label="Random Style", emoji="🎲", style=discord.ButtonStyle.primary, row=3)
+    async def random_style_btn(self, interaction: discord.Interaction, button: ui.Button):
+        import random
+        await interaction.response.defer()
+        pet = await self.bot.db.get_clan_pet(self.selected_clan["clan_id"])
+        if not pet:
+            pet = await self.bot.db.create_clan_pet(self.selected_clan["clan_id"], "cyber_cat", "Bé Mèo Cyber")
+        info = get_pet_level_info(int(pet.get("exp", 0)))
+        unlocked_slots = info["unlocked_slots"]
+        new_eq: Dict[str, str] = {}
+        for slot in unlocked_slots:
+            cands = [i["item_id"] for i in PET_CATALOG if i["slot"] == slot and i["min_stage"] <= info["stage"]]
+            if cands:
+                new_eq[slot] = random.choice(cands)
+        await self.bot.db.owner_set_pet_state(self.selected_clan["clan_id"], equipped=new_eq)
+        clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
+        chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
+        embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
+        view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
+        await auto_dismiss_notice(interaction, content=f"🎲 Đã phối ngẫu nhiên **{len(new_eq)} món đồ** cho Stage {info['stage']}!", delay=4)
+
+    @ui.button(label="Sửa Băng / Role", emoji="✏️", style=discord.ButtonStyle.secondary, row=3)
     async def edit_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(BotOwnerEditClanModal(self.selected_clan, self.mode, self.role_ids, self.bot))
 
-    @ui.button(label="Xóa Pet Băng", emoji="🧹", style=discord.ButtonStyle.danger, row=2)
+    @ui.button(label="Xóa Pet Băng", emoji="🧹", style=discord.ButtonStyle.danger, row=4)
     async def delete_pet_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         await self.bot.db.delete_clan_pet(self.selected_clan["clan_id"])
@@ -4899,12 +5007,12 @@ class BotOwnerSystemPanelView(SafeView):
                 pass
         clans = await self.bot.db.get_all_clans_in_guild(interaction.guild_id)
         chosen = await self.bot.db.get_clan_by_id(self.selected_clan["clan_id"])
-        embed = await build_bot_owner_panel_embed(interaction.guild, clans, chosen, self.bot.db)
+        embed, files = await build_owner_panel_message(interaction.guild, clans, chosen, self.bot.db)
         view = BotOwnerSystemPanelView(interaction.guild, clans, chosen, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=files)
         await auto_dismiss_notice(interaction, content=f"🧹 Đã xóa toàn bộ dữ liệu Linh Thú của băng **[{chosen['tag']}] {chosen['name']}**!", delay=5)
 
-    @ui.button(label="Xóa Băng & Tất Cả", emoji="🗑️", style=discord.ButtonStyle.danger, row=2)
+    @ui.button(label="Xóa Băng & Tất Cả", emoji="🗑️", style=discord.ButtonStyle.danger, row=4)
     async def delete_clan_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         embed = discord.Embed(
@@ -4913,14 +5021,14 @@ class BotOwnerSystemPanelView(SafeView):
             color=discord.Color.red()
         )
         view = BotOwnerDeleteClanConfirmView(self.selected_clan, self.mode, self.role_ids, self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=[])
 
-    @ui.button(label="Về Phân Quyền Role", emoji="🔐", style=discord.ButtonStyle.secondary, row=2)
+    @ui.button(label="Về Phân Quyền Role", emoji="🔐", style=discord.ButtonStyle.secondary, row=4)
     async def back_access_btn(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.defer()
         embed = build_bot_access_embed(interaction.guild.name, self.mode, self.role_ids)
         view = BotAccessControlView(interaction.guild.name, self.mode, self.role_ids, bot=self.bot)
-        await interaction.edit_original_response(embed=embed, view=view)
+        await interaction.edit_original_response(embed=embed, view=view, attachments=[])
 
 
 # =============================================================================

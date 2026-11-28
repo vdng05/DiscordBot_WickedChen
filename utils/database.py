@@ -1326,3 +1326,56 @@ class DatabaseManager:
             )
             await db.commit()
         return await self.get_clan_pet(clan_id)
+
+    async def owner_set_pet_state(
+        self,
+        clan_id: int,
+        species: Optional[str] = None,
+        stage: Optional[int] = None,
+        equipped: Optional[Dict[str, str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Chủ Bot đặt trực tiếp chủng loại, giai đoạn (Stage 1..5) hoặc bộ đồ đang mặc để test nhanh."""
+        pet = await self.get_clan_pet(clan_id)
+        if not pet:
+            sp = species or "cyber_cat"
+            sp_name = PET_SPECIES.get(sp, {}).get("name", sp)
+            pet = await self.create_clan_pet(clan_id, sp, f"Bé {sp_name}")
+
+        new_species = species if species in PET_SPECIES else pet["species"]
+        new_exp = int(pet.get("exp", 0))
+        if stage is not None:
+            st = max(1, min(5, int(stage)))
+            stage_min_exp = {1: 0, 2: 200, 3: 1200, 4: 4000, 5: 10000}
+            new_exp = stage_min_exp[st]
+
+        info = get_pet_level_info(new_exp)
+        new_equipped = dict(equipped if equipped is not None else (pet.get("equipped") or {}))
+        unlocked_slots = set(info["unlocked_slots"])
+        new_equipped = {k: v for k, v in new_equipped.items() if k in unlocked_slots and v}
+
+        async with self.connect() as db:
+            await db.execute(
+                "UPDATE clan_pets SET species = ?, exp = ?, level = ?, stage = ?, equipped_json = ? WHERE clan_id = ?",
+                (new_species, new_exp, info["level"], info["stage"], json.dumps(new_equipped, ensure_ascii=False), clan_id)
+            )
+            await db.commit()
+        return await self.get_clan_pet(clan_id)
+
+    async def owner_unlock_all_pet_items(self, clan_id: int, item_ids: List[str], bonus_coins: int = 10000) -> Optional[Dict[str, Any]]:
+        """Chủ Bot mở khóa toàn bộ vật phẩm trong Cửa Hàng & tặng Xu cho băng để test phối đồ."""
+        pet = await self.get_clan_pet(clan_id)
+        if not pet:
+            pet = await self.create_clan_pet(clan_id, "cyber_cat", "Bé Mèo Cyber")
+        now = time.time()
+        async with self.connect() as db:
+            for item_id in item_ids:
+                await db.execute(
+                    "INSERT OR IGNORE INTO clan_pet_inventory (clan_id, item_id, purchased_at) VALUES (?, ?, ?)",
+                    (clan_id, item_id, now)
+                )
+            await db.execute(
+                "UPDATE clan_pets SET pet_coins = pet_coins + ? WHERE clan_id = ?",
+                (max(0, int(bonus_coins)), clan_id)
+            )
+            await db.commit()
+        return await self.get_clan_pet(clan_id)
