@@ -10,7 +10,7 @@ from pathlib import Path
 import time
 from typing import Optional, Dict, List, Any
 from utils.logger import setup_logging
-from utils.constants import DEFAULT_WEEKLY_QUESTS, DEFAULT_DAILY_QUESTS, LEVELS, get_pet_level_info
+from utils.constants import DEFAULT_WEEKLY_QUESTS, DEFAULT_DAILY_QUESTS, LEVELS, PET_SPECIES, get_pet_level_info
 
 logger = setup_logging("Database")
 
@@ -1345,7 +1345,7 @@ class DatabaseManager:
         new_exp = int(pet.get("exp", 0))
         if stage is not None:
             st = max(1, min(5, int(stage)))
-            stage_min_exp = {1: 0, 2: 200, 3: 1200, 4: 4000, 5: 10000}
+            stage_min_exp = {1: 0, 2: 128, 3: 1008, 4: 3828, 5: 10388}
             new_exp = stage_min_exp[st]
 
         info = get_pet_level_info(new_exp)
