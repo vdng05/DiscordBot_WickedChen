@@ -259,6 +259,56 @@ class ClanEvents(commands.Cog):
         except Exception as e:
             logger.error(f"Lỗi kiểm tra nhắc kèo party: {e}")
 
+        # 3. Kiểm tra & reset các băng bị đứt chuỗi điểm danh qua ngày mới (giờ Việt Nam)
+        try:
+            today = get_today_vn_string()
+            if getattr(self, "_last_streak_reset_date", None) != today:
+                from utils.time_helper import get_yesterday_vn_string
+                yesterday = get_yesterday_vn_string()
+                expired_clans = await self.bot.db.reset_expired_clan_streaks(today, yesterday)
+                self._last_streak_reset_date = today
+                if expired_clans:
+                    from utils.streak_nick import sync_clan_streak_queue
+                    for ec in expired_clans:
+                        asyncio.create_task(sync_clan_streak_queue(self.bot, ec["clan_id"]))
+        except Exception as e:
+            logger.error(f"Lỗi kiểm tra reset streak băng: {e}")
+
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        """Phát hiện thành viên tự đổi/rút ngắn biệt danh để tôn trọng tên mới hoặc tự gắn lại lửa streak."""
+        if after.bot or before.nick == after.nick:
+            return
+        from utils.streak_nick import is_bot_editing_nick, sync_member_streak_nick
+        if is_bot_editing_nick(after.guild.id, after.id):
+            return
+        try:
+            state = await self.bot.db.get_member_streak_nick_state(after.guild.id, after.id)
+            if not state:
+                return
+            last_suffix = state.get("last_applied_suffix")
+            if last_suffix and (after.nick is None or not after.nick.endswith(last_suffix)):
+                await self.bot.db.set_member_streak_nick_state(
+                    after.guild.id,
+                    after.id,
+                    last_applied_suffix=None,
+                    had_original_nick=1 if after.nick is not None else 0,
+                )
+            if int(state.get("streak_nick_enabled") or 0) == 1:
+                if int(state.get("nick_warned_len") or 0) > 0 or last_suffix:
+                    clan = await self.bot.db.get_clan_by_id(state["clan_id"])
+                    clan_streak = int((clan or {}).get("clan_streak") or 0)
+                    if clan_streak > 0:
+                        await sync_member_streak_nick(
+                            self.bot.db,
+                            after,
+                            state["clan_id"],
+                            clan_streak,
+                            notify_on_overflow=True,
+                        )
+        except Exception as e:
+            logger.error(f"Lỗi xử lý on_member_update streak nick: {e}")
+
         # 3. Dọn dẹp cooldown rời băng đã hết hạn
         try:
             await self.bot.db.clean_expired_cooldowns()

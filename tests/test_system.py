@@ -659,8 +659,73 @@ async def run_tests():
     assert any(getattr(c, "label", "") == "Buff Pet & Xu" for c in owner_panel.children)
     print("✅ 34. Weekly Quests, Xem Trước Shop Linh Thú & Bộ công cụ Chủ Bot (/bot-access) hoạt động 100%.")
 
+    # Test 35: Lửa Streak Trên Biệt Danh (Exact-Suffix Match, Bảo toàn tên gốc, Overflow > 32, Streak Băng >= 2 người)
+    from utils.streak_nick import compute_base_nickname, sync_member_streak_nick, restore_original_nick
+    from utils.ui_components import ClanInfoView
+
+    # 35a. Không dùng regex xóa mù: user tự đặt "🔥 99" trong tên gốc vẫn được bảo toàn
+    b1, m1, man1 = compute_base_nickname("Pro 🔥 99 🔥 5", "Pro", " 🔥 5")
+    assert b1 == "Pro 🔥 99" and m1 is True and man1 is False
+    b2, m2, man2 = compute_base_nickname("Pro 🔥 99", "Pro", " 🔥 5")
+    assert b2 == "Pro 🔥 99" and m2 is False and man2 is True
+
+    # 35b. Streak chung của băng (>= 2 người check-in/ngày)
+    st_r1 = await db.record_clan_daily_checkin_streak(clan_id, "2099-01-01", "2098-12-31", min_members=2)
+    assert st_r1["streak_updated"] is False and st_r1["daily_checkin_count"] == 1
+    st_r2 = await db.record_clan_daily_checkin_streak(clan_id, "2099-01-01", "2098-12-31", min_members=2)
+    assert st_r2["streak_updated"] is True and st_r2["clan_streak"] >= 1
+
+    # 35c. Mock Member để test sync_member_streak_nick (nick=None -> khôi phục None, và overflow 32 ký tự)
+    class _FakeRole:
+        def __init__(self, pos): self.pos = pos
+        def __ge__(self, other): return self.pos >= other.pos
+
+    class _FakeGuild:
+        id = int(clan1_obj["guild_id"])
+        owner_id = 999999
+        class _Me:
+            class _Perms:
+                manage_nicknames = True
+            guild_permissions = _Perms()
+            top_role = _FakeRole(100)
+        me = _Me()
+
+    class _FakeMember:
+        def __init__(self, uid, nick, display_name):
+            self.id = uid
+            self.nick = nick
+            self.display_name = display_name
+            self.guild = _FakeGuild()
+            self.top_role = _FakeRole(10)
+            self.edits = []
+        async def edit(self, nick=None, reason=None):
+            self.nick = nick
+            self.edits.append(nick)
+
+    mem_uid = int(clan1_obj["leader_id"])
+    fake_mem = _FakeMember(mem_uid, None, "NguyenVanA")
+    res_on = await sync_member_streak_nick(db, fake_mem, clan_id, 9, notify_on_overflow=False, enable_opt_in=True)
+    assert res_on["status"] == "UPDATED" and fake_mem.nick == "NguyenVanA 🔥 9"
+    res_off = await restore_original_nick(db, fake_mem, disable_opt_in=True)
+    assert res_off["status"] == "RESTORED" and fake_mem.nick is None
+
+    # Test tràn 32 ký tự: 28 ký tự + " 🔥 9" (4 ký tự) = 32 (OK), lên " 🔥 10" (5 ký tự) = 33 -> gỡ đuôi cũ trả về tên gốc
+    long_mem = _FakeMember(mem_uid, "A" * 28, "A" * 28)
+    r_ok = await sync_member_streak_nick(db, long_mem, clan_id, 9, notify_on_overflow=False, enable_opt_in=True)
+    assert r_ok["status"] == "UPDATED" and len(long_mem.nick) == 32
+    r_ov = await sync_member_streak_nick(db, long_mem, clan_id, 10, notify_on_overflow=False)
+    assert r_ov["status"] == "TOO_LONG" and r_ov["excess"] == 1 and long_mem.nick == "A" * 28
+
+    # 35d. ClanInfoView có nút Lửa Streak
+    info_view_off = ClanInfoView(clan_id=clan_id, is_member=True, bot=bot, streak_nick_enabled=False)
+    assert any(getattr(c, "label", "") == "Lửa Streak: Đang Tắt" for c in info_view_off.children)
+    info_view_on = ClanInfoView(clan_id=clan_id, is_member=True, bot=bot, streak_nick_enabled=True)
+    assert any(getattr(c, "label", "") == "Lửa Streak: Đang Bật" for c in info_view_on.children)
+
+    print("✅ 35. Hệ thống Lửa Streak Trên Biệt Danh (Exact-Suffix Match, Bảo toàn tên gốc & Hồ Sơ Băng) hoạt động 100%.")
+
     print("=" * 60)
-    print("🎉 TẤT CẢ 34 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%! ")
+    print("🎉 TẤT CẢ 35 BÀI KIỂM THỬ HỆ THỐNG ĐỀU VƯỢT QUA 100%! ")
     print("=" * 60)
 
     # Dọn dẹp test db

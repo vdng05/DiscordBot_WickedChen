@@ -79,6 +79,10 @@ class DatabaseManager:
                 logo_url TEXT,
                 banner_url TEXT,
                 last_renamed_at INTEGER DEFAULT 0,
+                clan_streak INTEGER DEFAULT 0,
+                last_streak_date TEXT,
+                daily_checkin_date TEXT,
+                daily_checkin_count INTEGER DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 UNIQUE(guild_id, name),
                 UNIQUE(guild_id, tag),
@@ -94,6 +98,11 @@ class DatabaseManager:
                 contribution_points INTEGER DEFAULT 0,
                 checkin_streak INTEGER DEFAULT 0,
                 last_checkin_date TEXT,
+                custom_title TEXT,
+                streak_nick_enabled INTEGER DEFAULT 0,
+                last_applied_suffix TEXT,
+                had_original_nick INTEGER DEFAULT 1,
+                nick_warned_len INTEGER DEFAULT 0,
                 joined_at INTEGER NOT NULL,
                 PRIMARY KEY (guild_id, user_id),
                 FOREIGN KEY (clan_id) REFERENCES clans(clan_id) ON DELETE CASCADE
@@ -265,11 +274,15 @@ class DatabaseManager:
             await db.executescript(schema)
             await db.commit()
 
-            # Migration: thêm secondary_color_hex, log_channel_id và last_global_challenge_at nếu chưa có
+            # Migration: thêm secondary_color_hex, log_channel_id, last_global_challenge_at và clan_streak nếu chưa có
             for alter_sql in (
                 "ALTER TABLE clans ADD COLUMN secondary_color_hex TEXT",
                 "ALTER TABLE clans ADD COLUMN log_channel_id TEXT",
                 "ALTER TABLE clans ADD COLUMN last_global_challenge_at INTEGER DEFAULT 0",
+                "ALTER TABLE clans ADD COLUMN clan_streak INTEGER DEFAULT 0",
+                "ALTER TABLE clans ADD COLUMN last_streak_date TEXT",
+                "ALTER TABLE clans ADD COLUMN daily_checkin_date TEXT",
+                "ALTER TABLE clans ADD COLUMN daily_checkin_count INTEGER DEFAULT 0",
             ):
                 try:
                     await db.execute(alter_sql)
@@ -277,12 +290,19 @@ class DatabaseManager:
                 except Exception:
                     pass
 
-            # Migration: thêm custom_title cho clan_members nếu chưa có
-            try:
-                await db.execute("ALTER TABLE clan_members ADD COLUMN custom_title TEXT")
-                await db.commit()
-            except Exception:
-                pass
+            # Migration: thêm custom_title và streak_nick columns cho clan_members nếu chưa có
+            for alter_sql in (
+                "ALTER TABLE clan_members ADD COLUMN custom_title TEXT",
+                "ALTER TABLE clan_members ADD COLUMN streak_nick_enabled INTEGER DEFAULT 0",
+                "ALTER TABLE clan_members ADD COLUMN last_applied_suffix TEXT",
+                "ALTER TABLE clan_members ADD COLUMN had_original_nick INTEGER DEFAULT 1",
+                "ALTER TABLE clan_members ADD COLUMN nick_warned_len INTEGER DEFAULT 0",
+            ):
+                try:
+                    await db.execute(alter_sql)
+                    await db.commit()
+                except Exception:
+                    pass
 
             # Migration: nâng cấp CHECK constraint cho clan_weekly_quests hỗ trợ CHAT_MESSAGES
             try:
@@ -1379,3 +1399,102 @@ class DatabaseManager:
             )
             await db.commit()
         return await self.get_clan_pet(clan_id)
+
+    # =========================================================================
+    # STREAK CHUNG CỦA BĂNG & LỬA STREAK TRÊN BIỆT DANH
+    # =========================================================================
+    async def record_clan_daily_checkin_streak(
+        self,
+        clan_id: int,
+        today_str: str,
+        yesterday_str: str,
+        min_members: int = 2,
+    ) -> Dict[str, Any]:
+        """Ghi nhận lượt điểm danh hôm nay; khi đủ min_members (>=2) thì tăng clan_streak."""
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT clan_streak, last_streak_date, daily_checkin_date, daily_checkin_count FROM clans WHERE clan_id = ?",
+                (clan_id,)
+            ) as cur:
+                row = await cur.fetchone()
+            if not row:
+                return {"streak_updated": False, "clan_streak": 0, "daily_checkin_count": 0}
+
+            cur_streak = int(row["clan_streak"] or 0)
+            last_streak_date = row["last_streak_date"]
+            daily_date = row["daily_checkin_date"]
+            daily_count = (int(row["daily_checkin_count"] or 0) + 1) if daily_date == today_str else 1
+
+            streak_updated = False
+            new_streak = cur_streak
+            new_last_streak_date = last_streak_date
+            if daily_count >= min_members and last_streak_date != today_str:
+                new_streak = (cur_streak + 1) if last_streak_date == yesterday_str else 1
+                new_last_streak_date = today_str
+                streak_updated = True
+
+            await db.execute(
+                "UPDATE clans SET daily_checkin_date = ?, daily_checkin_count = ?, clan_streak = ?, last_streak_date = ? WHERE clan_id = ?",
+                (today_str, daily_count, new_streak, new_last_streak_date, clan_id)
+            )
+            await db.commit()
+            return {
+                "streak_updated": streak_updated,
+                "clan_streak": new_streak,
+                "daily_checkin_count": daily_count,
+            }
+
+    async def reset_expired_clan_streaks(self, today_str: str, yesterday_str: str) -> List[Dict[str, Any]]:
+        """Reset clan_streak = 0 cho các băng đã đứt chuỗi (last_streak_date không phải hôm nay hoặc hôm qua)."""
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                "SELECT clan_id, guild_id FROM clans WHERE clan_streak > 0 AND last_streak_date IS NOT NULL AND last_streak_date NOT IN (?, ?)",
+                (today_str, yesterday_str)
+            ) as cur:
+                expired = [dict(r) for r in await cur.fetchall()]
+            if expired:
+                await db.execute(
+                    "UPDATE clans SET clan_streak = 0 WHERE clan_streak > 0 AND last_streak_date IS NOT NULL AND last_streak_date NOT IN (?, ?)",
+                    (today_str, yesterday_str)
+                )
+                await db.commit()
+            return expired
+
+    async def get_member_streak_nick_state(self, guild_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT clan_id, streak_nick_enabled, last_applied_suffix, had_original_nick, nick_warned_len
+                FROM clan_members WHERE guild_id = ? AND user_id = ?
+                """,
+                (str(guild_id), str(user_id))
+            ) as cur:
+                row = await cur.fetchone()
+                return dict(row) if row else None
+
+    async def set_member_streak_nick_state(self, guild_id: int, user_id: int, **fields):
+        allowed = {"streak_nick_enabled", "last_applied_suffix", "had_original_nick", "nick_warned_len"}
+        clean = {k: v for k, v in fields.items() if k in allowed}
+        if not clean:
+            return
+        cols = ", ".join(f"{k} = ?" for k in clean)
+        vals = list(clean.values()) + [str(guild_id), str(user_id)]
+        async with self.connect() as db:
+            await db.execute(f"UPDATE clan_members SET {cols} WHERE guild_id = ? AND user_id = ?", vals)
+            await db.commit()
+
+    async def get_clan_streak_nick_members(self, clan_id: int) -> List[Dict[str, Any]]:
+        async with self.connect() as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT guild_id, user_id, streak_nick_enabled, last_applied_suffix, had_original_nick, nick_warned_len
+                FROM clan_members
+                WHERE clan_id = ? AND (streak_nick_enabled = 1 OR last_applied_suffix IS NOT NULL)
+                """,
+                (clan_id,)
+            ) as cur:
+                return [dict(r) for r in await cur.fetchall()]

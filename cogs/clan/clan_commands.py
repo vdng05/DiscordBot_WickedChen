@@ -649,6 +649,9 @@ class ClanCommands(commands.Cog):
             except Exception:
                 pass
 
+        from utils.streak_nick import restore_original_nick
+        await restore_original_nick(self.bot.db, user, disable_opt_in=True, reason="Bị trục xuất khỏi băng")
+
         # Xóa khỏi DB (Bỏ cooldown theo yêu cầu)
         await self.bot.db.remove_member(guild.id, user.id)
 
@@ -698,6 +701,9 @@ class ClanCommands(commands.Cog):
             except Exception:
                 pass
 
+        from utils.streak_nick import restore_original_nick
+        await restore_original_nick(self.bot.db, user, disable_opt_in=True, reason="Bị trục xuất khỏi băng")
+
         # Xóa khỏi DB (Bỏ cooldown theo yêu cầu)
         await self.bot.db.remove_member(guild.id, user.id)
 
@@ -742,7 +748,9 @@ class ClanCommands(commands.Cog):
 
         from utils.ui_components import build_clan_profile_payload
         embed, files = await build_clan_profile_payload(clan, members, level_info, interaction.guild)
-        view = ClanInfoView(clan_id=clan["clan_id"], can_apply=can_apply, is_member=is_member, is_leader=is_leader, bot=self.bot)
+        st_state = await self.bot.db.get_member_streak_nick_state(guild.id, interaction.user.id) if is_member else None
+        streak_on = bool(st_state and int(st_state.get("streak_nick_enabled") or 0) == 1)
+        view = ClanInfoView(clan_id=clan["clan_id"], can_apply=can_apply, is_member=is_member, is_leader=is_leader, bot=self.bot, streak_nick_enabled=streak_on)
         await interaction.followup.send(embed=embed, files=files, view=view)
 
     @clan_group.command(name="members", description="Xem danh sách thành viên trong băng kèm phân trang")
@@ -840,6 +848,9 @@ class ClanCommands(commands.Cog):
             return
 
         clan = res["clan"]
+        if res.get("clan_streak_updated"):
+            from utils.streak_nick import sync_clan_streak_queue
+            asyncio.create_task(sync_clan_streak_queue(self.bot, clan["clan_id"]))
         embed = discord.Embed(
             title="📅 ĐIỂM DANH HẰNG NGÀY THÀNH CÔNG!",
             description=f"Bạn đã điểm danh thành công cho băng **{clan['name']}**!",

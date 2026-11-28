@@ -250,6 +250,8 @@ async def perform_daily_checkin(db: Any, guild_id: int, user_id: int, expected_c
         if pet:
             await db.add_pet_coins(clan["clan_id"], daily_res["reward_coins"])
 
+    clan_streak_res = await db.record_clan_daily_checkin_streak(clan["clan_id"], today, yesterday, min_members=2)
+
     return {
         "ok": True,
         "clan": clan,
@@ -258,6 +260,8 @@ async def perform_daily_checkin(db: Any, guild_id: int, user_id: int, expected_c
         "pet_bonus_exp": pet_bonus_exp,
         "clan_exp_to_add": clan_exp_to_add,
         "contribution": EXP_REWARDS.CHECKIN_CONTRIBUTION,
+        "clan_streak_updated": clan_streak_res["streak_updated"],
+        "clan_streak": clan_streak_res["clan_streak"],
     }
 
 
@@ -1571,10 +1575,22 @@ class ClanChallengeTargetView(SafeView):
 
 class ClanInfoView(SafeView):
     """View tương tác động dưới /clan info tùy theo vai trò của người xem"""
-    def __init__(self, clan_id: int, can_apply: bool = False, is_member: bool = False, is_leader: bool = False, bot: Any = None):
+    def __init__(
+        self,
+        clan_id: int,
+        can_apply: bool = False,
+        is_member: bool = False,
+        is_leader: bool = False,
+        bot: Any = None,
+        streak_nick_enabled: bool = False,
+    ):
         super().__init__(timeout=None)
         self.clan_id = clan_id
         self.bot = bot
+
+        if streak_nick_enabled:
+            self.streak_nick_btn.label = "Lửa Streak: Đang Bật"
+            self.streak_nick_btn.style = discord.ButtonStyle.success
 
         if not can_apply:
             self.remove_item(self.apply_button)
@@ -1583,6 +1599,7 @@ class ClanInfoView(SafeView):
             self.remove_item(self.checkin_btn)
             self.remove_item(self.wallpaper_info_btn)
             self.remove_item(self.leave_info_btn)
+            self.remove_item(self.streak_nick_btn)
 
         if not is_leader:
             self.remove_item(self.settings_btn)
@@ -1618,6 +1635,9 @@ class ClanInfoView(SafeView):
             return
 
         streak_note = "🎁 *(Thưởng thêm +50 EXP mốc 7 ngày!)*" if res["is_streak_7"] else ""
+        if res.get("clan_streak_updated") and self.bot:
+            from utils.streak_nick import sync_clan_streak_queue
+            asyncio.create_task(sync_clan_streak_queue(self.bot, self.clan_id))
         await auto_dismiss_notice(
             interaction,
             content=(
@@ -1709,6 +1729,64 @@ class ClanInfoView(SafeView):
     @ui.button(label="Quay Lại Hub", emoji="🏠", style=discord.ButtonStyle.secondary, custom_id="clan_info_back_hub_btn", row=1)
     async def back_to_hub_btn(self, interaction: discord.Interaction, button: ui.Button):
         await return_to_hub(interaction, interaction.user, self.bot)
+
+    @ui.button(label="Lửa Streak: Đang Tắt", emoji="🔥", style=discord.ButtonStyle.secondary, custom_id="clan_info_streak_nick_btn", row=2)
+    async def streak_nick_btn(self, interaction: discord.Interaction, button: ui.Button):
+        from utils.streak_nick import restore_original_nick, sync_member_streak_nick
+        state = await self.bot.db.get_member_streak_nick_state(interaction.guild_id, interaction.user.id)
+        if not state or int(state.get("clan_id") or 0) != self.clan_id:
+            await auto_dismiss_notice(interaction, content="❌ Bạn không phải thành viên của băng này!", delay=5)
+            return
+
+        currently_on = int(state.get("streak_nick_enabled") or 0) == 1
+        if currently_on:
+            await interaction.response.defer()
+            await restore_original_nick(self.bot.db, interaction.user, disable_opt_in=True, reason="Thành viên tắt Lửa Streak")
+            button.label = "Lửa Streak: Đang Tắt"
+            button.style = discord.ButtonStyle.secondary
+            await interaction.edit_original_response(view=self)
+            await auto_dismiss_notice(interaction, content="🔥 Đã **tắt** Lửa Streak trên biệt danh và khôi phục tên gốc của bạn!", delay=5)
+            return
+
+        clan = await self.bot.db.get_clan_by_id(self.clan_id)
+        clan_streak = int((clan or {}).get("clan_streak") or 0)
+        res = await sync_member_streak_nick(
+            self.bot.db,
+            interaction.user,
+            self.clan_id,
+            clan_streak,
+            notify_on_overflow=False,
+            enable_opt_in=True,
+        )
+        status = res.get("status")
+        if status == "TOO_LONG":
+            await auto_dismiss_notice(
+                interaction,
+                content=(
+                    f"❌ Tên bạn đang dài **{res['base_len']}** ký tự, thêm `{res['suffix']}` sẽ thành **{res['total_len']}/32** ký tự.\n"
+                    f"Vui lòng tự rút ngắn bớt ít nhất **{res['excess']} ký tự** rồi bấm bật lại!"
+                ),
+                delay=8,
+            )
+            return
+        if status == "FORBIDDEN":
+            await auto_dismiss_notice(
+                interaction,
+                content="⚠️ Discord chặn mọi bot đổi biệt danh của **Chủ Server** hoặc người có Role cao hơn Bot (hoặc Bot thiếu quyền `Manage Nicknames`).",
+                delay=7,
+            )
+            return
+
+        await interaction.response.defer()
+        button.label = "Lửa Streak: Đang Bật"
+        button.style = discord.ButtonStyle.success
+        await interaction.edit_original_response(view=self)
+        note = (
+            f"🔥 Đã **bật** Lửa Streak (` 🔥 {clan_streak}`) lên biệt danh của bạn!"
+            if clan_streak > 0
+            else "🔥 Đã **bật** Lửa Streak! Khi băng đạt ≥ 2 người điểm danh/ngày, lửa sẽ tự động hiện lên tên bạn."
+        )
+        await auto_dismiss_notice(interaction, content=note, delay=6)
 
     @ui.button(label="Đóng Bảng", emoji="🗑️", style=discord.ButtonStyle.secondary, custom_id="clan_info_close_btn", row=1)
     async def close_btn(self, interaction: discord.Interaction, button: ui.Button):
@@ -2132,6 +2210,10 @@ class LeaveClanConfirmView(SafeView):
                 except Exception:
                     pass
 
+        # Gỡ hậu tố Lửa Streak nếu đang gắn trước khi rời băng
+        from utils.streak_nick import restore_original_nick
+        await restore_original_nick(self.bot.db, user, disable_opt_in=True, reason="Rời băng")
+
         # Xóa khỏi DB (Bỏ cooldown theo yêu cầu)
         await self.bot.db.remove_member(guild.id, user.id)
 
@@ -2202,6 +2284,10 @@ class KickMemberModal(SafeModal):
                     await self.target_member.remove_roles(role, reason=f"Bị trục xuất: {reason}")
                 except Exception:
                     pass
+
+        # Gỡ hậu tố Lửa Streak nếu đang gắn trước khi trục xuất
+        from utils.streak_nick import restore_original_nick
+        await restore_original_nick(self.bot.db, self.target_member, disable_opt_in=True, reason="Bị trục xuất khỏi băng")
 
         # Xóa khỏi DB (Bỏ cooldown theo yêu cầu)
         await self.bot.db.remove_member(guild.id, self.target_member.id)
@@ -2906,7 +2992,9 @@ class ClanHubView(SafeView):
         members = await self.bot.db.get_clan_members(clan["clan_id"])
         level_info = get_level_info(clan["exp"])
         embed, files = await build_clan_profile_payload(clan, members, level_info, interaction.guild)
-        view = ClanInfoView(clan_id=clan["clan_id"], can_apply=False, is_member=True, is_leader=(int(clan["leader_id"]) == interaction.user.id), bot=self.bot)
+        st_state = await self.bot.db.get_member_streak_nick_state(interaction.guild_id, interaction.user.id)
+        streak_on = bool(st_state and int(st_state.get("streak_nick_enabled") or 0) == 1)
+        view = ClanInfoView(clan_id=clan["clan_id"], can_apply=False, is_member=True, is_leader=(int(clan["leader_id"]) == interaction.user.id), bot=self.bot, streak_nick_enabled=streak_on)
         await interaction.edit_original_response(content=None, embed=embed, attachments=files, view=view)
 
     @ui.button(label="Linh Thú Băng", emoji="🐾", style=discord.ButtonStyle.primary, row=0)
@@ -5412,6 +5500,9 @@ class ClanMissionHubView(SafeView):
         if not res["ok"]:
             await auto_dismiss_notice(interaction, content=res["error"], delay=5)
             return
+        if res.get("clan_streak_updated") and self.bot:
+            from utils.streak_nick import sync_clan_streak_queue
+            asyncio.create_task(sync_clan_streak_queue(self.bot, self.clan["clan_id"]))
         streak_note = "🎁 *(Thưởng +50 EXP mốc 7 ngày!)*" if res["is_streak_7"] else ""
         pet_note = f" *(gồm +{res['pet_bonus_exp']} EXP buff Linh Thú)*" if res.get("pet_bonus_exp") else ""
         await auto_dismiss_notice(
