@@ -19,7 +19,7 @@ from utils.time_helper import get_vietnam_now
 
 PET_CACHE_DIR = Config.DATA_DIR / "pet_cache"
 PET_ASSETS_DIR = Config.BASE_DIR / "assets" / "pet"
-RENDER_VERSION = "v5"
+RENDER_VERSION = "v6"
 SS = 2  # Supersampling 2x: canvas nội bộ 1200x1200 -> 600x600
 
 
@@ -392,202 +392,354 @@ def _draw_aura_and_back(img: Image.Image, species: str, stage: int, equipped: di
         _paste_anchored(img, b_layer, anchors["back"])
 
 
+def _draw_organic_poly(
+    base: Image.Image,
+    pts: List[Tuple[float, float]],
+    fill_rgb: Tuple[int, int, int],
+    outline: Tuple[int, int, int, int] = (20, 22, 34, 255),
+    width: int = 7,
+    alpha: int = 255,
+    sh_offset: Tuple[int, int] = (-18, -22),
+) -> Image.Image:
+    """Vẽ khối hữu cơ từ đường cong Bezier có cel-shading mềm + highlight tự nhiên, trả về mask alpha."""
+    part = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    pd = ImageDraw.Draw(part, "RGBA")
+    pd.polygon(pts, fill=(*fill_rgb, alpha))
+    mask = part.getchannel("A")
+
+    # Bóng đổ mềm phía dưới-phải bên trong silhouette
+    sh_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    sd = ImageDraw.Draw(sh_layer, "RGBA")
+    sd.polygon(pts, fill=(*_darken(fill_rgb, 0.30), min(255, alpha)))
+    # Khoét phần sáng lệch lên trên-trái để tạo vành bóng tự nhiên
+    shifted = [(x + sh_offset[0], y + sh_offset[1]) for x, y in pts]
+    sd.polygon(shifted, fill=(0, 0, 0, 0))
+    sh_layer = sh_layer.filter(ImageFilter.GaussianBlur(8))
+    sh_clipped = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    sh_clipped.paste(sh_layer, (0, 0), mask)
+    part.alpha_composite(sh_clipped)
+
+    # Highlight mềm phía trên-trái
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    hi_layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    hd = ImageDraw.Draw(hi_layer, "RGBA")
+    hd.ellipse(
+        [x0 + (x1 - x0) * 0.16, y0 + (y1 - y0) * 0.08, x0 + (x1 - x0) * 0.62, y0 + (y1 - y0) * 0.34],
+        fill=(*_lighten(fill_rgb, 0.42), min(145, alpha)),
+    )
+    hi_layer = hi_layer.filter(ImageFilter.GaussianBlur(10))
+    hi_clipped = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    hi_clipped.paste(hi_layer, (0, 0), mask)
+    part.alpha_composite(hi_clipped)
+
+    # Viền nét mượt
+    if width > 0:
+        od = ImageDraw.Draw(part, "RGBA")
+        od.line(pts + [pts[0]], fill=outline, width=width, joint="curve")
+
+    base.alpha_composite(part)
+    return mask
+
+
+def _make_head_poly(cx: float, cy: float, rx: float, ry: float, cheek_boost: float = 1.12) -> List[Tuple[float, float]]:
+    """Tạo đường viền đầu anime/chibi bầu bĩnh tự nhiên bằng 4 cung Bezier (bớt tròn cứng)."""
+    top = (cx, cy - ry)
+    right = (cx + rx * cheek_boost, cy + ry * 0.16)
+    bot = (cx, cy + ry * 0.96)
+    left = (cx - rx * cheek_boost, cy + ry * 0.16)
+    return (
+        _bezier(top, (cx + rx * 0.72, cy - ry * 0.98), (cx + rx * cheek_boost, cy - ry * 0.38), right, 14)
+        + _bezier(right, (cx + rx * cheek_boost, cy + ry * 0.72), (cx + rx * 0.56, cy + ry * 0.96), bot, 14)
+        + _bezier(bot, (cx - rx * 0.56, cy + ry * 0.96), (cx - rx * cheek_boost, cy + ry * 0.72), left, 14)
+        + _bezier(left, (cx - rx * cheek_boost, cy - ry * 0.38), (cx - rx * 0.72, cy - ry * 0.98), top, 14)
+    )
+
+
+def _make_torso_poly(cx: float, cy: float, top_w: float, bot_w: float, h: float) -> List[Tuple[float, float]]:
+    """Tạo dáng thân thuôn hữu cơ (quả lê ở Stage 2 -> vai rộng eo thon ở Stage 4-5)."""
+    top = (cx, cy - h)
+    r_sh = (cx + top_w, cy - h * 0.48)
+    r_hip = (cx + bot_w, cy + h * 0.56)
+    bot = (cx, cy + h)
+    l_hip = (cx - bot_w, cy + h * 0.56)
+    l_sh = (cx - top_w, cy - h * 0.48)
+    return (
+        _bezier(top, (cx + top_w * 0.65, cy - h), (cx + top_w * 0.98, cy - h * 0.78), r_sh, 10)
+        + _bezier(r_sh, (cx + top_w * 1.02, cy - h * 0.05), (cx + bot_w * 1.04, cy + h * 0.25), r_hip, 10)
+        + _bezier(r_hip, (cx + bot_w * 0.95, cy + h * 0.92), (cx + bot_w * 0.45, cy + h), bot, 10)
+        + _bezier(bot, (cx - bot_w * 0.45, cy + h), (cx - bot_w * 0.95, cy + h * 0.92), l_hip, 10)
+        + _bezier(l_hip, (cx - bot_w * 1.04, cy + h * 0.25), (cx - top_w * 1.02, cy - h * 0.05), l_sh, 10)
+        + _bezier(l_sh, (cx - top_w * 0.98, cy - h * 0.78), (cx - top_w * 0.65, cy - h), top, 10)
+    )
+
+
+def _make_slime_poly(cx: float, cy: float, rx: float, ry: float) -> List[Tuple[float, float]]:
+    """Dáng giọt nước dẻo mềm cho Royal Slime."""
+    top = (cx, cy - ry * 1.02)
+    r_mid = (cx + rx * 0.98, cy + ry * 0.10)
+    r_bot = (cx + rx * 0.84, cy + ry * 0.84)
+    bot = (cx, cy + ry * 0.94)
+    l_bot = (cx - rx * 0.84, cy + ry * 0.84)
+    l_mid = (cx - rx * 0.98, cy + ry * 0.10)
+    return (
+        _bezier(top, (cx + rx * 0.52, cy - ry * 1.02), (cx + rx * 0.92, cy - ry * 0.44), r_mid, 12)
+        + _bezier(r_mid, (cx + rx * 1.04, cy + ry * 0.52), (cx + rx * 0.96, cy + ry * 0.74), r_bot, 10)
+        + _bezier(r_bot, (cx + rx * 0.62, cy + ry * 0.94), (cx + rx * 0.25, cy + ry * 0.94), bot, 10)
+        + _bezier(bot, (cx - rx * 0.25, cy + ry * 0.94), (cx - rx * 0.62, cy + ry * 0.94), l_bot, 10)
+        + _bezier(l_bot, (cx - rx * 0.96, cy + ry * 0.74), (cx - rx * 1.04, cy + ry * 0.52), l_mid, 10)
+        + _bezier(l_mid, (cx - rx * 0.92, cy - ry * 0.44), (cx - rx * 0.52, cy - ry * 1.02), top, 12)
+    )
+
+
 def _draw_limbs(
     img: Image.Image,
     stage: int,
     body_cy: int,
-    body_w: int,
+    top_w: int,
+    bot_w: int,
     body_h: int,
     fill_rgb: Tuple[int, int, int],
     outline: Tuple[int, int, int, int],
     claw_col: Optional[Tuple[int, int, int, int]] = None,
 ):
-    """Vẽ tay & chân có đổ khối cho Stage 2..5 (tọa độ 1200x1200)."""
-    draw = ImageDraw.Draw(img, "RGBA")
+    """Vẽ tay & chân bo cong mềm mại qua 5 giai đoạn (tọa độ 1200x1200)."""
     if stage == 2:
-        _draw_shaded_ellipse(img, (600 - body_w - 28, body_cy - 28, 600 - body_w + 28, body_cy + 28), fill_rgb, outline, 6)
-        _draw_shaded_ellipse(img, (600 + body_w - 28, body_cy - 28, 600 + body_w + 28, body_cy + 28), fill_rgb, outline, 6)
-        _draw_shaded_ellipse(img, (528, body_cy + body_h - 28, 588, body_cy + body_h + 20), fill_rgb, outline, 6)
-        _draw_shaded_ellipse(img, (612, body_cy + body_h - 28, 672, body_cy + body_h + 20), fill_rgb, outline, 6)
+        _draw_shaded_ellipse(img, (600 - top_w - 30, body_cy - 22, 600 - top_w + 22, body_cy + 26), fill_rgb, outline, 6)
+        _draw_shaded_ellipse(img, (600 + top_w - 22, body_cy - 22, 600 + top_w + 30, body_cy + 26), fill_rgb, outline, 6)
+        _draw_shaded_ellipse(img, (526, body_cy + body_h - 24, 588, body_cy + body_h + 20), fill_rgb, outline, 6)
+        _draw_shaded_ellipse(img, (612, body_cy + body_h - 24, 674, body_cy + body_h + 20), fill_rgb, outline, 6)
         return
 
-    arm_w = 48 if stage == 3 else (60 if stage == 4 else 68)
-    arm_len = 108 if stage == 3 else (136 if stage == 4 else 148)
-    sx_l = 600 - body_w + 12
-    sx_r = 600 + body_w - 12
-    sy = body_cy - body_h + 44
+    arm_len = 96 if stage == 3 else (126 if stage == 4 else 140)
+    arm_r = 24 if stage == 3 else (28 if stage == 4 else 32)
+    sy = body_cy - int(body_h * 0.52)
+    sh_rgb = _darken(fill_rgb, 0.14)
+    for side in (-1, 1):
+        sx = 600 + side * (top_w - 8)
+        ex = sx + side * (56 if stage == 3 else 76)
+        ey = sy + arm_len
+        arm_pts = (
+            _bezier((sx, sy - 16), (sx + side * 42, sy + 12), (ex + side * 12, ey - 28), (ex, ey), 10)
+            + _bezier((ex, ey), (ex - side * arm_r, ey + 20), (ex - side * arm_r * 1.4, ey - 10), (sx - side * 4, sy + 38), 10)
+        )
+        _draw_organic_poly(img, arm_pts, sh_rgb, outline, width=6, sh_offset=(-8, -10))
 
-    sh_rgb = _darken(fill_rgb, 0.25)
-    draw.polygon([(sx_l, sy), (sx_l - arm_w - 24, sy + arm_len - 24), (sx_l - arm_w + 24, sy + arm_len), (sx_l + 12, sy + 48)], fill=(*sh_rgb, 255), outline=outline, width=7)
-    draw.polygon([(sx_r, sy), (sx_r + arm_w + 24, sy + arm_len - 24), (sx_r + arm_w - 24, sy + arm_len), (sx_r - 12, sy + 48)], fill=(*sh_rgb, 255), outline=outline, width=7)
-
-    leg_top = body_cy + body_h - 36
-    leg_bot = body_cy + body_h + (48 if stage == 3 else 68)
-    draw.rounded_rectangle([508, leg_top, 576, leg_bot], radius=28, fill=(*fill_rgb, 255), outline=outline, width=7)
-    draw.rounded_rectangle([624, leg_top, 692, leg_bot], radius=28, fill=(*fill_rgb, 255), outline=outline, width=7)
-
-    if stage >= 4 and claw_col:
-        for cx in (524, 544, 564, 636, 656, 676):
-            draw.polygon([(cx - 6, leg_bot - 4), (cx + 6, leg_bot - 4), (cx, leg_bot + 14)], fill=claw_col, outline=outline, width=2)
-
-
-def _draw_body(img: Image.Image, species: str, stage: int, level: int, c1: Tuple[int, int, int], c2: Tuple[int, int, int]):
-    """Layer 2 (1200x1200): Thân hình 2.5D Cel-Shaded qua 5 giai đoạn cho 4 loài."""
+    leg_top = body_cy + body_h - 32
+    leg_bot = body_cy + body_h + (44 if stage == 3 else (64 if stage == 4 else 72))
     draw = ImageDraw.Draw(img, "RGBA")
-    outline = (18, 20, 30, 255)
+    for lx0, lx1 in ((508, 578), (622, 692)):
+        draw.rounded_rectangle([lx0, leg_top, lx1, leg_bot], radius=30, fill=(*fill_rgb, 255), outline=outline, width=7)
+        if stage >= 4 and claw_col:
+            for cx in range(lx0 + 16, lx1 - 8, 20):
+                draw.ellipse([cx - 6, leg_bot - 6, cx + 6, leg_bot + 10], fill=claw_col, outline=outline, width=2)
+
+
+def _draw_body(img: Image.Image, species: str, stage: int, level: int, c1: Tuple[int, int, int], c2: Tuple[int, int, int]) -> Optional[Image.Image]:
+    """Layer 2 (1200x1200): Thân hình hữu cơ 5 giai đoạn rõ rệt, trả về mask thân để cắt trang phục vừa khít."""
+    draw = ImageDraw.Draw(img, "RGBA")
+    outline = (18, 20, 32, 255)
 
     if stage == 1:
-        # Trứng 3D + vết nứt phát sáng Bloom từ Lv.3
-        _draw_shaded_ellipse(img, (410, 350, 790, 830), c1, outline, width=9)
+        egg_pts = _make_slime_poly(600, 600, 178, 224)
+        _draw_organic_poly(img, egg_pts, c1, outline, width=9)
         draw = ImageDraw.Draw(img, "RGBA")
-        draw.arc([450, 450, 750, 660], start=15, end=165, fill=(*c2, 235), width=14)
+        draw.arc([448, 460, 752, 665], start=15, end=165, fill=(*c2, 235), width=14)
         if level >= 3:
             crack = [(580, 430), (624, 496), (576, 550), (636, 610), (596, 664)]
             _draw_bloom(img, lambda d: d.line(crack, fill=(255, 245, 160, 255), width=10), blur_radius=12)
-        return
+        return None
 
     if species == "royal_slime":
-        scale = {2: 0.72, 3: 0.88, 4: 1.02, 5: 1.12}[stage]
-        rx, ry = int(210 * scale), int(176 * scale)
-        cx, cy = 600, 656
-        _draw_shaded_ellipse(img, (cx - rx, cy - ry, cx + rx, cy + ry), c1, outline, width=8, alpha=225)
+        scale = {2: 0.70, 3: 0.86, 4: 1.00, 5: 1.12}[stage]
+        rx, ry = int(208 * scale), int(172 * scale)
+        cx, cy = 600, 660
+        slime_pts = _make_slime_poly(cx, cy, rx, ry)
+        torso_mask = _draw_organic_poly(img, slime_pts, c1, outline, width=8, alpha=228)
         draw = ImageDraw.Draw(img, "RGBA")
         if stage >= 3:
             _draw_bloom(
                 img,
-                lambda d: d.polygon([(600, cy - 44), (644, cy + 8), (600, cy + 56), (556, cy + 8)], fill=(*c2, 225), outline=(255, 255, 255, 210), width=4),
+                lambda d: d.polygon([(600, cy - 48), (640, cy), (600, cy + 48), (560, cy)], fill=(*c2, 220), outline=(255, 255, 255, 210), width=4),
                 blur_radius=10,
             )
             draw = ImageDraw.Draw(img, "RGBA")
         if stage >= 4:
-            draw.polygon([(524, cy - ry + 16), (548, cy - ry - 56), (588, cy - ry - 12), (600, cy - ry - 76), (612, cy - ry - 12), (652, cy - ry - 56), (676, cy - ry + 16)], fill=(255, 212, 65, 255), outline=outline, width=6)
-            _draw_shaded_ellipse(img, (270, 630, 350, 702), c1, outline, width=6, alpha=210)
-            _draw_shaded_ellipse(img, (850, 630, 930, 702), c2, outline, width=6, alpha=210)
+            # Vương miện nhỏ bo cong mềm + 2 slime hộ vệ
+            crown_pts = [(526, cy - ry + 14), (546, cy - ry - 52), (584, cy - ry - 14), (600, cy - ry - 72), (616, cy - ry - 14), (654, cy - ry - 52), (674, cy - ry + 14)]
+            draw.polygon(crown_pts, fill=(255, 212, 65, 255), outline=outline, width=6)
+            _draw_organic_poly(img, _make_slime_poly(312, 668, 42, 34), c1, outline, width=5, alpha=215)
+            _draw_organic_poly(img, _make_slime_poly(888, 668, 42, 34), c2, outline, width=5, alpha=215)
         if stage >= 5:
             _draw_bloom(
                 img,
-                lambda d: [d.ellipse([ox - 20, oy - 20, ox + 20, oy + 20], fill=(255, 235, 145, 245)) for ox, oy in ((310, 460), (890, 460), (370, 340), (830, 340))],
+                lambda d: [d.ellipse([ox - 18, oy - 18, ox + 18, oy + 18], fill=(255, 235, 145, 245)) for ox, oy in ((315, 470), (885, 470), (375, 345), (825, 345))],
                 blur_radius=12,
             )
-        return
+        return torso_mask
 
-    head_r = {2: 140, 3: 128, 4: 124, 5: 128}[stage]
-    head_cy = {2: 556, 3: 476, 4: 428, 5: 412}[stage]
-    body_w = {2: 92, 3: 108, 4: 132, 5: 144}[stage]
-    body_h = {2: 88, 3: 136, 4: 168, 5: 180}[stage]
-    body_cy = head_cy + head_r + body_h - 36
+    # Tỷ lệ tiến hóa rõ rệt qua 4 giai đoạn (Stage 2 chibi ngồi -> Stage 3 thiếu niên -> Stage 4 trưởng thành -> Stage 5 tối thượng)
+    head_rx = {2: 144, 3: 126, 4: 118, 5: 122}[stage]
+    head_ry = {2: 132, 3: 118, 4: 112, 5: 116}[stage]
+    head_cy = {2: 562, 3: 478, 4: 428, 5: 412}[stage]
+    top_w = {2: 86, 3: 108, 4: 138, 5: 154}[stage]
+    bot_w = {2: 108, 3: 98, 4: 112, 5: 124}[stage]
+    body_h = {2: 88, 3: 136, 4: 172, 5: 186}[stage]
+    body_cy = head_cy + head_ry + body_h - 32
+
+    torso_pts = _make_torso_poly(600, body_cy, top_w, bot_w, body_h)
+    head_pts = _make_head_poly(600, head_cy, head_rx, head_ry)
 
     if species == "cyber_cat":
         body_rgb = (48, 58, 86)
         if stage == 2:
-            tail = _bezier((600 + body_w - 10, body_cy + 24), (720, body_cy - 10), (770, body_cy - 60), (784, body_cy - 92))
-            draw.line(tail, fill=(*c1, 255), width=18)
+            tail = _bezier((600 + bot_w - 14, body_cy + 20), (725, body_cy - 12), (770, body_cy - 58), (784, body_cy - 92))
+            draw.line(tail, fill=(*c1, 255), width=18, joint="curve")
         elif stage == 3:
-            tail = _bezier((600 + body_w - 10, body_cy + 32), (780, body_cy - 20), (840, body_cy - 100), (860, body_cy - 156))
-            _draw_bloom(img, lambda d: d.line(tail, fill=(*c1, 255), width=22), blur_radius=10)
+            tail = _bezier((600 + bot_w - 12, body_cy + 26), (780, body_cy - 24), (840, body_cy - 102), (860, body_cy - 156))
+            _draw_bloom(img, lambda d: d.line(tail, fill=(*c1, 255), width=22, joint="curve"), blur_radius=10)
         else:
-            t_r = _bezier((600 + body_w - 16, body_cy + 36), (800, body_cy - 24), (875, body_cy - 120), (896, body_cy - 190))
-            _draw_bloom(img, lambda d: (d.line(t_r, fill=(*c1, 255), width=24), d.polygon([(896, body_cy - 190), (950, body_cy - 270), (864, body_cy - 230)], fill=(*c2, 255))), blur_radius=12)
+            t_r = _bezier((600 + bot_w - 14, body_cy + 30), (800, body_cy - 28), (875, body_cy - 122), (898, body_cy - 190))
+            _draw_bloom(img, lambda d: (d.line(t_r, fill=(*c1, 255), width=24, joint="curve"), d.ellipse([880, body_cy - 215, 922, body_cy - 175], fill=(*c2, 255))), blur_radius=12)
             if stage >= 5:
-                t_l = _bezier((600 - body_w + 16, body_cy + 36), (400, body_cy - 24), (325, body_cy - 120), (304, body_cy - 190))
-                _draw_bloom(img, lambda d: (d.line(t_l, fill=(*c2, 255), width=22), d.polygon([(304, body_cy - 190), (250, body_cy - 270), (336, body_cy - 230)], fill=(*c1, 255))), blur_radius=12)
+                t_l = _bezier((600 - bot_w + 14, body_cy + 30), (400, body_cy - 28), (325, body_cy - 122), (302, body_cy - 190))
+                _draw_bloom(img, lambda d: (d.line(t_l, fill=(*c2, 255), width=22, joint="curve"), d.ellipse([278, body_cy - 215, 320, body_cy - 175], fill=(*c1, 255))), blur_radius=12)
 
-        _draw_limbs(img, stage, body_cy, body_w, body_h, body_rgb, outline, claw_col=(*c2, 255))
-        _draw_shaded_ellipse(img, (600 - body_w, body_cy - body_h, 600 + body_w, body_cy + body_h), body_rgb, outline, width=8)
-        _draw_bloom(img, lambda d: d.polygon([(600, body_cy - 68), (652, body_cy - 8), (600, body_cy + 52), (548, body_cy - 8)], fill=(*c1, 235)), blur_radius=10)
+        _draw_limbs(img, stage, body_cy, top_w, bot_w, body_h, body_rgb, outline, claw_col=(*c2, 255))
+        torso_mask = _draw_organic_poly(img, torso_pts, body_rgb, outline, width=8)
+        _draw_bloom(img, lambda d: d.polygon([(600, body_cy - 56), (642, body_cy - 6), (600, body_cy + 44), (558, body_cy - 6)], fill=(*c1, 235)), blur_radius=9)
 
-        draw = ImageDraw.Draw(img, "RGBA")
-        ear_h = 52 if stage == 2 else (84 if stage == 3 else 112)
-        draw.polygon([(484, head_cy - 56), (444, head_cy - head_r - ear_h), (552, head_cy - head_r + 24)], fill=(*body_rgb, 255), outline=outline, width=8)
-        draw.polygon([(716, head_cy - 56), (756, head_cy - head_r - ear_h), (648, head_cy - head_r + 24)], fill=(*body_rgb, 255), outline=outline, width=8)
-        draw.polygon([(492, head_cy - 72), (466, head_cy - head_r - ear_h + 36), (536, head_cy - head_r + 28)], fill=(*c1, 240))
-        draw.polygon([(708, head_cy - 72), (734, head_cy - head_r - ear_h + 36), (664, head_cy - head_r + 28)], fill=(*c1, 240))
-        _draw_shaded_ellipse(img, (600 - head_r, head_cy - head_r, 600 + head_r, head_cy + head_r), body_rgb, outline, width=8)
+        ear_h = {2: 58, 3: 88, 4: 116, 5: 128}[stage]
+        for side in (-1, 1):
+            e_base_in = (600 + side * 46, head_cy - head_ry + 22)
+            e_tip = (600 + side * (head_rx + 18), head_cy - head_ry - ear_h)
+            e_base_out = (600 + side * (head_rx - 18), head_cy - 32)
+            ear_pts = _bezier(e_base_in, (600 + side * 78, head_cy - head_ry - ear_h * 0.5), (600 + side * (head_rx + 10), head_cy - head_ry - ear_h * 0.9), e_tip, 10) + _bezier(
+                e_tip, (600 + side * (head_rx + 26), head_cy - head_ry * 0.8), (600 + side * (head_rx + 2), head_cy - 56), e_base_out, 10
+            )
+            _draw_organic_poly(img, ear_pts, body_rgb, outline, width=7)
+            draw = ImageDraw.Draw(img, "RGBA")
+            in_pts = [(600 + side * 66, head_cy - head_ry + 24), (600 + side * (head_rx + 4), head_cy - head_ry - ear_h + 36), (600 + side * (head_rx - 18), head_cy - 52)]
+            draw.polygon(in_pts, fill=(*c1, 230))
+        _draw_organic_poly(img, head_pts, body_rgb, outline, width=8)
         if stage >= 4:
             _draw_bloom(
                 img,
                 lambda d: (
-                    d.line([(492, head_cy + 20), (524, head_cy + 32)], fill=(*c2, 245), width=7),
-                    d.line([(708, head_cy + 20), (676, head_cy + 32)], fill=(*c2, 245), width=7),
-                    d.polygon([(600, head_cy - 96), (620, head_cy - 60), (600, head_cy - 36), (580, head_cy - 60)], fill=(*c2, 255)),
+                    d.line([(500, head_cy + 18), (530, head_cy + 28)], fill=(*c2, 245), width=7),
+                    d.line([(700, head_cy + 18), (670, head_cy + 28)], fill=(*c2, 245), width=7),
+                    d.polygon([(600, head_cy - 92), (618, head_cy - 60), (600, head_cy - 38), (582, head_cy - 60)], fill=(*c2, 255)),
                 ),
                 blur_radius=8,
             )
+        return torso_mask
 
     elif species == "mini_dragon":
-        body_rgb = _blend((38, 130, 96), c1, 0.45)
-        belly_col = (250, 224, 146, 255)
-        tail_x = 810 if stage == 2 else (880 if stage == 3 else 944)
-        draw.polygon([(600 + body_w - 28, body_cy + 48), (tail_x, body_cy + 72), (tail_x + 36, body_cy - 32), (600 + body_w - 16, body_cy - 8)], fill=(*_darken(body_rgb, 0.18), 255), outline=outline, width=8)
+        body_rgb = _blend((40, 138, 102), c1, 0.42)
+        belly_col = (250, 226, 152, 255)
+        # Đuôi rồng uốn cong hình chữ S thuôn nhọn (không dùng hình thang cụt)
+        tail_reach = {2: 185, 3: 245, 4: 295, 5: 335}[stage]
+        t_tip = (600 + bot_w + tail_reach, body_cy - (20 if stage == 2 else 75))
+        t_top = _bezier((600 + bot_w - 16, body_cy + 6), (600 + bot_w + tail_reach * 0.45, body_cy + 24), (600 + bot_w + tail_reach * 0.8, body_cy - 10), t_tip, 14)
+        t_bot = _bezier(t_tip, (600 + bot_w + tail_reach * 0.85, body_cy + 58), (600 + bot_w + tail_reach * 0.42, body_cy + 88), (600 + bot_w - 24, body_cy + 56), 14)
+        _draw_organic_poly(img, t_top + t_bot, _darken(body_rgb, 0.14), outline, width=7)
         if stage >= 4:
-            draw.polygon([(tail_x + 16, body_cy - 20), (tail_x + 68, body_cy - 68), (tail_x + 4, body_cy - 56)], fill=(245, 200, 75, 255), outline=outline, width=5)
+            draw = ImageDraw.Draw(img, "RGBA")
+            draw.polygon([t_tip, (t_tip[0] + 44, t_tip[1] - 42), (t_tip[0] - 12, t_tip[1] - 28)], fill=(245, 200, 75, 255), outline=outline, width=4)
 
+        # Cánh rồng cong hữu cơ từ Stage 3 -> 5
         if stage >= 3:
-            w_span = {3: 148, 4: 236, 5: 290}[stage]
-            w_top = {3: 150, 4: 240, 5: 290}[stage]
+            w_span = {3: 155, 4: 245, 5: 300}[stage]
+            w_top = {3: 145, 4: 225, 5: 275}[stage]
             for side in (-1, 1):
-                sx = 600 + side * 100
-                wing_pts = _bezier((sx, body_cy - 52), (sx + side * int(w_span * 0.55), body_cy - w_top), (sx + side * w_span, body_cy - int(w_top * 0.85)), (sx + side * w_span, body_cy - w_top + 60)) + [
-                    (sx + side * (w_span - 48), body_cy + 32)
-                ]
-                draw.polygon(wing_pts, fill=(*c2, 235), outline=outline, width=7)
-                if stage >= 4:
-                    draw.line([(sx, body_cy - 52), (sx + side * (w_span - 16), body_cy - w_top + 76)], fill=outline, width=6)
+                sx = 600 + side * (top_w - 14)
+                sy = body_cy - int(body_h * 0.44)
+                tip = (sx + side * w_span, sy - w_top + 48)
+                top_edge = _bezier((sx, sy), (sx + side * w_span * 0.45, sy - w_top), (sx + side * w_span * 0.85, sy - w_top * 0.9), tip, 14)
+                scallop1 = _bezier(tip, (sx + side * w_span * 0.82, sy - 20), (sx + side * w_span * 0.62, sy + 24), (sx + side * w_span * 0.52, sy + 52), 8)
+                scallop2 = _bezier((sx + side * w_span * 0.52, sy + 52), (sx + side * w_span * 0.34, sy + 20), (sx + side * w_span * 0.16, sy + 44), (sx, sy + 56), 8)
+                _draw_organic_poly(img, top_edge + scallop1 + scallop2, c2, outline, width=6, alpha=238)
+                draw = ImageDraw.Draw(img, "RGBA")
+                draw.line(_bezier((sx, sy + 8), (sx + side * w_span * 0.42, sy - w_top * 0.35), (sx + side * w_span * 0.66, sy - 10), (sx + side * w_span * 0.52, sy + 50), 8), fill=outline, width=5)
 
-        _draw_limbs(img, stage, body_cy, body_w, body_h, body_rgb, outline, claw_col=(250, 224, 146, 255))
-        _draw_shaded_ellipse(img, (600 - body_w, body_cy - body_h, 600 + body_w, body_cy + body_h), body_rgb, outline, width=8)
+        _draw_limbs(img, stage, body_cy, top_w, bot_w, body_h, body_rgb, outline, claw_col=(250, 224, 146, 255))
+        torso_mask = _draw_organic_poly(img, torso_pts, body_rgb, outline, width=8)
         draw = ImageDraw.Draw(img, "RGBA")
-        draw.ellipse([600 - body_w + 32, body_cy - body_h + 32, 600 + body_w - 32, body_cy + body_h - 16], fill=belly_col)
+        belly_pts = _make_torso_poly(600, body_cy + 10, top_w * 0.62, bot_w * 0.66, body_h * 0.78)
+        draw.polygon(belly_pts, fill=belly_col)
         if stage >= 4:
-            for vy in range(body_cy - body_h + 72, body_cy + body_h - 48, 48):
-                draw.arc([600 - body_w + 52, vy, 600 + body_w - 52, vy + 36], start=10, end=170, fill=(210, 168, 84, 225), width=6)
+            for vy in range(body_cy - int(body_h * 0.45), body_cy + int(body_h * 0.65), 46):
+                draw.arc([600 - int(top_w * 0.46), vy, 600 + int(top_w * 0.46), vy + 32], start=12, end=168, fill=(210, 168, 84, 220), width=5)
 
-        horn_h = {2: 36, 3: 72, 4: 108, 5: 132}[stage]
-        draw.polygon([(512, head_cy - head_r + 40), (460, head_cy - head_r - horn_h), (552, head_cy - head_r + 12)], fill=(245, 200, 85, 255), outline=outline, width=6)
-        draw.polygon([(688, head_cy - head_r + 40), (740, head_cy - head_r - horn_h), (648, head_cy - head_r + 12)], fill=(245, 200, 85, 255), outline=outline, width=6)
-        if stage >= 5:
-            draw.polygon([(476, head_cy - head_r + 72), (390, head_cy - head_r - 44), (496, head_cy - head_r + 40)], fill=(255, 165, 60, 255), outline=outline, width=6)
-            draw.polygon([(724, head_cy - head_r + 72), (810, head_cy - head_r - 44), (704, head_cy - head_r + 40)], fill=(255, 165, 60, 255), outline=outline, width=6)
+        # Sừng rồng cong tự nhiên (không dùng tam giác cứng)
+        horn_h = {2: 44, 3: 82, 4: 118, 5: 145}[stage]
+        for side in (-1, 1):
+            hb1 = (600 + side * 48, head_cy - head_ry + 28)
+            htip = (600 + side * (98 + stage * 12), head_cy - head_ry - horn_h)
+            hb2 = (600 + side * 88, head_cy - head_ry + 44)
+            horn_pts = _bezier(hb1, (600 + side * 52, head_cy - head_ry - horn_h * 0.45), (600 + side * 82, head_cy - head_ry - horn_h * 0.85), htip, 10) + _bezier(
+                htip, (600 + side * (102 + stage * 10), head_cy - head_ry - horn_h * 0.45), (600 + side * 96, head_cy - head_ry + 10), hb2, 10
+            )
+            _draw_organic_poly(img, horn_pts, (245, 200, 85), outline, width=5)
+            if stage >= 5:
+                hb3 = (600 + side * 94, head_cy - head_ry + 62)
+                htip2 = (600 + side * 195, head_cy - head_ry - 48)
+                horn2 = _bezier(hb3, (600 + side * 145, head_cy - head_ry + 10), (600 + side * 175, head_cy - head_ry - 24), htip2, 8) + _bezier(
+                    htip2, (600 + side * 175, head_cy - head_ry + 12), (600 + side * 135, head_cy - head_ry + 48), (600 + side * 104, head_cy - head_ry + 78), 8
+                )
+                _draw_organic_poly(img, horn2, (255, 165, 65), outline, width=5)
 
-        _draw_shaded_ellipse(img, (600 - head_r, head_cy - head_r, 600 + head_r, head_cy + head_r), body_rgb, outline, width=8)
+        _draw_organic_poly(img, head_pts, body_rgb, outline, width=8)
         if stage >= 4:
             _draw_bloom(
                 img,
-                lambda d: d.polygon([(600, head_cy - 100), (624, head_cy - 68), (600, head_cy - 40), (576, head_cy - 68)], fill=(*c2, 255), outline=(255, 240, 160, 255), width=4),
+                lambda d: d.polygon([(600, head_cy - 92), (620, head_cy - 62), (600, head_cy - 36), (580, head_cy - 62)], fill=(*c2, 255), outline=(255, 240, 160, 255), width=4),
                 blur_radius=10,
             )
+        return torso_mask
 
     else:
+        # Cáo Tinh (Spirit Fox): 1 đuôi -> 3 đuôi -> 5 đuôi -> 7 đuôi Cửu Vĩ
         fur_rgb = _blend((240, 128, 56), c1, 0.25)
-        tail_count = 1 if stage == 2 else (3 if stage <= 4 else 5)
-        tail_len = {2: 230, 3: 290, 4: 340, 5: 380}[stage]
+        tail_count = {2: 1, 3: 3, 4: 5, 5: 7}[stage]
+        tail_len = {2: 215, 3: 275, 4: 325, 5: 365}[stage]
         for ti in range(tail_count):
-            ang = math.radians(-55 + (ti - (tail_count - 1) / 2) * 28)
-            tx = 600 + int(math.sin(ang) * tail_len) + (56 if tail_count == 1 else 0)
-            ty = body_cy - int(math.cos(ang) * (tail_len * 0.68)) + 30
-            t_pts = _bezier((600, body_cy + 36), (600 + (tx - 600) * 0.4, body_cy - 40), (600 + (tx - 600) * 0.8, ty + 40), (tx, ty))
-            draw.line(t_pts, fill=(*_darken(fur_rgb, 0.12), 255), width=48 if stage <= 3 else 56)
-            draw.ellipse([tx - 32, ty - 32, tx + 32, ty + 32], fill=(255, 245, 232, 255), outline=outline, width=4)
+            ang = math.radians(-58 + (ti - (tail_count - 1) / 2) * (24 if tail_count >= 5 else 30))
+            tx = 600 + int(math.sin(ang) * tail_len) + (68 if tail_count == 1 else 0)
+            ty = body_cy - int(math.cos(ang) * (tail_len * 0.65)) + 26
+            t_pts = _bezier((600, body_cy + 34), (600 + (tx - 600) * 0.4, body_cy - 38), (600 + (tx - 600) * 0.8, ty + 38), (tx, ty), 14)
+            draw = ImageDraw.Draw(img, "RGBA")
+            draw.line(t_pts, fill=(*_darken(fur_rgb, 0.12), 255), width=46 if stage <= 3 else 52, joint="curve")
+            draw.ellipse([tx - 30, ty - 30, tx + 30, ty + 30], fill=(255, 245, 232, 255), outline=outline, width=4)
 
-        _draw_limbs(img, stage, body_cy, body_w, body_h, fur_rgb, outline)
-        _draw_shaded_ellipse(img, (600 - body_w, body_cy - body_h, 600 + body_w, body_cy + body_h), fur_rgb, outline, width=8)
+        _draw_limbs(img, stage, body_cy, top_w, bot_w, body_h, fur_rgb, outline)
+        torso_mask = _draw_organic_poly(img, torso_pts, fur_rgb, outline, width=8)
         draw = ImageDraw.Draw(img, "RGBA")
-        draw.ellipse([500, head_cy + head_r - 44, 700, head_cy + head_r + 72], fill=(255, 245, 232, 255), outline=outline, width=6)
+        draw.ellipse([510, head_cy + head_ry - 42, 690, head_cy + head_ry + 68], fill=(255, 245, 232, 255), outline=outline, width=6)
 
-        ear_h = {2: 56, 3: 84, 4: 108, 5: 120}[stage]
-        draw.polygon([(476, head_cy - 56), (436, head_cy - head_r - ear_h), (548, head_cy - head_r + 24)], fill=(*fur_rgb, 255), outline=outline, width=8)
-        draw.polygon([(724, head_cy - 56), (764, head_cy - head_r - ear_h), (652, head_cy - head_r + 24)], fill=(*fur_rgb, 255), outline=outline, width=8)
-        _draw_shaded_ellipse(img, (600 - head_r, head_cy - head_r, 600 + head_r, head_cy + head_r), fur_rgb, outline, width=8)
+        ear_h = {2: 60, 3: 88, 4: 112, 5: 124}[stage]
+        for side in (-1, 1):
+            e_in = (600 + side * 44, head_cy - head_ry + 20)
+            e_tip = (600 + side * (head_rx + 24), head_cy - head_ry - ear_h)
+            e_out = (600 + side * (head_rx - 14), head_cy - 32)
+            ear_pts = _bezier(e_in, (600 + side * 78, head_cy - head_ry - ear_h * 0.5), (600 + side * (head_rx + 12), head_cy - head_ry - ear_h * 0.9), e_tip, 10) + _bezier(
+                e_tip, (600 + side * (head_rx + 28), head_cy - head_ry * 0.8), (600 + side * (head_rx + 4), head_cy - 54), e_out, 10
+            )
+            _draw_organic_poly(img, ear_pts, fur_rgb, outline, width=7)
+        _draw_organic_poly(img, head_pts, fur_rgb, outline, width=8)
         if stage >= 4:
-            _draw_bloom(img, lambda d: d.polygon([(600, head_cy - 100), (620, head_cy - 64), (600, head_cy - 40), (580, head_cy - 64)], fill=(255, 95, 115, 245)), blur_radius=8)
+            _draw_bloom(img, lambda d: d.polygon([(600, head_cy - 92), (618, head_cy - 60), (600, head_cy - 38), (582, head_cy - 60)], fill=(255, 95, 115, 245)), blur_radius=8)
+        return torso_mask
 
 
 def _draw_face(img: Image.Image, species: str, stage: int, expression: str, c1: Tuple[int, int, int]):
-    """Layer 3 (1200x1200): Mắt Anime 3 lớp + má hồng mềm + lông mày uy nghiêm."""
+    """Layer 3 (1200x1200): Mắt Anime có chiều sâu + má hồng mềm + lông mày uy nghiêm."""
     if stage == 1:
         return
     draw = ImageDraw.Draw(img, "RGBA")
-    cy = 652 if species == "royal_slime" else {2: 556, 3: 476, 4: 428, 5: 412}[stage]
+    cy = 652 if species == "royal_slime" else {2: 562, 3: 478, 4: 428, 5: 412}[stage]
     lx, rx = 544, 656
 
     if expression == "sleepy":
@@ -603,19 +755,21 @@ def _draw_face(img: Image.Image, species: str, stage: int, expression: str, c1: 
         draw.arc([568, cy + 44, 632, cy + 76], start=180, end=360, fill=(20, 22, 30, 255), width=8)
         return
 
-    # Mắt 3 lớp có tròng mắt màu sắc + đồng tử + 2 đốm sáng
-    eye_r = 28 if stage == 2 else 25
-    iris_col = _lighten(c1, 0.15)
+    # Mắt Anime oval hơi cao (bớt tròn cứng) + tròng gradient + mí mắt trên cong
+    ew = 25 if stage == 2 else 23
+    eh = 30 if stage == 2 else 28
+    iris_col = _lighten(c1, 0.18)
     for ex in (lx, rx):
-        draw.ellipse([ex - eye_r - 3, cy - eye_r - 3, ex + eye_r + 3, cy + eye_r + 3], fill=(248, 250, 255, 255), outline=(18, 20, 30, 255), width=5)
-        draw.ellipse([ex - eye_r + 4, cy - eye_r + 4, ex + eye_r - 4, cy + eye_r - 4], fill=(*iris_col, 255))
-        draw.ellipse([ex - int(eye_r * 0.55), cy - int(eye_r * 0.55), ex + int(eye_r * 0.55), cy + int(eye_r * 0.55)], fill=(18, 20, 32, 255))
-        draw.ellipse([ex - 13, cy - 16, ex - 1, cy - 4], fill=(255, 255, 255, 255))
+        draw.ellipse([ex - ew - 3, cy - eh - 3, ex + ew + 3, cy + eh + 3], fill=(248, 250, 255, 255), outline=(18, 20, 30, 255), width=5)
+        draw.ellipse([ex - ew + 4, cy - eh + 5, ex + ew - 4, cy + eh - 4], fill=(*iris_col, 255))
+        draw.ellipse([ex - int(ew * 0.58), cy - int(eh * 0.56), ex + int(ew * 0.58), cy + int(eh * 0.56)], fill=(18, 20, 32, 255))
+        draw.arc([ex - ew - 4, cy - eh - 5, ex + ew + 4, cy + eh], start=195, end=345, fill=(18, 20, 30, 255), width=8)
+        draw.ellipse([ex - 12, cy - 17, ex, cy - 4], fill=(255, 255, 255, 255))
         draw.ellipse([ex + 4, cy + 6, ex + 12, cy + 14], fill=(255, 255, 255, 230))
 
     if stage >= 4:
-        draw.line([(lx - 32, cy - 44), (lx + 24, cy - 32)], fill=(20, 22, 32, 255), width=8)
-        draw.line([(rx + 32, cy - 44), (rx - 24, cy - 32)], fill=(20, 22, 32, 255), width=8)
+        draw.line([(lx - 30, cy - 44), (lx + 24, cy - 32)], fill=(20, 22, 32, 255), width=7)
+        draw.line([(rx + 30, cy - 44), (rx - 24, cy - 32)], fill=(20, 22, 32, 255), width=7)
 
     if expression == "happy":
         blush = Image.new("RGBA", img.size, (0, 0, 0, 0))
@@ -629,71 +783,86 @@ def _draw_face(img: Image.Image, species: str, stage: int, expression: str, c1: 
         draw.line([(580, cy + 44), (620, cy + 44)], fill=(20, 22, 30, 255), width=8)
 
 
-def _draw_outfit(img: Image.Image, species: str, stage: int, equipped: dict, c1: Tuple[int, int, int]):
-    """Layer 4: Khăn choàng / Vòng cổ / Lõi năng lượng gọn nhẹ ôm cổ (không che thân thú AI)."""
+def _draw_outfit(
+    img: Image.Image,
+    species: str,
+    stage: int,
+    equipped: dict,
+    c1: Tuple[int, int, int],
+    torso_mask: Optional[Image.Image] = None,
+):
+    """Layer 4: Trang phục ôm khít 100% theo silhouette thân Pet (cắt theo torso_mask)."""
     outfit_id = equipped.get("outfit")
-    if stage < 3 or not outfit_id:
+    if stage < 3 or not outfit_id or torso_mask is None:
         return
 
-    o_layer = Image.new("RGBA", (320, 160), (0, 0, 0, 0))
-    od = ImageDraw.Draw(o_layer, "RGBA")
-    outline = (18, 20, 32, 245)
+    # Tìm bounding box thực của thân Pet để vẽ chi tiết áo vừa khít
+    bb = torso_mask.getbbox()
+    if not bb:
+        return
+    x0, y0, x1, y1 = bb
+    tw = max(1, x1 - x0)
+    th = max(1, y1 - y0)
+    cx = (x0 + x1) // 2
 
-    def _draw_scarf(main_col: Tuple[int, int, int], trim_col: Tuple[int, int, int]):
-        # Bóng đổ mềm dưới khăn
-        sh = Image.new("RGBA", o_layer.size, (0, 0, 0, 0))
-        sd = ImageDraw.Draw(sh, "RGBA")
-        sd.chord([54, 42, 266, 118], start=0, end=180, fill=(0, 0, 0, 110))
-        o_layer.alpha_composite(sh.filter(ImageFilter.GaussianBlur(6)))
-        d = ImageDraw.Draw(o_layer, "RGBA")
-        # Vòng khăn ôm cổ cong tự nhiên
-        collar_pts = _bezier((52, 54), (110, 96), (210, 96), (268, 54)) + _bezier((268, 54), (215, 70), (105, 70), (52, 54))
-        d.polygon(collar_pts, fill=(*main_col, 245), outline=outline, width=4)
-        # Đuôi khăn bay nhẹ lệch phải
-        tail_pts = [(195, 74), (242, 70), (262, 134), (222, 142)]
-        d.polygon(tail_pts, fill=(*main_col, 240), outline=outline, width=4)
-        d.line([(234, 74), (251, 134)], fill=(*trim_col, 230), width=4)
-        # Viền sáng trên khăn
-        hi_pts = _bezier((64, 58), (116, 86), (204, 86), (256, 58))
-        d.line(hi_pts, fill=(*trim_col, 220), width=4)
+    cloth = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    cd = ImageDraw.Draw(cloth, "RGBA")
+    outline = (18, 20, 32, 235)
+    # Slime chỉ mặc nửa dưới (dưới miệng) để giữ khuôn mặt & tinh thể lõi
+    top_cut = y0 + int(th * 0.68) if species == "royal_slime" else y0 + int(th * 0.06)
 
-    if outfit_id == "outfit_cyber_armor":
-        # Vòng cổ công nghệ + lõi năng lượng lục giác phát sáng Neon Cyan
-        _draw_scarf((20, 32, 58), (0, 230, 255))
+    if outfit_id == "outfit_hoodie":
+        cd.rectangle([x0 - 4, top_cut, x1 + 4, y1 + 4], fill=(44, 48, 68, 245))
+        cd.polygon([(cx - int(tw * 0.28), top_cut), (cx, top_cut + int(th * 0.24)), (cx + int(tw * 0.28), top_cut)], fill=(*c1, 245))
+        cd.line([(cx - 18, top_cut + int(th * 0.14)), (cx - 18, top_cut + int(th * 0.42))], fill=(235, 240, 250, 245), width=6)
+        cd.line([(cx + 18, top_cut + int(th * 0.14)), (cx + 18, top_cut + int(th * 0.42))], fill=(235, 240, 250, 245), width=6)
+        cd.rounded_rectangle([cx - int(tw * 0.26), y1 - int(th * 0.34), cx + int(tw * 0.26), y1 - int(th * 0.10)], radius=18, fill=(30, 34, 50, 245), outline=outline, width=4)
+    elif outfit_id == "outfit_bomber":
+        cd.rectangle([x0 - 4, top_cut, x1 + 4, y1 + 4], fill=(185, 42, 62, 245))
+        cd.rectangle([x0 - 4, top_cut, x0 + int(tw * 0.22), y1 + 4], fill=(242, 244, 248, 235))
+        cd.rectangle([x1 - int(tw * 0.22), top_cut, x1 + 4, y1 + 4], fill=(242, 244, 248, 235))
+        cd.line([(cx, top_cut), (cx, y1)], fill=(245, 208, 78, 250), width=7)
+        cd.rectangle([x0, y1 - int(th * 0.14), x1, y1 + 4], fill=(28, 30, 42, 250))
+    elif outfit_id == "outfit_cyber_armor":
+        cd.rectangle([x0 - 4, top_cut, x1 + 4, y1 + 4], fill=(22, 34, 58, 245))
+        cd.line([(x0, top_cut + int(th * 0.25)), (cx - 26, top_cut + int(th * 0.42)), (cx + 26, top_cut + int(th * 0.42)), (x1, top_cut + int(th * 0.25))], fill=(0, 230, 255, 220), width=5)
+        cd.rectangle([x0, y1 - int(th * 0.22), x1, y1 - int(th * 0.12)], fill=(0, 220, 255, 190))
         _draw_bloom(
-            o_layer,
-            lambda d: d.polygon([(160, 64), (184, 84), (160, 108), (136, 84)], fill=(0, 240, 255, 250), outline=(255, 255, 255, 230), width=3),
+            cloth,
+            lambda d: d.polygon([(cx, top_cut + int(th * 0.18)), (cx + 30, top_cut + int(th * 0.34)), (cx, top_cut + int(th * 0.50)), (cx - 30, top_cut + int(th * 0.34))], fill=(0, 240, 255, 245), outline=(255, 255, 255, 230), width=3),
             blur_radius=8,
         )
     elif outfit_id == "outfit_royal_vest":
-        _draw_scarf((138, 22, 46), (245, 200, 75))
-        od = ImageDraw.Draw(o_layer, "RGBA")
-        od.ellipse([142, 68, 178, 104], fill=(245, 200, 75, 255), outline=outline, width=4)
-        od.ellipse([151, 77, 169, 95], fill=(220, 40, 68, 255))
+        cd.rectangle([x0 - 4, top_cut, x1 + 4, y1 + 4], fill=(138, 22, 46, 245))
+        cd.polygon([(cx - int(tw * 0.26), top_cut), (cx + int(tw * 0.26), top_cut), (cx, top_cut + int(th * 0.44))], fill=(248, 248, 252, 250))
+        cd.polygon([(cx - 10, top_cut + 12), (cx + 10, top_cut + 12), (cx + 7, top_cut + int(th * 0.36)), (cx, top_cut + int(th * 0.42)), (cx - 7, top_cut + int(th * 0.36))], fill=(245, 200, 70, 255))
+        cd.line([(cx, top_cut + int(th * 0.44)), (cx, y1)], fill=(245, 200, 75, 250), width=6)
     elif outfit_id == "outfit_tuxedo":
-        # Nơ bướm điệp viên đen + viền cổ trắng gọn gàng
-        od.polygon([(112, 66), (160, 86), (208, 66), (208, 104), (160, 88), (112, 104)], fill=(215, 38, 60, 250), outline=outline, width=4)
-        od.ellipse([148, 74, 172, 98], fill=(245, 48, 72, 255), outline=outline, width=3)
+        cd.rectangle([x0 - 4, top_cut, x1 + 4, y1 + 4], fill=(24, 26, 36, 248))
+        cd.polygon([(cx - int(tw * 0.24), top_cut), (cx + int(tw * 0.24), top_cut), (cx, top_cut + int(th * 0.44))], fill=(250, 250, 255, 255))
+        cd.polygon([(cx - 28, top_cut + 14), (cx, top_cut + 30), (cx + 28, top_cut + 14), (cx + 28, top_cut + 42), (cx, top_cut + 28), (cx - 28, top_cut + 42)], fill=(220, 42, 65, 255))
     elif outfit_id == "outfit_mage_robe":
-        _draw_scarf((68, 42, 132), (245, 200, 75))
-        _draw_bloom(o_layer, lambda d: d.ellipse([142, 68, 178, 104], fill=(95, 225, 255, 245), outline=(245, 200, 75, 255), width=4), blur_radius=8)
+        cd.rectangle([x0 - 4, top_cut, x1 + 4, y1 + 4], fill=(68, 42, 132, 245))
+        cd.line([(cx, top_cut), (cx, y1)], fill=(245, 200, 75, 250), width=7)
+        _draw_bloom(cloth, lambda d: d.ellipse([cx - 22, top_cut + int(th * 0.20), cx + 22, top_cut + int(th * 0.20) + 44], fill=(95, 225, 255, 245), outline=(245, 200, 75, 255), width=4), blur_radius=8)
     elif outfit_id == "outfit_cloud_robe":
-        _draw_scarf((26, 28, 42), (225, 55, 78))
+        cd.rectangle([x0 - 4, top_cut, x1 + 4, y1 + 4], fill=(28, 30, 46, 248))
+        cd.ellipse([cx - 42, top_cut + int(th * 0.22), cx - 6, top_cut + int(th * 0.36)], fill=(225, 52, 74, 245))
+        cd.ellipse([cx + 12, top_cut + int(th * 0.42), cx + 48, top_cut + int(th * 0.56)], fill=(225, 52, 74, 245))
+        cd.rectangle([x0, y1 - int(th * 0.28), x1, y1 - int(th * 0.14)], fill=(215, 48, 68, 250))
     elif outfit_id == "outfit_samurai":
-        _draw_scarf((152, 28, 38), (245, 200, 75))
-        od = ImageDraw.Draw(o_layer, "RGBA")
-        od.polygon([(142, 72), (178, 72), (170, 106), (150, 106)], fill=(245, 200, 75, 250), outline=outline, width=4)
-    elif outfit_id == "outfit_bomber":
-        _draw_scarf((185, 42, 62), (245, 245, 250))
-    elif outfit_id == "outfit_hoodie":
-        _draw_scarf((44, 48, 66), c1)
+        cd.rectangle([x0 - 4, top_cut, x1 + 4, y1 + 4], fill=(148, 28, 38, 248))
+        for frac in (0.28, 0.48, 0.68):
+            ry = top_cut + int(th * frac)
+            cd.line([(x0, ry), (x1, ry)], fill=(245, 200, 75, 235), width=6)
     elif outfit_id == "outfit_tanktop":
-        # Dây chuyền vàng + mặt trời mùa hè
-        chain = _bezier((80, 56), (125, 96), (195, 96), (240, 56))
-        od.line(chain, fill=(245, 200, 75, 250), width=6)
-        od.ellipse([144, 74, 176, 106], fill=(255, 210, 65, 255), outline=outline, width=4)
+        cd.rectangle([cx - int(tw * 0.34), top_cut, cx + int(tw * 0.34), y1 + 4], fill=(246, 248, 255, 245))
+        cd.ellipse([cx - 32, top_cut + int(th * 0.24), cx + 32, top_cut + int(th * 0.24) + 64], fill=(255, 205, 65, 245))
 
-    _paste_anchored(img, o_layer, PET_ANCHORS[species][stage]["outfit"])
+    # Cắt trang phục vừa khít 100% theo silhouette thân Pet + bóng đổ nhẹ ở mép cổ áo
+    fitted = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    fitted.paste(cloth, (0, 0), torso_mask)
+    img.alpha_composite(fitted)
 
 
 def _draw_headwear(img: Image.Image, species: str, stage: int, equipped: dict):
@@ -878,10 +1047,9 @@ def render_pet_sprite_only(pet: Dict[str, Any], clan_color: str = "#5865F2", sec
 
     canvas = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 0))
     _draw_aura_and_back(canvas, species, stage, equipped, c1, c2)
-    if not _draw_sprite_layer(canvas, species, stage, expr, c1, outfit_id=equipped.get("outfit")):
-        _draw_body(canvas, species, stage, lvl_info["level"], c1, c2)
-        _draw_face(canvas, species, stage, expr, c1)
-    _draw_outfit(canvas, species, stage, equipped, c1)
+    torso_mask = _draw_body(canvas, species, stage, lvl_info["level"], c1, c2)
+    _draw_face(canvas, species, stage, expr, c1)
+    _draw_outfit(canvas, species, stage, equipped, c1, torso_mask=torso_mask)
     _draw_headwear(canvas, species, stage, equipped)
     _draw_face_and_held(canvas, species, stage, equipped)
     return canvas.resize((size, size), Image.Resampling.LANCZOS)
@@ -936,10 +1104,9 @@ def generate_clan_pet_image(pet: Dict[str, Any], clan: Dict[str, Any]) -> io.Byt
     hi_res = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 255))
     _draw_background(hi_res, equipped.get("background"), c1, c2, stage=stage)
     _draw_aura_and_back(hi_res, species, stage, equipped, c1, c2)
-    if not _draw_sprite_layer(hi_res, species, stage, expr, c1, outfit_id=equipped.get("outfit")):
-        _draw_body(hi_res, species, stage, level, c1, c2)
-        _draw_face(hi_res, species, stage, expr, c1)
-    _draw_outfit(hi_res, species, stage, equipped, c1)
+    torso_mask = _draw_body(hi_res, species, stage, level, c1, c2)
+    _draw_face(hi_res, species, stage, expr, c1)
+    _draw_outfit(hi_res, species, stage, equipped, c1, torso_mask=torso_mask)
     _draw_headwear(hi_res, species, stage, equipped)
     _draw_face_and_held(hi_res, species, stage, equipped)
     _draw_ui_overlay(hi_res, pet, lvl_info["stage_name"], level, c1)
@@ -978,10 +1145,9 @@ def generate_clan_pet_preview_image(pet: Dict[str, Any], clan: Dict[str, Any], p
     hi_res = Image.new("RGBA", (600 * SS, 600 * SS), (0, 0, 0, 255))
     _draw_background(hi_res, equipped.get("background"), c1, c2, stage=preview_stage)
     _draw_aura_and_back(hi_res, species, preview_stage, equipped, c1, c2)
-    if not _draw_sprite_layer(hi_res, species, preview_stage, expr, c1, outfit_id=equipped.get("outfit")):
-        _draw_body(hi_res, species, preview_stage, max(level, 3 if preview_stage == 1 else level), c1, c2)
-        _draw_face(hi_res, species, preview_stage, expr, c1)
-    _draw_outfit(hi_res, species, preview_stage, equipped, c1)
+    torso_mask = _draw_body(hi_res, species, preview_stage, max(level, 3 if preview_stage == 1 else level), c1, c2)
+    _draw_face(hi_res, species, preview_stage, expr, c1)
+    _draw_outfit(hi_res, species, preview_stage, equipped, c1, torso_mask=torso_mask)
     _draw_headwear(hi_res, species, preview_stage, equipped)
     _draw_face_and_held(hi_res, species, preview_stage, equipped)
 
